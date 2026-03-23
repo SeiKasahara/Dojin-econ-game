@@ -96,7 +96,7 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
     const e = container.querySelector('#mg-energy');
     const s = container.querySelector('#mg-sold');
     const t = container.querySelector('#mg-time');
-    if (e) e.textContent = `⚡ 精力 ${mg.energy}`;
+    if (e) e.textContent = `⚡ 精力 ${Math.floor(mg.energy)}`;
     if (s) s.textContent = `💰 售出 ${mg.score.sold}`;
     if (t) t.textContent = `⏱️ ${Math.ceil(mg.timeRemaining / 1000)}s`;
 

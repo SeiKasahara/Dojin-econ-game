@@ -543,8 +543,8 @@ export function startMinigame(mainState, event, onComplete) {
         mg.cooldowns[k] = Math.max(0, mg.cooldowns[k] - dt);
       }
 
-      // Passive energy regen: ~2 per second (slow but steady)
-      mg.energy = Math.min(100, mg.energy + dt * 0.002);
+      // Passive energy regen: ~1.2 per second
+      mg.energy = Math.min(100, Math.round((mg.energy + dt * 0.0012) * 100) / 100);
 
       // Spawn customers
       mg.nextSpawnTime -= dt;

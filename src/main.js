@@ -5,7 +5,7 @@
 
 import './style.css';
 import { createInitialState, executeTurn, rollEvent, applyEvent } from './engine.js';
-import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector } from './ui.js';
+import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector } from './ui.js';
 
 let state = null;
 
@@ -14,8 +14,8 @@ let selectedPreset = 'mid';
 function startGame(communityPreset) {
   selectedPreset = communityPreset || 'mid';
   // Show endowment allocation screen before game starts
-  renderEndowments((endowments) => {
-    state = createInitialState(selectedPreset, endowments);
+  renderEndowments((endowments, backgroundId) => {
+    state = createInitialState(selectedPreset, endowments, backgroundId);
     state._prevAchievementCount = 0;
     renderGame(state, handleAction);
   });
@@ -87,12 +87,43 @@ function handleAction(actionId) {
     return;
   }
 
+  // === HVP confirmation (multi-turn commitment) ===
+  if (actionId === 'hvp' && !needsPricing(actionId)) {
+    const isNew = !state.hvpProject;
+    const needed = state.hasPartner ? 2 : 3;
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    overlay.innerHTML = `
+      <div class="event-card" style="max-width:340px">
+        <div class="event-emoji">📖</div>
+        <div class="event-title">${isNew ? '开始创作同人本？' : '继续创作同人本？'}</div>
+        <div class="event-desc" style="margin-bottom:12px">${isNew
+          ? `需要${needed}个月完成${state.hasPartner ? '（搭档协作）' : '（独自创作）'}，每月消耗热情。完成后印刷入库。`
+          : `当前进度 ${state.hvpProject.progress}/${state.hvpProject.needed}，继续投入本月的创作时间。`}</div>
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">每月消耗：热情-${Math.max(8, 15 - (state.endowments?.stamina || 0))} · 需闲暇≥4</div>
+        <button class="btn btn-primary btn-block" id="btn-hvp-go" style="margin-bottom:8px">${isNew ? '开始创作' : '继续创作'}</button>
+        <button class="btn btn-block" id="btn-hvp-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#btn-hvp-go').addEventListener('click', () => { overlay.remove(); proceedWithTurn(actionId); });
+    overlay.querySelector('#btn-hvp-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+    return;
+  }
+
   // === Pricing ===
   if (needsPricing(actionId)) {
     const type = actionId === 'lvp' ? 'lvp' : 'hvp';
     renderPriceSelector(state, type, (chosenPrice) => {
       state.playerPrice[type] = chosenPrice;
-      proceedWithTurn(actionId);
+      // For HVP completion: also choose anti-speculator strategy
+      if (type === 'hvp') {
+        renderStrategySelector(state, (strategy) => {
+          state._antiSpecStrategy = strategy;
+          proceedWithTurn(actionId);
+        });
+      } else {
+        proceedWithTurn(actionId);
+      }
     }, cancelBack);
     return;
   }

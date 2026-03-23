@@ -3,9 +3,9 @@
  * Market ecosystem panel, pricing UI, diversity indicators
  */
 
-import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT } from './engine.js';
+import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground } from './engine.js';
 import { createChartCanvas, drawSupplyDemand } from './chart.js';
-import { getMarketNarratives, getPriceTiers, calculatePricedSales } from './market.js';
+import { getMarketNarratives, getPriceTiers, calculatePricedSales, getMarketAvgPrice } from './market.js';
 import { getOfficialNarratives } from './official.js';
 import { getAdvancedNarratives } from './advanced.js';
 
@@ -64,24 +64,63 @@ export function renderTitle(onStart) {
 
 // === Endowment Allocation Screen ===
 export function renderEndowments(onConfirm) {
-  const pts = { talent: 1, stamina: 1, social: 2, marketing: 1, resilience: 2 };
   const MAX = ENDOWMENT_MAX_PER_TRAIT;
-  const TOTAL = ENDOWMENT_TOTAL_POINTS;
+  const TRAIT_COUNT = Object.keys(ENDOWMENTS).length; // 5
+  const MIN_TOTAL = TRAIT_COUNT; // each trait at least 1
+  const MAX_TOTAL = TRAIT_COUNT * MAX; // 15
 
-  function remaining() { return TOTAL - Object.values(pts).reduce((s, v) => s + v, 0); }
+  // Left-skewed normal: Box-Muller, mean=7.5 sd=2, clamp to [MIN_TOTAL, MAX_TOTAL]
+  function rollTotal() {
+    const u1 = Math.random(), u2 = Math.random();
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    // Skew left: use lower mean so high rolls are rarer
+    const raw = 7 + z * 1.8;
+    return Math.max(MIN_TOTAL, Math.min(MAX_TOTAL, Math.round(raw)));
+  }
+
+  let totalPoints = rollTotal();
+  let bgId = rollBackground();
+  let rolled = false; // one reroll allowed
+  const pts = { talent: 1, stamina: 1, social: 1, marketing: 1, resilience: 1 };
+
+  function remaining() { return totalPoints - Object.values(pts).reduce((s, v) => s + v, 0); }
+
+  // Rating for the roll
+  function rollRating(t) {
+    if (t >= 12) return { text: '天选之人！', color: '#E74C3C' };
+    if (t >= 10) return { text: '非常幸运', color: '#F39C12' };
+    if (t >= 8) return { text: '不错', color: 'var(--success)' };
+    if (t >= 7) return { text: '普通', color: 'var(--text-light)' };
+    return { text: '逆境开局', color: 'var(--danger)' };
+  }
 
   function render() {
     const rem = remaining();
     const keys = Object.keys(ENDOWMENTS);
+    const rating = rollRating(totalPoints);
     app().innerHTML = `
       <div class="screen" style="padding:16px">
         <h2 style="text-align:center;margin-bottom:4px">角色禀赋</h2>
-        <p style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-bottom:12px">
-          分配 <strong>${TOTAL}</strong> 点到 5 项禀赋（每项 0-${MAX}）<br/>
-          禀赋影响全局数值与随机事件触发
+        <p style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-bottom:8px">
+          先抽取天赋点数，再自由分配（每项至少1，上限${MAX}）
         </p>
-        <div style="text-align:center;margin-bottom:12px">
-          <span style="font-size:1.1rem;font-weight:700;color:${rem > 0 ? 'var(--primary)' : 'var(--success)'}">剩余点数: ${rem}</span>
+        <div style="display:flex;justify-content:center;gap:16px;margin-bottom:12px">
+          <div style="text-align:center;flex:1">
+            <div style="font-size:1.8rem;font-weight:700;color:${rating.color}">${totalPoints}</div>
+            <div style="font-size:0.75rem;color:${rating.color};font-weight:600">${rating.text}</div>
+            <div style="font-size:0.65rem;color:var(--text-muted)">天赋点数</div>
+          </div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:1.8rem">${BACKGROUNDS[bgId].emoji}</div>
+            <div style="font-size:0.75rem;font-weight:600">${BACKGROUNDS[bgId].name}</div>
+            <div style="font-size:0.65rem;color:var(--text-muted)">¥${BACKGROUNDS[bgId].money}起步</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-bottom:8px">
+          ${!rolled ? `<button class="btn btn-secondary" id="btn-reroll" style="padding:4px 20px;font-size:0.82rem">🎲 重新抽取（仅1次）</button>` : `<div style="font-size:0.7rem;color:var(--text-muted)">已用完重抽机会</div>`}
+        </div>
+        <div style="text-align:center;margin-bottom:8px">
+          <span style="font-size:0.9rem;font-weight:700;color:${rem > 0 ? 'var(--primary)' : 'var(--success)'}">剩余: ${rem}</span>
         </div>
         <div style="max-width:360px;margin:0 auto">
           ${keys.map(k => {
@@ -96,7 +135,7 @@ export function renderEndowments(onConfirm) {
                 <div style="font-size:0.65rem;color:var(--text-muted)">${e.effects.join(' · ')}</div>
               </div>
               <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-                <button class="endow-btn" data-key="${k}" data-dir="-1" ${v <= 0 ? 'disabled' : ''} style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:1rem;cursor:pointer">−</button>
+                <button class="endow-btn" data-key="${k}" data-dir="-1" ${v <= 1 ? 'disabled' : ''} style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:1rem;cursor:pointer">−</button>
                 <div style="width:60px;text-align:center">
                   <div style="font-size:1.1rem;font-weight:700">${v}</div>
                   <div style="display:flex;gap:2px;justify-content:center">${Array.from({length: MAX}, (_, i) => `<div style="width:12px;height:4px;border-radius:2px;background:${i < v ? 'var(--primary)' : '#E0E0E0'}"></div>`).join('')}</div>
@@ -108,13 +147,10 @@ export function renderEndowments(onConfirm) {
         </div>
         <div style="max-width:360px;margin:12px auto 0">
           <button class="btn btn-primary btn-block" id="btn-endow-confirm" ${rem !== 0 ? 'disabled style="opacity:0.5"' : ''}>确认禀赋 (${rem === 0 ? '✓' : `还剩${rem}点`})</button>
-          <div style="text-align:center;margin-top:8px">
-            <button class="btn btn-secondary" id="btn-endow-reset" style="font-size:0.8rem;padding:4px 16px">重置为默认</button>
-          </div>
         </div>
         <div class="tip-box" style="max-width:360px;margin:12px auto 0;text-align:left">
           <div class="tip-label">禀赋与理论</div>
-          <div class="tip-text">禀赋差异源自生产者模型中的个体异质性：热情预算、时间禀赋、反馈敏感性各不相同。你的起点决定了不同的最优策略。</div>
+          <div class="tip-text">天赋点数服从偏左正态分布——大多数人拿到6-8点，少数幸运儿可达10+，也有人以5点逆境开局。每项至少保底1点。</div>
         </div>
       </div>
     `;
@@ -124,7 +160,7 @@ export function renderEndowments(onConfirm) {
         const k = btn.dataset.key;
         const dir = parseInt(btn.dataset.dir);
         const newVal = pts[k] + dir;
-        if (newVal < 0 || newVal > MAX) return;
+        if (newVal < 1 || newVal > MAX) return; // min 1 per trait
         if (dir > 0 && remaining() <= 0) return;
         pts[k] = newVal;
         render();
@@ -132,10 +168,14 @@ export function renderEndowments(onConfirm) {
     });
     const confirmBtn = document.getElementById('btn-endow-confirm');
     if (confirmBtn && remaining() === 0) {
-      confirmBtn.addEventListener('click', () => onConfirm({ ...pts }));
+      confirmBtn.addEventListener('click', () => onConfirm({ ...pts }, bgId));
     }
-    document.getElementById('btn-endow-reset')?.addEventListener('click', () => {
-      pts.talent = 1; pts.stamina = 1; pts.social = 2; pts.marketing = 1; pts.resilience = 2;
+    document.getElementById('btn-reroll')?.addEventListener('click', () => {
+      if (rolled) return;
+      rolled = true;
+      totalPoints = rollTotal();
+      bgId = rollBackground();
+      pts.talent = 1; pts.stamina = 1; pts.social = 1; pts.marketing = 1; pts.resilience = 1;
       render();
     });
   }
@@ -427,12 +467,14 @@ function renderStats(state) {
         </div>
         <span class="stat-value">${Math.round(infoPct)}%</span>
       </div>
-      ${infoPct > 15 ? `<div style="font-size:0.65rem;color:var(--text-muted);text-align:right;padding-right:4px;margin-top:-4px">每月-10% · ${Math.ceil((infoPct - 8) / 10)}月后回到底线</div>` : ''}
-      ${(state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) ? `
-      <div style="display:flex;justify-content:center;gap:16px;padding:6px 0;margin-top:4px;border-top:1px dashed var(--border);font-size:0.78rem">
-        <span>📦 库存</span>
-        <span style="color:${state.inventory.hvpStock > 0 ? 'var(--primary)' : 'var(--text-muted)'}">📖 同人本×${state.inventory.hvpStock}</span>
-        <span style="color:${state.inventory.lvpStock > 0 ? 'var(--secondary)' : 'var(--text-muted)'}">🔑 谷子×${state.inventory.lvpStock}</span>
+      ${infoPct > 15 ? `<div style="font-size:0.65rem;color:var(--text-muted);text-align:right;padding-right:4px;margin-top:-4px">每月-7% · ${Math.ceil((infoPct - 8) / 7)}月后回到底线</div>` : ''}
+      ${(state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) || (state.totalHVP + state.totalLVP > 0) ? `
+      <div style="display:flex;justify-content:center;gap:12px;padding:6px 0;margin-top:4px;border-top:1px dashed var(--border);font-size:0.78rem;flex-wrap:wrap">
+        ${(state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) ? `<span>📦 本×${state.inventory.hvpStock} 谷×${state.inventory.lvpStock}</span>` : ''}
+        ${(state.totalHVP + state.totalLVP > 0) ? (() => {
+          const sk = getCreativeSkill(state);
+          return `<span style="color:var(--secondary)">🎯 技艺Lv${sk.toFixed(1)} ${getSkillLabel(sk)}</span>`;
+        })() : ''}
       </div>` : ''}
     </div>
   `;
@@ -463,8 +505,8 @@ function renderMarketPanel(market, official) {
       <div class="market-body">
         <div style="display:flex;justify-content:space-around;padding:8px 0;font-size:0.78rem;text-align:center">
           <div><div style="font-weight:700;font-size:1.1rem">${market.communitySize.toLocaleString()}</div><div style="color:var(--text-muted)">社群人数</div></div>
-          <div><div style="font-weight:700;font-size:1.1rem;color:var(--primary)">${market.nHVP}</div><div style="color:var(--text-muted)">HVP创作者</div></div>
-          <div><div style="font-weight:700;font-size:1.1rem">${market.nLVP}</div><div style="color:var(--text-muted)">LVP创作者</div></div>
+          <div><div style="font-weight:700;font-size:1.1rem;color:var(--primary)">${market.nHVP}</div><div style="color:var(--text-muted)">同人本创作者</div></div>
+          <div><div style="font-weight:700;font-size:1.1rem">${market.nLVP}</div><div style="color:var(--text-muted)">同人谷创作者</div></div>
         </div>
         <div class="stat-row" style="margin-top:4px">
           <span class="stat-icon">🌈</span>
@@ -490,8 +532,8 @@ function renderMarketPanel(market, official) {
           </div>
           <span class="stat-value">${ipHeat}</span>
         </div>
-        ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.72rem;color:var(--danger);padding:4px 0">⚠ 消费者HVP偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
-        ${official && official.secondHandPressure.lvp > 0.1 ? `<div style="font-size:0.72rem;color:var(--warning);padding:2px 0">📦 二手LVP压力: ${Math.round(official.secondHandPressure.lvp * 100)}%</div>` : ''}
+        ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.72rem;color:var(--danger);padding:4px 0">⚠ 消费者同人本偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
+        ${official && official.secondHandPressure.lvp > 0.1 ? `<div style="font-size:0.72rem;color:var(--warning);padding:2px 0">📦 二手同人谷压力: ${Math.round(official.secondHandPressure.lvp * 100)}%</div>` : ''}
         <div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
           ${npcFeed}
         </div>
@@ -522,6 +564,51 @@ function renderActionCard(action, state) {
 }
 
 // === Result Screen ===
+// === Grouped Delta Display ===
+function renderGroupedDeltas(deltas) {
+  // Categorize deltas by icon/label keywords
+  const groups = { passion: [], money: [], reputation: [], inventory: [], other: [] };
+  const passionIcons = ['❤️', '😰', '😮‍💨', '🌍', '🕸️', '💸', '🔥', '😞', '💬', '🎉'];
+  const moneyIcons = ['💰', '🖨️', '🤝', '💼', '🏠', '🌐'];
+  const repIcons = ['⭐', '📢', '📈'];
+  const invIcons = ['📦', '🔑', '📖'];
+
+  for (const d of deltas) {
+    if (passionIcons.includes(d.icon)) groups.passion.push(d);
+    else if (moneyIcons.includes(d.icon)) groups.money.push(d);
+    else if (repIcons.includes(d.icon)) groups.reputation.push(d);
+    else if (invIcons.includes(d.icon)) groups.inventory.push(d);
+    else groups.other.push(d);
+  }
+
+  const renderItems = (items) => items.map(d => {
+    const critical = !d.positive && (d.label.includes('热情') || d.label.includes('焦虑'));
+    return `<div class="delta-item" ${critical ? 'style="background:#FFF0F0;border-radius:4px;padding:1px 4px;margin:-1px -4px"' : ''}>
+      <span class="delta-icon">${d.icon}</span>
+      <span style="flex:1">${d.label}</span>
+      <span class="${d.positive ? 'delta-positive' : 'delta-negative'}">${d.value}</span>
+    </div>`;
+  }).join('');
+
+  const sections = [
+    { key: 'passion', label: '❤️ 热情', items: groups.passion },
+    { key: 'money', label: '💰 收支', items: groups.money },
+    { key: 'reputation', label: '⭐ 声誉', items: groups.reputation },
+    { key: 'inventory', label: '📦 库存', items: groups.inventory },
+    { key: 'other', label: '📋 其他', items: groups.other },
+  ].filter(s => s.items.length > 0);
+
+  // If total deltas ≤ 6, show flat (no grouping needed)
+  if (deltas.length <= 6) return renderItems(deltas);
+
+  return sections.map(s => `
+    <div style="margin-bottom:4px">
+      <div style="font-size:0.7rem;font-weight:600;color:var(--text-muted);padding:2px 0;border-bottom:1px solid var(--border);margin-bottom:2px">${s.label}</div>
+      ${renderItems(s.items)}
+    </div>
+  `).join('');
+}
+
 export function renderResult(state, result, onContinue) {
   const tipHtml = result.tip ? `
     <div class="tip-box">
@@ -559,13 +646,7 @@ export function renderResult(state, result, onContinue) {
       <div class="game-content">
         <div class="result-box">
           <h3>${result.actionEmoji} ${result.actionName}</h3>
-          ${result.deltas.map(d => `
-            <div class="delta-item">
-              <span class="delta-icon">${d.icon}</span>
-              <span style="flex:1">${d.label}</span>
-              <span class="${d.positive ? 'delta-positive' : 'delta-negative'}">${d.value}</span>
-            </div>
-          `).join('')}
+          ${renderGroupedDeltas(result.deltas)}
         </div>
 
         ${result.salesInfo ? renderSalesBreakdown(result.salesInfo) : ''}
@@ -663,58 +744,188 @@ function renderSalesBreakdown(s) {
 
 // === Price Selection Screen ===
 export function renderPriceSelector(state, productType, onSelect, onCancel) {
-  const basePrice = productType === 'hvp' ? 50 : 15;
+  const isHVP = productType === 'hvp';
+  // Dynamic market average price based on current market conditions
+  const basePrice = state.market ? getMarketAvgPrice(state.market, state, productType) : (isHVP ? 50 : 15);
   const tiers = getPriceTiers(basePrice, productType);
-  const label = productType === 'hvp' ? '同人本' : '谷子';
-  const elasticity = productType === 'hvp' ? 1.06 : 0.92;
-  const typeLabel = productType === 'hvp' ? '弱奢侈品' : '必需品';
+  const label = isHVP ? '同人本' : '谷子';
+  const elasticity = isHVP ? 1.06 : 0.92;
+  const typeLabel = isHVP ? '弱奢侈品' : '必需品';
 
-  // Show predicted demand at each price level
-  const demandPreviews = tiers.map(t => {
+  // --- Market intelligence ---
+  const cs = state.market?.communitySize || 10000;
+  const nComp = isHVP ? (state.market?.nHVP || 9) : (state.market?.nLVP || 55);
+  const npcAvgRep = isHVP ? 2.0 : 0.5;
+  const totalAlpha = nComp * npcAvgRep + state.reputation;
+  const playerShare = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
+  const baseConv = Math.min(0.95, 0.20 + state.infoDisclosure * 0.50);
+  const gamma = isHVP ? 5 : 15;
+  const baseDemand = Math.round(gamma * (cs / 1000) * playerShare * baseConv);
+  // Production cost context (skill-adjusted)
+  const rawUnitCost = isHVP ? 50 : 7;
+  const unitCost = Math.round(rawUnitCost * (1 - Math.min(0.2, (state.totalHVP * 3 + state.totalLVP) * 0.005)));
+  const recLabel = state.recessionTurnsLeft > 0 ? ' 📉下行中' : '';
+  const refPrice = isHVP ? 50 : 15; // static reference for comparison
+
+  // Demand & profit preview for each tier
+  const previews = tiers.map(t => {
     const priceFactor = Math.pow(t.price / basePrice, -elasticity);
-    const relDemand = Math.round(priceFactor * 100);
-    const relRevenue = Math.round(priceFactor * t.price / basePrice * 100);
-    return { ...t, relDemand, relRevenue };
+    const estDemand = Math.max(1, Math.round(baseDemand * priceFactor));
+    const estRevenue = estDemand * t.price;
+    const estProfit = estDemand * (t.price - unitCost);
+    return { ...t, estDemand, estRevenue, estProfit, priceFactor };
   });
 
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
   overlay.innerHTML = `
-    <div class="event-card" style="max-width:360px">
-      <div class="event-emoji">${productType === 'hvp' ? '📖' : '🔑'}</div>
-      <div class="event-title">${label}定价</div>
-      <div class="event-desc" style="margin-bottom:4px">
-        弹性 ε = ${elasticity} (${typeLabel})
+    <div class="event-card" style="max-width:400px;max-height:85vh;overflow-y:auto;text-align:left">
+      <div style="text-align:center;margin-bottom:8px">
+        <span style="font-size:1.5rem">${isHVP ? '📖' : '🔑'}</span>
+        <div style="font-weight:700;font-size:1rem;margin-top:2px">${label}定价</div>
       </div>
-      <div class="price-selector">
-        ${demandPreviews.map(t => `
-          <div class="price-btn" data-price="${t.price}">
-            <div class="price-label">${t.label}</div>
-            <div class="price-value">¥${t.price}</div>
-            <div class="price-desc">需求${t.relDemand}%<br/>收入${t.relRevenue}%</div>
-          </div>
-        `).join('')}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;font-size:0.72rem">
+        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
+          <div style="color:var(--text-muted)">社群规模</div>
+          <div style="font-weight:700">${cs.toLocaleString()}人</div>
+        </div>
+        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
+          <div style="color:var(--text-muted)">同类竞争者</div>
+          <div style="font-weight:700">${nComp}人${recLabel}</div>
+        </div>
+        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
+          <div style="color:var(--text-muted)">你的市场份额</div>
+          <div style="font-weight:700">${(playerShare * 100).toFixed(1)}%</div>
+        </div>
+        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
+          <div style="color:var(--text-muted)">单位成本 / 市场均价</div>
+          <div style="font-weight:700">¥${unitCost} / ¥${basePrice} ${basePrice > refPrice ? '📈' : basePrice < refPrice ? '📉' : ''}</div>
+        </div>
       </div>
+
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">
+        弹性 ε=${elasticity} (${typeLabel}) · 预估月需求 ~${baseDemand}${isHVP ? '本' : '个'}（均价时）
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        ${previews.map(t => {
+          const profitColor = t.estProfit > 0 ? 'var(--success)' : 'var(--danger)';
+          const isBase = t.id === 'normal';
+          return `
+          <div class="price-btn" data-price="${t.price}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;text-align:left;cursor:pointer;${isBase ? 'border:1px solid var(--primary);' : ''}">
+            <div style="min-width:52px;text-align:center">
+              <div style="font-size:1.1rem;font-weight:700">¥${t.price}</div>
+              <div style="font-size:0.65rem;color:var(--text-muted)">${t.label}</div>
+            </div>
+            <div style="flex:1;font-size:0.72rem;display:flex;gap:12px">
+              <div><div style="color:var(--text-muted)">预估销量</div><div style="font-weight:600">${t.estDemand}${isHVP ? '本' : '个'}</div></div>
+              <div><div style="color:var(--text-muted)">预估收入</div><div style="font-weight:600">¥${t.estRevenue}</div></div>
+              <div><div style="color:var(--text-muted)">预估利润</div><div style="font-weight:600;color:${profitColor}">${t.estProfit >= 0 ? '+' : ''}¥${t.estProfit}</div></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+
       <div class="tip-box" style="text-align:left;margin-bottom:0">
-        <div class="tip-label">弹性公式: 需求 = 基准 × (价格/基准价)^(-ε)</div>
-        <div class="tip-text">${productType === 'hvp'
-          ? '同人本ε=1.06 > 1：涨价30%→需求降约33%→收入降低。定价权弱，高价策略有风险。'
-          : '谷子ε=0.92 < 1：涨价30%→需求只降约25%→收入反而微增。必需品属性给了一定定价空间。'}</div>
+        <div class="tip-label">定价经济学</div>
+        <div class="tip-text">${isHVP
+          ? '同人本弹性ε=1.06>1（弱奢侈品）：涨价会让需求下降更快，总收入反而减少。但高价策略适合声誉高、份额大的创作者——因为你的粉丝愿意为品质付费。'
+          : '谷子弹性ε=0.92<1（必需品属性）：涨价时需求下降较慢，收入可能反增。低价走量和高价少量都是可行策略——取决于你的库存和参展计划。'}</div>
       </div>
-      <button class="btn btn-block btn-cancel-overlay" style="margin-top:12px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+      <button class="btn btn-primary btn-block" id="btn-price-confirm" disabled style="margin-top:10px;opacity:0.5">请选择定价</button>
+      <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
   `;
   document.body.appendChild(overlay);
 
+  let selectedPrice = null;
   overlay.querySelectorAll('.price-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      overlay.remove();
-      onSelect(parseInt(btn.dataset.price));
+      // Deselect all
+      overlay.querySelectorAll('.price-btn').forEach(b => {
+        b.style.border = '1px solid var(--border)';
+        b.style.background = '';
+      });
+      // Highlight selected
+      btn.style.border = '2px solid var(--primary)';
+      btn.style.background = '#F0F4FF';
+      selectedPrice = parseInt(btn.dataset.price);
+      // Enable confirm
+      const cfm = overlay.querySelector('#btn-price-confirm');
+      cfm.disabled = false;
+      cfm.style.opacity = '1';
+      cfm.textContent = `确认定价 ¥${selectedPrice}`;
     });
+  });
+  overlay.querySelector('#btn-price-confirm').addEventListener('click', () => {
+    if (selectedPrice == null) return;
+    overlay.remove();
+    onSelect(selectedPrice);
   });
   overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
     overlay.remove();
     if (onCancel) onCancel();
+  });
+}
+
+// === Anti-Speculator Strategy Selector (frmn.md) ===
+export function renderStrategySelector(state, onSelect) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+
+  const strategies = [
+    { id: 'normal', emoji: '📦', name: '普通发售', desc: '按正常流程印刷发售', detail: '不做特殊处理。二手市场自由流通。' },
+    { id: 'unlimited', emoji: '♾️', name: '不限量发售', desc: '承诺持续接受预订再版', detail: '投机客无法预估存量，泡沫项趋近于零。压制二手HVP炒价。' },
+    { id: 'signed', emoji: '✍️', name: 'To签/定制化', desc: '每本附赠买家专属签绘', detail: '大幅降低二手流通价值（个人签名难以转售）。粉丝好感↑声誉+0.1。' },
+    { id: 'digital', emoji: '📱', name: '同步发行电子版', desc: '实体+电子同步发售', detail: '用低成本满足内容消费需求，减少投机买家。额外获得约30%电子版收入。' },
+  ];
+
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:380px;text-align:left">
+      <div style="text-align:center;margin-bottom:8px">
+        <span style="font-size:1.3rem">🛡️</span>
+        <div style="font-weight:700;font-size:1rem">发售策略</div>
+        <div style="font-size:0.75rem;color:var(--text-light)">选择如何发售你的同人本（影响二手市场行为）</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        ${strategies.map(s => `
+          <div class="price-btn strat-btn" data-strat="${s.id}" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;cursor:pointer">
+            <span style="font-size:1.3rem">${s.emoji}</span>
+            <div>
+              <div style="font-weight:700;font-size:0.85rem">${s.name}</div>
+              <div style="font-size:0.72rem;color:var(--text-light)">${s.desc}</div>
+              <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">${s.detail}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-strat-confirm" disabled style="opacity:0.5">请选择策略</button>
+      <div class="tip-box" style="text-align:left;margin-top:8px;margin-bottom:0">
+        <div class="tip-label">创作者反制 (frmn.md)</div>
+        <div class="tip-text">投机客的利益建立在稀缺性之上。创作者可以通过干预供给预期(不限量)、降低流通属性(To签)或分离内容效用(电子版)来抑制投机。每种策略有不同的收益与取舍。</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  let selected = null;
+  overlay.querySelectorAll('.strat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.strat-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
+      btn.style.border = '2px solid var(--primary)';
+      btn.style.background = '#F0F4FF';
+      selected = btn.dataset.strat;
+      const cfm = overlay.querySelector('#btn-strat-confirm');
+      cfm.disabled = false;
+      cfm.style.opacity = '1';
+      cfm.textContent = '确认发售策略';
+    });
+  });
+  overlay.querySelector('#btn-strat-confirm').addEventListener('click', () => {
+    if (!selected) return;
+    overlay.remove();
+    onSelect(selected);
   });
 }
 
@@ -854,6 +1065,7 @@ export function renderGameOver(state, onRestart) {
 
       <div class="go-stats">
         <div class="go-stat-item"><span>起点</span><span class="go-stat-val">18岁 高考后暑假</span></div>
+        <div class="go-stat-item"><span>背景</span><span class="go-stat-val">${BACKGROUNDS[state.background]?.emoji || '🏠'} ${BACKGROUNDS[state.background]?.name || '普通家庭'}</span></div>
         <div class="go-stat-item"><span>禀赋</span><span class="go-stat-val">${Object.entries(state.endowments || {}).map(([k, v]) => `${ENDOWMENTS[k]?.emoji || ''}${v}`).join(' ')}</span></div>
         <div class="go-stat-item"><span>终点</span><span class="go-stat-val">${age}岁 · ${stageText}</span></div>
         <div class="go-stat-item"><span>坚持月数</span><span class="go-stat-val">${survived} 个月</span></div>

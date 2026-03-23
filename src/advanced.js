@@ -243,7 +243,7 @@ export const ADVANCED_EVENTS = [
       s.advanced.nicheDiscovered = { name, bonusMult: 1.8, turnsLeft: dur };
       s.advanced.nichesFound++;
     },
-    tip: '柯兹纳(Kirzner)定义企业家精神的核心为"敏锐度/警觉性(Alertness)"——发现市场中未被满足的需求并采取行动。同人创作者在阅读原作时嗅到"读者想要但官方没给的情感缺口"，这就是企业家精神。AI永远无法主动发现这些缺口。',
+    tip: '柯兹纳定义企业家精神的核心为"敏锐度/警觉性"——发现市场中未被满足的需求并采取行动。同人创作者在阅读原作时嗅到"读者想要但官方没给的情感缺口"，这就是企业家精神。AI永远无法主动发现这些缺口。',
     weight: 5, when: (s) => s.reputation > 1.5 && !s.advanced?.nicheDiscovered, maxTotal: Infinity,
   },
 
@@ -288,7 +288,7 @@ export const ADVANCED_EVENTS = [
     desc: '你早期的一部作品因为绝版而被炒出高价。圈内开始有人把它当作"正统粉丝"的身份象征，价格越高反而越多人想要...',
     effect: '资金+800 声誉+0.3', effectClass: 'positive',
     apply: (s) => { s.money += 800; s.reputation += 0.3; },
-    tip: '韦伯仑效应：价格越高需求越大。绝版同人制品从消费品相变为金融资产。购买者消费的不再是内容本身，而是"克服高昂交易成本的证明"和"文化正统性"。林迪效应：存在越久的作品，预期继续存活越久。',
+    tip: '韦伯仑效应：价格越高需求越大。绝版同人制品从消费品相变为金融资产。购买者消费的不再是内容本身，而是"克服高昂交易成本的证明"和"文化正统性"。',
     weight: 2, when: (s) => s.reputation > 4 && s.totalHVP > 2 && s.turn > 24, maxTotal: 3,
   },
 

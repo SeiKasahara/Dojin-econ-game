@@ -140,20 +140,50 @@ export function getCompetitionModifier(market, productType) {
 // === Price-Demand Curve (consumer.md Translated CES) ===
 // Player picks a price, demand responds via elasticity
 export function calculatePricedSales(baseSales, basePrice, playerPrice, productType) {
-  // A-type (HVP): elasticity ~1.06 (luxury, slightly elastic)
-  // B-type (LVP): elasticity ~0.92 (necessity, slightly inelastic)
   const elasticity = productType === 'hvp' ? 1.06 : 0.92;
   const priceFactor = Math.pow(playerPrice / basePrice, -elasticity);
   const adjustedSales = Math.max(1, Math.round(baseSales * priceFactor));
   return { sales: adjustedSales, price: playerPrice, revenue: adjustedSales * playerPrice };
 }
 
+// === Dynamic Market Average Price ===
+// Derives from supply-demand balance, confidence, recession, competition density
+export function getMarketAvgPrice(market, playerState, productType) {
+  const isHVP = productType === 'hvp';
+  const baseRef = isHVP ? 50 : 15; // reference equilibrium price
+
+  // Supply pressure: more competitors → price pushed down
+  const eqCount = isHVP ? EQ_HVP : EQ_LVP;
+  const actual = isHVP ? market.nHVP : market.nLVP;
+  const supplyRatio = actual / Math.max(1, eqCount); // >1 = oversupply, <1 = undersupply
+  const supplyMod = 1.15 - 0.15 * supplyRatio; // undersupply: prices up; oversupply: prices down
+
+  // Demand pressure: community size relative to reference
+  const demandMod = Math.sqrt(market.communitySize / 10000); // larger community = higher willingness
+
+  // Confidence: mild effect on price (mainly affects volume, not price)
+  const confMod = 1 - (1 - market.marketConfidence) * 0.15; // confidence 0.6→0.94, 1.0→1.0
+
+  // Recession: moderate price pressure
+  const recMod = playerState.recessionTurnsLeft > 0 ? 0.90 : 1.0;
+
+  // Consumer preference decay: only kicks in at extreme levels (α<0.5)
+  const alphaMod = isHVP && market.consumerAlpha < 0.5
+    ? 0.7 + market.consumerAlpha * 0.6  // α=0→0.7, α=0.5→1.0
+    : 1.0;
+
+  const rawPrice = baseRef * supplyMod * demandMod * confMod * recMod * alphaMod;
+  return Math.max(isHVP ? 25 : 8, Math.round(rawPrice));
+}
+
 // === Price Tiers for UI ===
 export function getPriceTiers(basePrice, productType) {
   return [
-    { id: 'low',    label: '低价冲量', price: Math.round(basePrice * 0.7), desc: '薄利多销' },
-    { id: 'normal', label: '标准定价', price: basePrice,                    desc: '平衡策略' },
-    { id: 'high',   label: '高端定价', price: Math.round(basePrice * 1.4),  desc: '高价少量' },
+    { id: 'budget',  label: '低价冲量', price: Math.max(1, Math.round(basePrice * 0.6)), desc: '薄利多销' },
+    { id: 'low',     label: '亲民价',   price: Math.max(1, Math.round(basePrice * 0.8)), desc: '略低于均价' },
+    { id: 'normal',  label: '市场均价', price: basePrice,                                  desc: '跟随市场' },
+    { id: 'high',    label: '品质溢价', price: Math.round(basePrice * 1.3),                desc: '高于均价' },
+    { id: 'premium', label: '高端定位', price: Math.round(basePrice * 1.6),                desc: '少量精品' },
   ];
 }
 
