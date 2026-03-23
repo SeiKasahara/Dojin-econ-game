@@ -10,12 +10,14 @@ import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, r
 let state = null;
 
 let selectedPreset = 'mid';
+let selectedIpType = 'normal';
 
-function startGame(communityPreset) {
+function startGame(communityPreset, ipType) {
   selectedPreset = communityPreset || 'mid';
+  selectedIpType = ipType || 'normal';
   // Show endowment allocation screen before game starts
   renderEndowments((endowments, backgroundId) => {
-    state = createInitialState(selectedPreset, endowments, backgroundId);
+    state = createInitialState(selectedPreset, endowments, backgroundId, selectedIpType);
     state._prevAchievementCount = 0;
     renderGame(state, handleAction);
   });

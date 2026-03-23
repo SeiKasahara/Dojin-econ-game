@@ -145,7 +145,7 @@ export function rollBackground() {
   return 'ordinary';
 }
 
-export function createInitialState(communityPreset = 'mid', endowments = null, backgroundId = null) {
+export function createInitialState(communityPreset = 'mid', endowments = null, backgroundId = null, ipType = 'normal') {
   const e = endowments || { talent: 1, stamina: 1, social: 2, marketing: 1, resilience: 2 };
   const bgId = backgroundId || 'ordinary';
   const bg = BACKGROUNDS[bgId];
@@ -175,9 +175,9 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     // Personal goods collection (as consumer)
     goodsCollection: 0,   // purchased goods owned, can sell to secondhand market
     // Market ecosystem (Phase 2)
-    market: createMarketState(communityPreset),
+    market: createMarketState(communityPreset, ipType),
     // Official IP & secondhand (Phase 3)
-    official: createOfficialState(),
+    official: createOfficialState(ipType),
     // Advanced: stagflation, AI, network, Kirzner (Phase 4+5)
     advanced: createAdvancedState(),
     // Event frequency tracking

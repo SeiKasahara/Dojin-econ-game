@@ -16,19 +16,31 @@ const P_LVP_EXIT = 0.025; // LVP exit rate
 const ALPHA_DECAY = 0.95; // consumer α decay per turn when N_HVP=0 (faster for gameplay)
 const GAMMA_H = 15;       // committed consumption (vacuum profit base)
 
+// === IP Type definitions ===
+export const IP_TYPES = {
+  cold:   { name: '冷门IP', emoji: '🧊', carryingCapacity: 5000,  officialActiveChance: 0.03, officialMinorChance: 0.02, desc: '官方几乎不管，社群天花板低，但竞争也少' },
+  normal: { name: '潜力IP', emoji: '🌟', carryingCapacity: 25000, officialActiveChance: 0.12, officialMinorChance: 0.10, desc: '官方偶尔更新，社群有成长空间' },
+  hot:    { name: '热门IP', emoji: '🔥', carryingCapacity: 50000, officialActiveChance: 0.18, officialMinorChance: 0.15, desc: '官方频繁更新，社群庞大但竞争激烈' },
+};
+
 // === Create Market State ===
-// communityPreset: 'early' | 'mid' | 'late'
-export function createMarketState(communityPreset = 'mid') {
+export function createMarketState(communityPreset = 'mid', ipType = 'normal') {
   const presets = {
     early: { nHVP: 3, nLVP: 15, communitySize: 1500 },
     mid:   { nHVP: 9, nLVP: 55, communitySize: 10000 },
     late:  { nHVP: 12, nLVP: 80, communitySize: 20000 },
   };
   const p = presets[communityPreset] || presets.mid;
+  const ip = IP_TYPES[ipType] || IP_TYPES.normal;
+  // Cold IP: cap community to its ceiling, fewer creators
+  const cappedSize = Math.min(p.communitySize, ip.carryingCapacity);
+  const creatorScale = cappedSize / p.communitySize;
   return {
-    nHVP: p.nHVP,
-    nLVP: p.nLVP,
-    communitySize: p.communitySize,
+    nHVP: Math.max(1, Math.round(p.nHVP * creatorScale)),
+    nLVP: Math.max(5, Math.round(p.nLVP * creatorScale)),
+    communitySize: cappedSize,
+    ipType,
+    carryingCapacity: ip.carryingCapacity,
     hvpZeroStreak: 0,
     consumerAlpha: 1.0,
     diversityHealth: 1.0,
@@ -100,8 +112,7 @@ export function tickMarket(market, playerState) {
   market.marketConfidence += (basConf * divConf - market.marketConfidence) * 0.2; // smooth
 
   // --- 7. Community size dynamics (logistic growth with carrying capacity) ---
-  // IP has a natural audience ceiling. Growth slows as community approaches saturation.
-  const CARRYING_CAPACITY = 25000; // maximum sustainable community for this IP
+  const CARRYING_CAPACITY = market.carryingCapacity || 25000;
   const saturationFactor = 1 - market.communitySize / CARRYING_CAPACITY; // approaches 0 at cap
   const hvpPull = market.nHVP * 40 * Math.max(0, saturationFactor);
   const lvpPull = market.nLVP * 4 * Math.max(0, saturationFactor);

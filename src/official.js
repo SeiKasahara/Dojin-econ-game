@@ -5,11 +5,11 @@
  */
 
 // === IP Heat System (hsls.md: dK/dt = I_official + θ·N_D - λ·K) ===
-export function createOfficialState() {
+export function createOfficialState(ipType = 'normal') {
   return {
-    ipHeat: 80,            // K: IP热度 (0-100), starts healthy
-    officialActive: true,   // whether official is producing content
-    dormancyTurns: 0,       // months since last official release
+    ipHeat: ipType === 'cold' ? 35 : ipType === 'hot' ? 95 : 80,
+    officialActive: ipType !== 'cold', // cold IP: official is dormant from start
+    dormancyTurns: ipType === 'cold' ? 24 : 0, // cold: already 2 years without update
     shadowPrice: 0,         // P_D: negative=subsidy, positive=restriction
     lastReleaseType: null,  // 'major'|'minor'|null
 
@@ -23,18 +23,21 @@ export function createOfficialState() {
 // === Tick Official IP each turn ===
 export function tickOfficial(official, market, playerState) {
   const events = [];
+  const ipType = market.ipType || 'normal';
 
   // --- 1. IP Heat decay: dK/dt = I_official + θ·N_D - λ·K ---
-  const lambda = 0.03;  // natural decay rate 3%/month
-  const totalCreators = market.nHVP + market.nLVP + 1; // +1 for player
-  const doujinContrib = totalCreators * 0.15; // θ·N_D: each creator sustains heat
+  // Cold IP decays faster (less organic interest)
+  const lambda = ipType === 'cold' ? 0.05 : ipType === 'hot' ? 0.02 : 0.03;
+  const totalCreators = market.nHVP + market.nLVP + 1;
+  const doujinContrib = totalCreators * 0.15;
   let officialInput = 0;
 
-  // Official release cycle: roughly every 8-18 months
+  // Official release cycle — IP type determines how often official bothers
+  const majorChance = ipType === 'cold' ? 0.03 : ipType === 'hot' ? 0.18 : 0.12;
+  const minorChance = ipType === 'cold' ? 0.02 : ipType === 'hot' ? 0.15 : 0.10;
   official.dormancyTurns++;
   if (official.officialActive) {
-    // Check for scheduled release
-    if (official.dormancyTurns >= 8 && Math.random() < 0.12) {
+    if (official.dormancyTurns >= 8 && Math.random() < majorChance) {
       // Major release
       officialInput = 30;
       official.dormancyTurns = 0;
@@ -49,7 +52,7 @@ export function tickOfficial(official, market, playerState) {
           s.passion = Math.min(100, s.passion + 10);
         },
       });
-    } else if (official.dormancyTurns >= 4 && Math.random() < 0.1) {
+    } else if (official.dormancyTurns >= 4 && Math.random() < minorChance) {
       // Minor update
       officialInput = 10;
       official.dormancyTurns = Math.max(0, official.dormancyTurns - 4);

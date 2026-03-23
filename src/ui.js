@@ -5,7 +5,7 @@
 
 import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground } from './engine.js';
 import { createChartCanvas, drawSupplyDemand } from './chart.js';
-import { getMarketNarratives, getPriceTiers, calculatePricedSales, getMarketAvgPrice } from './market.js';
+import { getMarketNarratives, getPriceTiers, calculatePricedSales, getMarketAvgPrice, IP_TYPES } from './market.js';
 import { getOfficialNarratives } from './official.js';
 import { getAdvancedNarratives } from './advanced.js';
 
@@ -23,23 +23,16 @@ export function renderTitle(onStart) {
         从高考后的暑假开始，经历大学、工作<br/>
         你的同人创作之路能走多远？
       </p>
-      <div style="margin-bottom:20px;width:100%;max-width:320px">
-        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px;text-align:center">选择你入坑时的圈子阶段</div>
+      <div style="margin-bottom:20px;width:100%;max-width:340px">
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px;text-align:center">你喜欢什么样的作品？</div>
         <div class="price-selector">
-          <div class="price-btn selected" data-preset="early">
-            <div class="price-label">🌱 新兴期</div>
-            <div class="price-value" style="font-size:0.75rem">1500人</div>
-            <div class="price-desc">小而全连接</div>
+          <div class="price-btn selected" data-fandom="niche">
+            <div class="price-label">💎 冷门佳作</div>
+            <div class="price-desc">小众但有味道的作品<br/>圈子小，不知道能不能火</div>
           </div>
-          <div class="price-btn" data-preset="mid">
-            <div class="price-label">🌳 成长期</div>
-            <div class="price-value" style="font-size:0.75rem">10000人</div>
-            <div class="price-desc">活跃发展</div>
-          </div>
-          <div class="price-btn" data-preset="late">
-            <div class="price-label">🏔️ 成熟期</div>
-            <div class="price-value" style="font-size:0.75rem">20000人</div>
-            <div class="price-desc">竞争激烈</div>
+          <div class="price-btn" data-fandom="popular">
+            <div class="price-label">🔥 热门大作</div>
+            <div class="price-desc">当下最火的作品<br/>圈子大，但热度能持续多久？</div>
           </div>
         </div>
       </div>
@@ -50,16 +43,30 @@ export function renderTitle(onStart) {
       </p>
     </div>
   `;
-  // Preset selection
-  let selectedPreset = 'early';
-  document.querySelectorAll('.price-btn[data-preset]').forEach(btn => {
+  let selectedFandom = 'niche';
+  document.querySelectorAll('.price-btn[data-fandom]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.price-btn[data-preset]').forEach(b => b.classList.remove('selected'));
+      document.querySelectorAll('.price-btn[data-fandom]').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
-      selectedPreset = btn.dataset.preset;
+      selectedFandom = btn.dataset.fandom;
     });
   });
-  $('#btn-start').addEventListener('click', () => onStart(selectedPreset));
+  $('#btn-start').addEventListener('click', () => {
+    // Roll actual IP type and community size behind the scenes
+    let ipType, preset;
+    if (selectedFandom === 'niche') {
+      // Niche: small community, could be cold or secretly have potential
+      preset = 'early';
+      const r = Math.random();
+      ipType = r < 0.40 ? 'cold' : r < 0.85 ? 'normal' : 'hot'; // 40% cold, 45% normal, 15% sleeper hit
+    } else {
+      // Popular: large community, but could decline
+      preset = Math.random() < 0.6 ? 'late' : 'mid';
+      const r = Math.random();
+      ipType = r < 0.05 ? 'cold' : r < 0.35 ? 'normal' : 'hot'; // 5% already declining, 30% normal, 65% hot
+    }
+    onStart(preset, ipType);
+  });
 }
 
 // === Endowment Allocation Screen ===
@@ -495,7 +502,7 @@ function renderMarketPanel(market, official) {
   return `
     <div class="market-panel collapsed">
       <div class="market-header" id="market-toggle">
-        <span>🏪 市场生态</span>
+        <span>🏪 市场生态 ${IP_TYPES[market.ipType]?.emoji || ''}</span>
         <span style="display:flex;align-items:center;gap:8px">
           <span style="font-size:0.72rem">👥${market.communitySize} HVP:${market.nHVP} LVP:${market.nLVP}</span>
           <span style="font-size:0.72rem;color:${divColor}">${divLabel}</span>
@@ -1121,6 +1128,7 @@ export function renderGameOver(state, onRestart) {
       <div class="go-stats">
         <div class="go-stat-item"><span>起点</span><span class="go-stat-val">18岁 高考后暑假</span></div>
         <div class="go-stat-item"><span>背景</span><span class="go-stat-val">${BACKGROUNDS[state.background]?.emoji || '🏠'} ${BACKGROUNDS[state.background]?.name || '普通家庭'}</span></div>
+        <div class="go-stat-item"><span>IP</span><span class="go-stat-val">${IP_TYPES[state.market?.ipType]?.emoji || '🌟'} ${IP_TYPES[state.market?.ipType]?.name || '潜力IP'}</span></div>
         <div class="go-stat-item"><span>禀赋</span><span class="go-stat-val">${Object.entries(state.endowments || {}).map(([k, v]) => `${ENDOWMENTS[k]?.emoji || ''}${v}`).join(' ')}</span></div>
         <div class="go-stat-item"><span>终点</span><span class="go-stat-val">${age}岁 · ${stageText}</span></div>
         <div class="go-stat-item"><span>坚持月数</span><span class="go-stat-val">${survived} 个月</span></div>
