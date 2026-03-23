@@ -929,6 +929,61 @@ export function renderStrategySelector(state, onSelect) {
   });
 }
 
+// === Event Mode Selector: 亲参 vs 寄售 ===
+export function renderEventModeSelector(state, event, onSelect, onCancel) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  const condLabel = event.condition === 'popular' ? ' 🔥人气爆棚' : '';
+
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:360px;text-align:left">
+      <div style="text-align:center;margin-bottom:10px">
+        <div style="font-size:1.3rem">🎪</div>
+        <div style="font-weight:700">${event.name}@${event.city}${condLabel}</div>
+        <div style="font-size:0.75rem;color:var(--text-light)">路费¥${event.travelCost} · 📦本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+        <div class="price-btn mode-btn" data-mode="attend" style="padding:12px;cursor:pointer">
+          <div style="font-weight:700;font-size:0.9rem">🏪 亲自摆摊</div>
+          <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">进入展会迷你游戏，亲手招揽客人售卖。销量取决于你的操作表现。</div>
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-5 · 路费¥${event.travelCost} · 连续参展有疲劳</div>
+        </div>
+        <div class="price-btn mode-btn" data-mode="consign" style="padding:12px;cursor:pointer">
+          <div style="font-weight:700;font-size:0.9rem">📦 寄售委托</div>
+          <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">委托朋友或摊主代售，无需亲自到场。销量由市场供需模型决定。</div>
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-2 · 路费¥${Math.round(event.travelCost * 0.3)}(邮费) · 无参展疲劳</div>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-mode-confirm" disabled style="opacity:0.5">请选择参展方式</button>
+      <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  let selected = null;
+  overlay.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.mode-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
+      btn.style.border = '2px solid var(--primary)';
+      btn.style.background = '#F0F4FF';
+      selected = btn.dataset.mode;
+      const cfm = overlay.querySelector('#btn-mode-confirm');
+      cfm.disabled = false;
+      cfm.style.opacity = '1';
+      cfm.textContent = selected === 'attend' ? '确认亲参' : '确认寄售';
+    });
+  });
+  overlay.querySelector('#btn-mode-confirm').addEventListener('click', () => {
+    if (!selected) return;
+    overlay.remove();
+    onSelect(selected);
+  });
+  overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
+    overlay.remove();
+    if (onCancel) onCancel();
+  });
+}
+
 // === Doujin Event Selector ===
 export function renderEventSelector(state, onSelect, onCancel) {
   const events = state.availableEvents || [];

@@ -961,16 +961,22 @@ export function executeTurn(state, actionId) {
         // Skip all selling logic below
       } else {
 
-      // Track event attendance for fatigue (连续参展边际递减)
-      state.recentEventTurns.push(state.turn);
-      // Count events in last 6 months
-      const recentCount = state.recentEventTurns.filter(t => state.turn - t < 6).length;
-      // Fatigue: 1st-2nd event=100%, 3rd=80%, 4th=60%, 5th+=40%
-      const eventFatigue = recentCount <= 2 ? 1.0 : Math.max(0.4, 1.0 - (recentCount - 2) * 0.2);
+      const mode = state._eventMode || 'attend'; // 'attend' = 亲参, 'consign' = 寄售
+      state._eventMode = null;
+      const isAttend = mode === 'attend';
+      const mg = isAttend ? state._minigameResult : null;
+      state._minigameResult = null;
 
-      const mg = state._minigameResult; // from mini-game, or null if skipped
+      // Fatigue only applies to 亲参
+      let eventFatigue = 1.0;
+      if (isAttend) {
+        state.recentEventTurns.push(state.turn);
+        const recentCount = state.recentEventTurns.filter(t => state.turn - t < 6).length;
+        eventFatigue = recentCount <= 2 ? 1.0 : Math.max(0.4, 1.0 - (recentCount - 2) * 0.2);
+      }
 
-      if (mg) {
+      if (isAttend && mg) {
+        // === 亲参 with minigame ===
         state.passion -= 5;
         state.money -= evt.travelCost + mg.moneySpent;
         const fatiguePassion = Math.round(mg.passionDelta * eventFatigue);
@@ -979,17 +985,18 @@ export function executeTurn(state, actionId) {
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = { ...evt, salesBoost: mg.salesMultiplier };
 
-        result.deltas.push({ icon: '🎪', label: `${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
+        result.deltas.push({ icon: '🏪', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
         result.deltas.push({ icon: '💰', label: '路费' + (mg.moneySpent > 0 ? '+无料费' : ''), value: `-¥${evt.travelCost + mg.moneySpent}`, positive: false });
         result.deltas.push({ icon: '❤️', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
         if (eventFatigue < 1) {
-          result.deltas.push({ icon: '😮‍💨', label: `连续参展疲劳(近6月第${recentCount}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
+          const rc = state.recentEventTurns.filter(t => state.turn - t < 6).length;
+          result.deltas.push({ icon: '😮‍💨', label: `连续亲参疲劳(近6月第${rc}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
         }
         if (evt.condition === 'popular') {
           result.deltas.push({ icon: '🔥', label: '人气爆棚！人流超出预期', value: '', positive: true });
         }
-        state._minigameResult = null;
-      } else {
+      } else if (isAttend) {
+        // === 亲参 but skipped minigame ===
         state.passion -= 5;
         state.money -= evt.travelCost;
         const fatigueBoost = Math.round(evt.passionBoost * eventFatigue);
@@ -997,64 +1004,96 @@ export function executeTurn(state, actionId) {
         state.reputation += evt.reputationBoost;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = evt;
-        result.deltas.push({ icon: '🎪', label: `参加${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
+        result.deltas.push({ icon: '🏪', label: `亲参 ${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
         result.deltas.push({ icon: '💰', label: '路费', value: `-¥${evt.travelCost}`, positive: false });
-        if (eventFatigue < 1) {
-          result.deltas.push({ icon: '😮‍💨', label: `连续参展疲劳(近6月第${recentCount}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
-        }
+      } else {
+        // === 寄售 (consignment) ===
+        const shipCost = Math.round(evt.travelCost * 0.3);
+        state.passion -= 2;
+        state.money -= shipCost;
+        state.attendingEvent = evt; // for calculateSales event boost
+        result.deltas.push({ icon: '📦', label: `寄售 ${evt.name}@${evt.city}`, value: '委托代售', positive: true });
+        result.deltas.push({ icon: '💰', label: '邮寄费用', value: `-¥${shipCost}`, positive: false });
       }
 
       // === SELL FROM INVENTORY AT EVENT ===
       let eventRevenue = 0;
       let totalEventSold = 0;
 
-      if (state.inventory.hvpStock > 0) {
-        state.playerPrice.hvp = state.inventory.hvpPrice;
-        const sales = calculateSales('hvp', state);
-        const hvpDemand = sales.hvpSales;
-        const hvpSold = Math.min(hvpDemand, state.inventory.hvpStock);
-        state.inventory.hvpStock -= hvpSold;
-        const hvpRev = hvpSold * state.inventory.hvpPrice;
-        eventRevenue += hvpRev;
-        totalEventSold += hvpSold;
-        state.totalSales += hvpSold;
+      if (isAttend && mg && mg.sold > 0) {
+        // 亲参: minigame sold count is the actual sales (player saw it happen)
+        const mgSold = mg.sold;
+        const totalStock = state.inventory.hvpStock + state.inventory.lvpStock;
+        const actualSold = Math.min(mgSold, totalStock);
 
-        result.salesInfo = sales;
-        result.supplyDemand = getSupplyDemandData(state, sales);
-        result.deltas.push({ icon: '📖', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
-        if (hvpDemand > hvpSold) {
-          result.deltas.push({ icon: '🔥', label: '同人本售罄！供不应求', value: `需求${hvpDemand}·库存仅${hvpSold}`, positive: false });
+        // Distribute sales proportionally between HVP and LVP stock
+        if (actualSold > 0 && totalStock > 0) {
+          const hvpRatio = state.inventory.hvpStock / totalStock;
+          const hvpSold = Math.min(Math.round(actualSold * hvpRatio), state.inventory.hvpStock);
+          const lvpSold = Math.min(actualSold - hvpSold, state.inventory.lvpStock);
+
+          if (hvpSold > 0) {
+            state.inventory.hvpStock -= hvpSold;
+            const hvpRev = hvpSold * state.inventory.hvpPrice;
+            eventRevenue += hvpRev;
+            totalEventSold += hvpSold;
+            state.totalSales += hvpSold;
+            result.deltas.push({ icon: '📖', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
+            const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
+            state.reputation += repGain;
+            state.maxReputation = Math.max(state.maxReputation, state.reputation);
+            if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
+          }
+          if (lvpSold > 0) {
+            state.inventory.lvpStock -= lvpSold;
+            const lvpRev = lvpSold * state.inventory.lvpPrice;
+            eventRevenue += lvpRev;
+            totalEventSold += lvpSold;
+            state.totalSales += lvpSold;
+            result.deltas.push({ icon: '🔑', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
+            const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
+            state.reputation += repGain;
+            state.maxReputation = Math.max(state.maxReputation, state.reputation);
+            if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
+          }
         }
-        const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
-        state.reputation += repGain;
-        state.maxReputation = Math.max(state.maxReputation, state.reputation);
-        result.deltas.push({ icon: '⭐', label: '售卖声誉', value: `+${repGain.toFixed(2)}`, positive: true });
-        if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
-      }
-
-      if (state.inventory.lvpStock > 0) {
-        state.playerPrice.lvp = state.inventory.lvpPrice;
-        const sales = calculateSales('lvp', state);
-        const lvpDemand = sales.lvpSales;
-        const lvpSold = Math.min(lvpDemand, state.inventory.lvpStock);
-        state.inventory.lvpStock -= lvpSold;
-        const lvpRev = lvpSold * state.inventory.lvpPrice;
-        eventRevenue += lvpRev;
-        totalEventSold += lvpSold;
-        state.totalSales += lvpSold;
-
-        if (!result.salesInfo) {
+      } else {
+        // 寄售 or 亲参快速结算: use CES model
+        if (state.inventory.hvpStock > 0) {
+          state.playerPrice.hvp = state.inventory.hvpPrice;
+          const sales = calculateSales('hvp', state);
+          const hvpSold = Math.min(sales.hvpSales, state.inventory.hvpStock);
+          state.inventory.hvpStock -= hvpSold;
+          const hvpRev = hvpSold * state.inventory.hvpPrice;
+          eventRevenue += hvpRev;
+          totalEventSold += hvpSold;
+          state.totalSales += hvpSold;
           result.salesInfo = sales;
           result.supplyDemand = getSupplyDemandData(state, sales);
+          result.deltas.push({ icon: '📖', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
+          if (sales.hvpSales > hvpSold) result.deltas.push({ icon: '🔥', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpSold}`, positive: false });
+          const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
+          state.reputation += repGain;
+          state.maxReputation = Math.max(state.maxReputation, state.reputation);
+          if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
         }
-        result.deltas.push({ icon: '🔑', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
-        if (lvpDemand > lvpSold) {
-          result.deltas.push({ icon: '🔥', label: '谷子售罄！供不应求', value: `需求${lvpDemand}·库存仅${lvpSold}`, positive: false });
+        if (state.inventory.lvpStock > 0) {
+          state.playerPrice.lvp = state.inventory.lvpPrice;
+          const sales = calculateSales('lvp', state);
+          const lvpSold = Math.min(sales.lvpSales, state.inventory.lvpStock);
+          state.inventory.lvpStock -= lvpSold;
+          const lvpRev = lvpSold * state.inventory.lvpPrice;
+          eventRevenue += lvpRev;
+          totalEventSold += lvpSold;
+          state.totalSales += lvpSold;
+          if (!result.salesInfo) { result.salesInfo = sales; result.supplyDemand = getSupplyDemandData(state, sales); }
+          result.deltas.push({ icon: '🔑', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
+          if (sales.lvpSales > lvpSold) result.deltas.push({ icon: '🔥', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpSold}`, positive: false });
+          const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
+          state.reputation += repGain;
+          state.maxReputation = Math.max(state.maxReputation, state.reputation);
+          if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
         }
-        const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
-        state.reputation += repGain;
-        state.maxReputation = Math.max(state.maxReputation, state.reputation);
-        if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
       }
 
       // Bundling bonus: selling both HVP and LVP at same event

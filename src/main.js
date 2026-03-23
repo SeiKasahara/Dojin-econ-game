@@ -5,7 +5,7 @@
 
 import './style.css';
 import { createInitialState, executeTurn, rollEvent, applyEvent } from './engine.js';
-import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector } from './ui.js';
+import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector } from './ui.js';
 
 let state = null;
 
@@ -30,50 +30,50 @@ function needsPricing(actionId) {
 function handleAction(actionId) {
   const cancelBack = () => renderGame(state, handleAction);
 
-  // === Attend Event: event selection → mini-game → proceed ===
+  // === Attend Event: event selection → mode → mini-game/consign → proceed ===
   if (actionId === 'attendEvent') {
-    const launchMinigame = (chosenEvent) => {
+    const processEvent = (chosenEvent) => {
       // Roll event condition: cancelled / normal / popular
       const condRoll = Math.random();
       if (condRoll < 0.05) {
-        // ~5%: event cancelled (流展)
         chosenEvent.condition = 'cancelled';
         state.attendingEvent = chosenEvent;
         state._minigameResult = null;
+        state._eventMode = 'attend';
         renderEvent({
           emoji: '😱', title: '展会流展了！',
           desc: `${chosenEvent.name}@${chosenEvent.city}因故取消，到了现场才知道消息……路费白花了。`,
           effect: `路费-¥${chosenEvent.travelCost} 热情-5`, effectClass: 'negative',
-          tip: '流展是同人展会的现实风险之一。主办方跑路、场地问题、审批不通过都可能导致。路费变成沉没成本，只能认栽。好在这种情况很少见。',
+          tip: '流展是同人展会的现实风险之一。路费变成沉没成本，只能认栽。',
         }, () => proceedWithTurn(actionId));
         return;
       }
-      if (condRoll < 0.05 + 0.25) {
-        // ~25%: popular event
-        chosenEvent.condition = 'popular';
-      } else {
-        chosenEvent.condition = 'normal';
-      }
+      chosenEvent.condition = condRoll < 0.30 ? 'popular' : 'normal';
 
-      state.attendingEvent = chosenEvent;
-      // Dynamic import for code splitting
-      import('./minigame.js').then(({ startMinigame }) => {
-        startMinigame(state, chosenEvent, (mgResult) => {
-          if (mgResult === null) {
-            // Skipped mini-game → use default instant resolve
-            proceedWithTurn(actionId);
-          } else {
-            state._minigameResult = mgResult;
-            proceedWithTurn(actionId);
-          }
-        });
-      });
+      // Show attend mode selector: 亲参 vs 寄售
+      renderEventModeSelector(state, chosenEvent, (mode) => {
+        state.attendingEvent = chosenEvent;
+        state._eventMode = mode;
+        if (mode === 'attend') {
+          // 亲参 → play minigame
+          import('./minigame.js').then(({ startMinigame }) => {
+            startMinigame(state, chosenEvent, (mgResult) => {
+              state._minigameResult = mgResult || null;
+              proceedWithTurn(actionId);
+            });
+          });
+        } else {
+          // 寄售 → skip minigame, use CES model
+          state._minigameResult = null;
+          proceedWithTurn(actionId);
+        }
+      }, cancelBack);
     };
 
     if (state.availableEvents && state.availableEvents.length > 1) {
-      renderEventSelector(state, launchMinigame, cancelBack);
+      renderEventSelector(state, processEvent, cancelBack);
     } else if (state.availableEvents && state.availableEvents.length === 1) {
-      launchMinigame(state.availableEvents[0]);
+      processEvent(state.availableEvents[0]);
     }
     return;
   }
