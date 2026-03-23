@@ -1229,10 +1229,23 @@ export function executeTurn(state, actionId) {
     result.deltas.push({ icon: '🏠', label: '生活费结余', value: `+¥${allowance}`, positive: true });
   } else if (stage === 'work') {
     if (state.unemployed) {
-      // No salary, massive passion drain from anxiety & uncertainty
-      const anxietyDrain = 8 + state.jobSearchTurns * 2; // gets worse the longer unemployed
+      // No salary — anxiety scales with search duration but savings provide buffer
+      const baseAnxiety = 8 + state.jobSearchTurns * 2;
+      // Savings buffer or debt amplifier
+      let moneyMod; // <0 = amplify, >0 = buffer
+      if (state.money > 0) {
+        moneyMod = Math.min(0.6, state.money / 20000); // up to -60% anxiety
+      } else {
+        moneyMod = -Math.min(0.8, Math.abs(state.money) / 5000); // up to +80% anxiety
+      }
+      const anxietyDrain = Math.max(2, Math.round(baseAnxiety * (1 - moneyMod)));
       state.passion = Math.max(0, state.passion - anxietyDrain);
       result.deltas.push({ icon: '😰', label: '失业焦虑', value: `热情-${anxietyDrain}`, positive: false });
+      if (moneyMod > 0.1) {
+        result.deltas.push({ icon: '💰', label: `存款¥${state.money.toLocaleString()}缓冲焦虑`, value: `-${Math.round(moneyMod * 100)}%`, positive: true });
+      } else if (moneyMod < -0.1) {
+        result.deltas.push({ icon: '💸', label: `负债¥${Math.abs(state.money).toLocaleString()}加剧焦虑`, value: `+${Math.round(-moneyMod * 100)}%`, positive: false });
+      }
       result.deltas.push({ icon: '💼', label: '无工资收入', value: '¥0', positive: false });
     } else {
       const baseSalary = 800 + Math.floor((state.turn - 50) / 12) * 200;
