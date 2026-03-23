@@ -1877,9 +1877,9 @@ function checkAchievements(state) {
   const checks = [
     { id: 'first_hvp', cond: state.totalHVP >= 1 }, { id: 'first_lvp', cond: state.totalLVP >= 1 },
     { id: 'rep3', cond: state.reputation >= 3 }, { id: 'rep5', cond: state.reputation >= 5 }, { id: 'rep8', cond: state.reputation >= 8 },
-    { id: 'survive12', cond: state.turn >= 12 }, { id: 'survive24', cond: state.turn >= 24 },
+    { id: 'survive12', cond: state.turn >= 12 }, { id: 'survive24', cond: state.turn >= 24 }, { id: 'survive120', cond: state.turn >= 120 },
     { id: 'survive_work', cond: getLifeStage(state.turn) === 'work' && state.passion > 0 },
-    { id: 'rich', cond: state.money >= 10000 }, { id: 'hvp5', cond: state.totalHVP >= 5 },
+    { id: 'rich', cond: state.money >= 10000 && state.totalRevenue >= 5000 }, { id: 'hvp5', cond: state.totalHVP >= 5 },
     { id: 'recession_survivor', cond: (state.eventCounts['recession'] || 0) > 0 && state.recessionTurnsLeft === 0 && state.passion > 0 },
     { id: 'diversity_savior', cond: state.market && state.market.nHVP === 0 && state.hvpProject && state.hvpProject.progress > 0 },
     { id: 'market_veteran', cond: state.market && state.market.diversityHealth < 0.3 && state.passion > 20 },
@@ -1914,6 +1914,7 @@ export function getAchievementInfo(id) {
     stagflation_survivor: { name: '滞胀幸存者', desc: '经历滞胀后仍在创作', emoji: '🔥' },
     veblen: { name: '圣遗物制造者', desc: '作品成为韦伯仑商品', emoji: '💎' },
     collector: { name: '纯粹的消费者', desc: '收藏了10件谷子却从未创作过', emoji: '🛒' },
+    survive120: { name: '十年老兵', desc: '在同人创作之路上坚持了十年', emoji: '🎖️' },
   };
   return map[id] || { name: id, desc: '', emoji: '🎖️' };
 }
