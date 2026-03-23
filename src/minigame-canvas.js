@@ -153,9 +153,12 @@ export function renderFrame(ctx, mg, canvas) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
 
-  // --- Neighbor booths ---
+  // --- Neighbor booths (active competitors) ---
   drawBooth(ctx, 20, 190, 60, 40, '#D4C5B0', '🎨');
   drawBooth(ctx, 400, 190, 60, 40, '#C5D4B0', '✏️');
+  // Neighbor shopkeepers
+  drawEmoji(ctx, '🧑‍🎨', 50, 225, 16);
+  drawEmoji(ctx, '🧑‍💻', 430, 225, 16);
 
   // --- Player booth ---
   drawBooth(ctx, mg.boothX, mg.boothY, mg.boothW, mg.boothH, '#FFD6D6', '📖🔑');
@@ -274,7 +277,7 @@ function drawCustomer(ctx, c) {
   drawEmoji(ctx, c.emoji, c.x, c.y, 18);
 
   // Thought bubble
-  if (c.thoughtBubble && (c.state === 'browsing' || c.state === 'interested')) {
+  if (c.thoughtBubble && (c.state === 'browsing' || c.state === 'interested' || c.state === 'browsing_neighbor')) {
     ctx.fillStyle = '#FFF';
     ctx.strokeStyle = '#DDD';
     ctx.lineWidth = 1;
@@ -284,7 +287,7 @@ function drawCustomer(ctx, c) {
     drawEmoji(ctx, c.thoughtBubble, c.x + 18, c.y - 13, 10);
   }
 
-  // Satisfaction bar (for browsing/interested)
+  // Satisfaction bar (player booth customers only)
   if (c.state === 'browsing' || c.state === 'interested') {
     const barW = 20;
     const pct = Math.min(1, c.satisfaction / 60);
@@ -294,8 +297,8 @@ function drawCustomer(ctx, c) {
     ctx.fillRect(c.x - barW / 2, c.y + 12, barW * pct, 3);
   }
 
-  // Buying animation
-  if (c.state === 'buying') {
+  // Buying animation (player or neighbor)
+  if (c.state === 'buying' || c.state === 'buying_neighbor') {
     drawEmoji(ctx, '💫', c.x, c.y - 15, 14);
   }
 }

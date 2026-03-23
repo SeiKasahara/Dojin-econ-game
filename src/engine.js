@@ -107,6 +107,8 @@ export function createInitialState(communityPreset = 'mid') {
     // Doujin events (同人展)
     attendingEvent: null,     // current event being attended: { name, salesBoost, cost }
     availableEvents: [],      // events available this month
+    // Inventory system (库存管理)
+    inventory: { hvpStock: 0, lvpStock: 0, hvpPrice: 50, lvpPrice: 15 },
     // Market ecosystem (Phase 2)
     market: createMarketState(communityPreset),
     // Official IP & secondhand (Phase 3)
@@ -147,6 +149,10 @@ export const ACTIONS = {
                  costLabel: '需有同人展·路费·闲暇≥3', requires: { passion: 5, time: 3 } },
   jobSearch:   { id: 'jobSearch',   name: '找工作',     emoji: '💼', type: 'jobSearch',
                  costLabel: '热情-10 面试奔波', requires: { passion: 5 } },
+  reprint:     { id: 'reprint',     name: '追加印刷',   emoji: '🖨️', type: 'reprint',
+                 costLabel: '补印库存 需有旧作', requires: { passion: 3, time: 2 } },
+  buyGoods:    { id: 'buyGoods',    name: '购买谷子',   emoji: '🛍️', type: 'buyGoods',
+                 costLabel: '¥200 热情↑(效果逐年递减)', requires: { time: 1 } },
 };
 
 // Dynamic action info (for UI)
@@ -175,15 +181,16 @@ export function getActionDisplay(actionId, state) {
     return base;
   }
   if (actionId === 'attendEvent') {
-    if (state.totalHVP === 0 && state.totalLVP === 0) {
-      return { ...base, costLabel: '没有作品可卖！先创作' };
+    if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) {
+      return { ...base, costLabel: '没有库存可卖！先创作或追印' };
     }
     if (!state.availableEvents || state.availableEvents.length === 0) {
       return { ...base, costLabel: '本月无同人展' };
     }
     const evts = state.availableEvents;
     const best = evts[0];
-    return { ...base, costLabel: `${best.name}@${best.city} 路费¥${best.travelCost} 销量×${best.salesBoost}` };
+    const stockInfo = `📦本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}`;
+    return { ...base, costLabel: `${best.name}@${best.city} 路费¥${best.travelCost} ${stockInfo}` };
   }
   if (actionId === 'promote_light' || actionId === 'promote_heavy') {
     const sigCost = state.advanced ? getSignalCost(state.advanced) : 1.0;
@@ -199,6 +206,20 @@ export function getActionDisplay(actionId, state) {
     const partner = state.hasPartner ? ' 搭档:2个月' : '';
     return { ...base, costLabel: `${solo}${partner} 热情-15/月 需闲暇≥4` };
   }
+  if (actionId === 'reprint') {
+    if (state.totalHVP === 0 && state.totalLVP === 0) {
+      return { ...base, costLabel: '还没有作品可以追印！' };
+    }
+    const parts = [];
+    if (state.totalHVP > 0) parts.push(`本30本¥1200`);
+    if (state.totalLVP > 0) parts.push(`谷20个¥120`);
+    return { ...base, costLabel: `${parts.join(' / ')} 库存:本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}` };
+  }
+  if (actionId === 'buyGoods') {
+    const yearsIn = state.turn / 12;
+    const eff = Math.max(30, Math.round((1 - yearsIn * 0.08) * 100));
+    return { ...base, costLabel: `¥200 热情+${Math.round(12 * eff / 100)} 效率${eff}%${state.money < 200 ? ' ⚠️资金不足' : ''}` };
+  }
   return base;
 }
 
@@ -212,9 +233,9 @@ export function getFreelanceTimeCost(state) {
 export function canPerformAction(state, actionId) {
   const r = ACTIONS[actionId]?.requires;
   if (!r) return false;
-  // Unemployed: can only rest, find job, or freelance
+  // Unemployed: can only rest, find job, freelance, or buy goods
   if (state.unemployed) {
-    if (!['rest', 'jobSearch', 'freelance'].includes(actionId)) return false;
+    if (!['rest', 'jobSearch', 'freelance', 'buyGoods'].includes(actionId)) return false;
   }
   // jobSearch: only when unemployed
   if (actionId === 'jobSearch' && !state.unemployed) return false;
@@ -223,10 +244,18 @@ export function canPerformAction(state, actionId) {
     const stage = getLifeStage(state.turn);
     if (stage === 'work' && !state.unemployed) return false;
   }
-  // attendEvent: need events available AND have completed works to sell
+  // attendEvent: need events available AND have inventory to sell
   if (actionId === 'attendEvent') {
     if (!state.availableEvents || state.availableEvents.length === 0) return false;
+    if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) return false;
+  }
+  // reprint: need at least one work ever created
+  if (actionId === 'reprint') {
     if (state.totalHVP === 0 && state.totalLVP === 0) return false;
+  }
+  // buyGoods: need money
+  if (actionId === 'buyGoods') {
+    if (state.money < 200) return false;
   }
   if (r.passion && state.passion < r.passion) return false;
   // Freelance: dynamic time requirement
@@ -723,13 +752,12 @@ export function executeTurn(state, actionId) {
     result.tip = state.reputation >= 3 ? TIPS.freelanceHigh : TIPS.freelanceLow;
 
   } else if (action.type === 'attendEvent') {
-    // === ATTEND DOUJIN EVENT ===
+    // === ATTEND DOUJIN EVENT — now sells directly from inventory ===
     const evt = state.attendingEvent || (state.availableEvents && state.availableEvents[0]);
     if (evt) {
       const mg = state._minigameResult; // from mini-game, or null if skipped
 
       if (mg) {
-        // Mini-game played → use mini-game results
         state.passion -= 5;
         state.money -= evt.travelCost + mg.moneySpent;
         state.passion = Math.min(100, state.passion + mg.passionDelta);
@@ -739,13 +767,9 @@ export function executeTurn(state, actionId) {
 
         result.deltas.push({ icon: '🎪', label: `${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
         result.deltas.push({ icon: '💰', label: '路费' + (mg.moneySpent > 0 ? '+无料费' : ''), value: `-¥${evt.travelCost + mg.moneySpent}`, positive: false });
-        result.deltas.push({ icon: '👥', label: `招呼${mg.greeted}次 售出${mg.sold}份`, value: '', positive: mg.sold > 0 });
-        result.deltas.push({ icon: '📈', label: '展会售卖加成', value: `×${mg.salesMultiplier}`, positive: mg.salesMultiplier >= 1.0 });
         result.deltas.push({ icon: '❤️', label: '展会热情', value: `${mg.passionDelta > 0 ? '+' : ''}${mg.passionDelta}`, positive: mg.passionDelta > 0 });
-        result.deltas.push({ icon: '⭐', label: '声誉', value: `+${mg.reputationDelta.toFixed(2)}`, positive: true });
         state._minigameResult = null;
       } else {
-        // Skipped mini-game → instant resolve (original behavior)
         state.passion -= 5;
         state.money -= evt.travelCost;
         state.passion = Math.min(100, state.passion + evt.passionBoost);
@@ -754,8 +778,100 @@ export function executeTurn(state, actionId) {
         state.attendingEvent = evt;
         result.deltas.push({ icon: '🎪', label: `参加${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
         result.deltas.push({ icon: '💰', label: '路费', value: `-¥${evt.travelCost}`, positive: false });
-        result.deltas.push({ icon: '📈', label: '下次售卖加成', value: `销量×${evt.salesBoost}`, positive: true });
       }
+
+      // === SELL FROM INVENTORY AT EVENT ===
+      let eventRevenue = 0;
+      let totalEventSold = 0;
+
+      if (state.inventory.hvpStock > 0) {
+        state.playerPrice.hvp = state.inventory.hvpPrice;
+        const sales = calculateSales('hvp', state);
+        const hvpDemand = sales.hvpSales;
+        const hvpSold = Math.min(hvpDemand, state.inventory.hvpStock);
+        state.inventory.hvpStock -= hvpSold;
+        const hvpRev = hvpSold * state.inventory.hvpPrice;
+        eventRevenue += hvpRev;
+        totalEventSold += hvpSold;
+        state.totalSales += hvpSold;
+
+        result.salesInfo = sales;
+        result.supplyDemand = getSupplyDemandData(state, sales);
+        result.deltas.push({ icon: '📖', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
+        if (hvpDemand > hvpSold) {
+          result.deltas.push({ icon: '🔥', label: '同人本售罄！供不应求', value: `需求${hvpDemand}·库存仅${hvpSold}`, positive: false });
+        }
+        const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
+        state.reputation += repGain;
+        state.maxReputation = Math.max(state.maxReputation, state.reputation);
+        result.deltas.push({ icon: '⭐', label: '售卖声誉', value: `+${repGain.toFixed(2)}`, positive: true });
+        if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
+      }
+
+      if (state.inventory.lvpStock > 0) {
+        state.playerPrice.lvp = state.inventory.lvpPrice;
+        const sales = calculateSales('lvp', state);
+        const lvpDemand = sales.lvpSales;
+        const lvpSold = Math.min(lvpDemand, state.inventory.lvpStock);
+        state.inventory.lvpStock -= lvpSold;
+        const lvpRev = lvpSold * state.inventory.lvpPrice;
+        eventRevenue += lvpRev;
+        totalEventSold += lvpSold;
+        state.totalSales += lvpSold;
+
+        if (!result.salesInfo) {
+          result.salesInfo = sales;
+          result.supplyDemand = getSupplyDemandData(state, sales);
+        }
+        result.deltas.push({ icon: '🔑', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
+        if (lvpDemand > lvpSold) {
+          result.deltas.push({ icon: '🔥', label: '谷子售罄！供不应求', value: `需求${lvpDemand}·库存仅${lvpSold}`, positive: false });
+        }
+        const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
+        state.reputation += repGain;
+        state.maxReputation = Math.max(state.maxReputation, state.reputation);
+        if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
+      }
+
+      // Bundling bonus: selling both HVP and LVP at same event
+      if (state.inventory.hvpStock >= 0 && state.inventory.lvpStock >= 0 && totalEventSold > 0 && state.totalHVP > 0 && state.totalLVP > 0) {
+        const bundleBonus = Math.round(eventRevenue * 0.1);
+        if (bundleBonus > 0) {
+          eventRevenue += bundleBonus;
+          result.deltas.push({ icon: '🎯', label: '本+谷联动加成', value: `+¥${bundleBonus}`, positive: true });
+        }
+      }
+
+      state.money += eventRevenue;
+      state.totalRevenue += eventRevenue;
+
+      if (eventRevenue > 0) {
+        const travelCost = evt.travelCost + (mg ? mg.moneySpent : 0);
+        const profit = eventRevenue - travelCost;
+        result.deltas.push({ icon: '💰', label: '展会利润', value: profit >= 0 ? `+¥${profit}` : `-¥${Math.abs(profit)}`, positive: profit >= 0 });
+      }
+
+      // Event emotional amplification
+      if (totalEventSold >= 15) {
+        const boost = Math.round(5 + totalEventSold * 0.3);
+        state.passion = Math.min(100, state.passion + boost);
+        result.deltas.push({ icon: '🎉', label: '展会大卖！情绪高涨', value: `热情+${boost}`, positive: true });
+      } else if (totalEventSold <= 2 && (state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0)) {
+        const hit = -10 - Math.round(evt.travelCost / 150);
+        state.passion = Math.max(0, state.passion + hit);
+        result.deltas.push({ icon: '😞', label: '展会惨淡...花了路费却卖不出去', value: `热情${hit}`, positive: false });
+      }
+
+      // Show remaining inventory
+      result.deltas.push({ icon: '📦', label: '剩余库存', value: `本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}`, positive: state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0 });
+
+      // Community feedback from face-to-face interaction
+      const feedback = calculateFeedback(state);
+      state.passion = Math.min(100, state.passion + feedback);
+      if (feedback > 0.5) result.deltas.push({ icon: '💬', label: '现场交流反馈', value: `热情+${feedback.toFixed(1)}`, positive: true });
+
+      // Clear event (selling happens immediately at the event)
+      state.attendingEvent = null;
       result.tip = TIPS.doujinEvent;
     }
 
@@ -801,74 +917,39 @@ export function executeTurn(state, actionId) {
       state.hvpProject.progress++;
       const p = state.hvpProject;
       if (p.progress >= p.needed) {
-        // === HVP COMPLETE! ===
+        // === HVP COMPLETE → ADD TO INVENTORY ===
+        // Clear project FIRST to prevent stuck state if anything below errors
+        const savedProject = { ...p };
+        state.hvpProject = null;
+
         const costMult = (state.recessionTurnsLeft > 0 ? 1.2 : 1.0) * getAdvancedCostMod(state.advanced);
-        const printCost = Math.round(p.printCost * costMult);
+        const printCost = Math.round(savedProject.printCost * costMult);
         const partnerCost = state.hasPartner ? state.partnerFee : 0;
         const totalCost = printCost + partnerCost;
         state.money -= totalCost;
 
+        // Calculate batch size and add to inventory
+        const batchQty = Math.max(20, Math.round(printCost / 50));
+        state.inventory.hvpStock += batchQty;
+        state.inventory.hvpPrice = state.playerPrice.hvp || 50;
+
         result.deltas.push({ icon: '🎉', label: '同人本完成！', value: '', positive: true });
         result.deltas.push({ icon: '🖨️', label: `印刷成本${costMult > 1 ? '(经济下行+20%)' : ''}`, value: `-¥${printCost}`, positive: false });
         if (partnerCost > 0) result.deltas.push({ icon: '🤝', label: '搭档稿费', value: `-¥${partnerCost}`, positive: false });
+        result.deltas.push({ icon: '📦', label: `印刷${batchQty}本入库`, value: `库存${state.inventory.hvpStock}本 定价¥${state.inventory.hvpPrice}`, positive: true });
 
-        // Sales
-        const sales = calculateSales('hvp', state);
-        // Bundling bonus: if player made LVP within last 3 turns
-        if (state.recentLVP > 0 && state.recentLVP <= 3) {
-          const bundleLVP = Math.floor(sales.hvpSales * 1.4);
-          const bundlePrice = 12 + Math.floor(Math.random() * 8);
-          const bundleRev = bundleLVP * bundlePrice;
-          sales.lvpSales = bundleLVP;
-          sales.lvpPrice = bundlePrice;
-          sales.totalRevenue += bundleRev;
-          result.deltas.push({ icon: '🎯', label: `配套谷子联动售出 ${bundleLVP}个`, value: `+¥${bundleRev}`, positive: true });
-        }
-
-        result.salesInfo = sales;
-        result.supplyDemand = getSupplyDemandData(state, sales);
-        state.money += sales.totalRevenue;
-        state.totalRevenue += sales.totalRevenue;
-        state.totalHVP++;
-        const profit = sales.totalRevenue - totalCost;
-
-        result.deltas.push({ icon: '👥', label: `社群${sales.communitySize}人 → 关注${sales.awareness}人`, value: `转化率${sales.conversion}%`, positive: true });
-        if (sales.infoBonus > 0) result.deltas.push({ icon: '📢', label: '信息透明度加成', value: `+${sales.infoBonus}%转化`, positive: true });
-        if (sales.compMod && sales.compMod !== 100) result.deltas.push({ icon: '🏪', label: '市场竞争', value: `${sales.compMod}%`, positive: sales.compMod > 100 });
-        if (sales.shModPct && sales.shModPct < 95) result.deltas.push({ icon: '📦', label: '二手市场冲击', value: `${sales.shModPct}%`, positive: false });
-        if (sales.recessionActive) result.deltas.push({ icon: '📉', label: '经济下行影响', value: '销量-30%', positive: false });
-        state.totalSales += sales.hvpSales;
-        result.deltas.push({ icon: '📖', label: `同人本售出 ${sales.hvpSales}本`, value: `+¥${sales.hvpSales * sales.hvpPrice}`, positive: true });
-        result.deltas.push({ icon: '💰', label: '本期利润', value: profit >= 0 ? `+¥${profit}` : `-¥${Math.abs(profit)}`, positive: profit >= 0 });
-
-        const repGain = 0.35 * state.infoDisclosure * sales.hvpSales * 0.1;
+        // Small reputation gain for completing a new work
+        const repGain = 0.15 * state.infoDisclosure;
         state.reputation += repGain;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
-        result.deltas.push({ icon: '⭐', label: '声誉提升', value: `+${repGain.toFixed(2)}`, positive: true });
+        result.deltas.push({ icon: '⭐', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: true });
 
+        // Community feedback (people know you released something new)
         const feedback = calculateFeedback(state);
         state.passion = Math.min(100, state.passion + feedback);
         result.deltas.push({ icon: '💬', label: '社群反馈', value: `热情+${feedback.toFixed(1)}`, positive: feedback > 0 });
 
-        // === Event amplification: selling at a doujin event amplifies emotional response ===
-        if (state.attendingEvent) {
-          const expectedSales = Math.round(marketDemand * playerShare * conversion * 0.95); // expected without event
-          const actualVsExpected = sales.hvpSales / Math.max(1, expectedSales);
-          if (actualVsExpected >= 1.5) {
-            // Great event sales! Huge passion boost
-            const eventPassionBoost = Math.round(8 + (actualVsExpected - 1) * 5);
-            state.passion = Math.min(100, state.passion + eventPassionBoost);
-            result.deltas.push({ icon: '🎉', label: '展会大卖！情绪高涨', value: `热情+${eventPassionBoost}`, positive: true });
-          } else if (sales.hvpSales <= 3) {
-            // Terrible event sales — devastating for morale
-            const eventPassionHit = -15 - Math.round(state.attendingEvent.travelCost / 100);
-            state.passion = Math.max(0, state.passion + eventPassionHit);
-            result.deltas.push({ icon: '😞', label: '展会惨淡...花了路费却没卖几本', value: `热情${eventPassionHit}`, positive: false });
-          }
-        }
-
-        state.hvpProject = null;
-        if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, sales.hvpSales);
+        state.totalHVP++;
         result.tip = TIPS.hvpComplete;
         if (state.passion < 30) result.tip = TIPS.burnout;
       } else {
@@ -878,7 +959,7 @@ export function executeTurn(state, actionId) {
     }
 
   } else if (action.type === 'lvp') {
-    // === LVP: single-turn, complete immediately ===
+    // === LVP: single-turn → ADD TO INVENTORY ===
     state.passion -= 8;
     const lvpCost = 200;
     const costMult = state.recessionTurnsLeft > 0 ? 1.2 : 1.0;
@@ -887,46 +968,78 @@ export function executeTurn(state, actionId) {
     result.deltas.push({ icon: '❤️', label: '创作消耗', value: '-8', positive: false });
     result.deltas.push({ icon: '💰', label: `制作成本${costMult > 1 ? '(下行+20%)' : ''}`, value: `-¥${actualCost}`, positive: false });
 
-    const sales = calculateSales('lvp', state);
-    result.salesInfo = sales;
-    result.supplyDemand = getSupplyDemandData(state, sales);
-    state.money += sales.totalRevenue;
-    state.totalRevenue += sales.totalRevenue;
+    // Calculate batch size and add to inventory
+    const batchQty = Math.max(10, Math.round(actualCost / 7));
+    state.inventory.lvpStock += batchQty;
+    state.inventory.lvpPrice = state.playerPrice.lvp || 15;
+
+    result.deltas.push({ icon: '📦', label: `制作${batchQty}个入库`, value: `库存${state.inventory.lvpStock}个 定价¥${state.inventory.lvpPrice}`, positive: true });
+
     state.totalLVP++;
-    state.totalSales += sales.lvpSales;
     state.recentLVP = 1;
-    if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, sales.lvpSales);
-    const profit = sales.totalRevenue - actualCost;
 
-    result.deltas.push({ icon: '👁️', label: `潜在关注 ${sales.awareness}人`, value: `转化率${sales.conversion}%`, positive: true });
-    if (sales.infoBonus > 0) result.deltas.push({ icon: '📢', label: '信息透明度加成', value: `+${sales.infoBonus}%转化`, positive: true });
-    if (sales.compMod && sales.compMod !== 100) result.deltas.push({ icon: '🏪', label: '市场竞争', value: `${sales.compMod}%`, positive: sales.compMod > 100 });
-    if (sales.recessionActive) result.deltas.push({ icon: '📉', label: '经济下行影响', value: '销量-30%', positive: false });
-    result.deltas.push({ icon: '🔑', label: `谷子售出 ${sales.lvpSales}个`, value: `+¥${sales.lvpSales * sales.lvpPrice}`, positive: true });
-    result.deltas.push({ icon: '💰', label: '本期利润', value: profit >= 0 ? `+¥${profit}` : `-¥${Math.abs(profit)}`, positive: profit >= 0 });
-
-    const repGain = 0.04 * state.infoDisclosure * sales.lvpSales * 0.1;
+    // Small reputation gain for new product
+    const repGain = 0.04 * state.infoDisclosure;
     state.reputation += repGain;
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
-    result.deltas.push({ icon: '⭐', label: '声誉提升', value: `+${repGain.toFixed(2)}`, positive: true });
+    result.deltas.push({ icon: '⭐', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: true });
 
+    // Community feedback
     const feedback = calculateFeedback(state);
     state.passion = Math.min(100, state.passion + feedback);
     result.deltas.push({ icon: '💬', label: '社群反馈', value: `热情+${feedback.toFixed(1)}`, positive: feedback > 0 });
 
-    // === Event amplification for LVP ===
-    if (state.attendingEvent) {
-      if (sales > 15) {
-        const boost = Math.round(5 + sales * 0.3);
-        state.passion = Math.min(100, state.passion + boost);
-        result.deltas.push({ icon: '🎉', label: '展会谷子大卖！', value: `热情+${boost}`, positive: true });
-      } else if (sales <= 3) {
-        const hit = -10 - Math.round(state.attendingEvent.travelCost / 150);
-        state.passion = Math.max(0, state.passion + hit);
-        result.deltas.push({ icon: '😞', label: '展会谷子无人问津...', value: `热情${hit}`, positive: false });
-      }
-    }
     result.tip = TIPS.lvp;
+
+  } else if (action.type === 'reprint') {
+    // === REPRINT: add more copies to inventory ===
+    state.passion -= 3;
+    result.deltas.push({ icon: '❤️', label: '安排印刷', value: '-3', positive: false });
+
+    const reprintType = state._reprintType || (state.totalHVP > 0 ? 'hvp' : 'lvp');
+    state._reprintType = null;
+
+    if (reprintType === 'hvp' && state.totalHVP > 0) {
+      const qty = 30;
+      const unitCost = 40; // cheaper than first print (plates already made)
+      const cost = qty * unitCost;
+      state.money -= cost;
+      state.inventory.hvpStock += qty;
+      result.deltas.push({ icon: '🖨️', label: `追印同人本${qty}本`, value: `-¥${cost}`, positive: false });
+      result.deltas.push({ icon: '📦', label: '库存更新', value: `同人本×${state.inventory.hvpStock} 定价¥${state.inventory.hvpPrice}`, positive: true });
+    } else if (reprintType === 'lvp' && state.totalLVP > 0) {
+      const qty = 20;
+      const unitCost = 6;
+      const cost = qty * unitCost;
+      state.money -= cost;
+      state.inventory.lvpStock += qty;
+      result.deltas.push({ icon: '🖨️', label: `追加制作谷子${qty}个`, value: `-¥${cost}`, positive: false });
+      result.deltas.push({ icon: '📦', label: '库存更新', value: `谷子×${state.inventory.lvpStock} 定价¥${state.inventory.lvpPrice}`, positive: true });
+    }
+    result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。真正的同人创作者都在学习的供应链管理。' };
+
+  } else if (action.type === 'buyGoods') {
+    // === BUY GOODS AS CONSUMER: spend money for passion ===
+    const cost = 200;
+    state.money -= cost;
+    result.deltas.push({ icon: '💰', label: '购买谷子', value: `-¥${cost}`, positive: false });
+
+    // Passion gain diminishes with years in the hobby
+    const yearsIn = state.turn / 12;
+    const efficiency = Math.max(0.3, 1 - yearsIn * 0.08);
+    const passionGain = Math.round(12 * efficiency);
+    state.passion = Math.min(100, state.passion + passionGain);
+    result.deltas.push({ icon: '❤️', label: '买到心仪的谷子！', value: `热情+${passionGain}`, positive: true });
+
+    if (efficiency < 0.8) {
+      result.deltas.push({ icon: '📉', label: '收集热情递减', value: `效率${Math.round(efficiency * 100)}%`, positive: false });
+    }
+
+    // Small info disclosure gain (you're engaging with the community)
+    state.infoDisclosure = Math.min(1, state.infoDisclosure + 0.05);
+    result.deltas.push({ icon: '📢', label: '社群参与', value: `信息+5%`, positive: true });
+
+    result.tip = { label: '消费者身份 (双重角色)', text: '同人创作者同时也是消费者——买别人的谷子是维持热情的重要方式。但随着入坑年限增加，新鲜感递减(边际效用递减)。这解释了为什么老玩家更依赖"创作成就感"而非"消费快感"来维持热情。' };
   }
 
   // --- Partner effects ---
@@ -952,7 +1065,7 @@ export function executeTurn(state, actionId) {
 
   // --- Track creative activity (resets inactivity counter) ---
   // Creating, attending events, finding partners, heavy promotion all count as "active in the scene"
-  const isActive = ['hvp', 'lvp', 'promote_heavy', 'attendEvent'].includes(actionId)
+  const isActive = ['hvp', 'lvp', 'promote_heavy', 'attendEvent', 'buyGoods'].includes(actionId)
     || (actionId === 'findPartner' && state.hasPartner); // only if actually found one
   if (isActive) state.lastCreativeTurn = state.turn;
 
@@ -1017,6 +1130,47 @@ export function executeTurn(state, actionId) {
   // --- Info disclosure: fast decay ---
   state.infoDisclosure = Math.max(0.08, state.infoDisclosure - 0.10);
 
+  // --- Passive online sales (trickle from inventory each turn) ---
+  if ((state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) && action.type !== 'attendEvent') {
+    const cs = state.market ? state.market.communitySize : 10000;
+    const nHVP = state.market?.nHVP || 9;
+    const nLVP = state.market?.nLVP || 55;
+    const baseConv = Math.min(0.95, 0.20 + state.infoDisclosure * 0.50);
+    const onlineFactor = 0.12; // online sales are ~12% of full market demand
+
+    if (state.inventory.hvpStock > 0) {
+      const totalAlpha = nHVP * 2.0 + state.reputation;
+      const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
+      const demand = Math.max(0, Math.round(cs / 1000 * 5 * share * baseConv * onlineFactor));
+      const sold = Math.min(demand, state.inventory.hvpStock);
+      if (sold > 0) {
+        state.inventory.hvpStock -= sold;
+        const rev = sold * state.inventory.hvpPrice;
+        state.money += rev;
+        state.totalRevenue += rev;
+        state.totalSales += sold;
+        const repGain = 0.35 * state.infoDisclosure * sold * 0.05;
+        state.reputation += repGain;
+        result.deltas.push({ icon: '🌐', label: `网上售出同人本×${sold}`, value: `+¥${rev}`, positive: true });
+      }
+    }
+
+    if (state.inventory.lvpStock > 0) {
+      const totalAlpha = nLVP * 0.5 + state.reputation;
+      const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
+      const demand = Math.max(0, Math.round(cs / 1000 * 15 * share * baseConv * onlineFactor));
+      const sold = Math.min(demand, state.inventory.lvpStock);
+      if (sold > 0) {
+        state.inventory.lvpStock -= sold;
+        const rev = sold * state.inventory.lvpPrice;
+        state.money += rev;
+        state.totalRevenue += rev;
+        state.totalSales += sold;
+        result.deltas.push({ icon: '🌐', label: `网上售出谷子×${sold}`, value: `+¥${rev}`, positive: true });
+      }
+    }
+  }
+
   // --- Tick recentLVP (for bundling bonus) ---
   if (state.recentLVP > 0) state.recentLVP++;
 
@@ -1048,10 +1202,9 @@ export function executeTurn(state, actionId) {
   }
   result.advancedMsgs = advEvents;
 
-  // --- Reset player price choices and event boost ---
+  // --- Reset player price choices ---
   state.playerPrice = { hvp: null, lvp: null };
-  // Event boost consumed after producing
-  if (action.type === 'hvp' || action.type === 'lvp') state.attendingEvent = null;
+  // attendingEvent is cleared in the attendEvent handler itself
 
   // --- Advance turn ---
   state.turn++;
@@ -1143,8 +1296,8 @@ export function getAchievementInfo(id) {
 const TIPS = {
   hvpStart: { label: '长期项目', text: '同人本是多月项目——独自需要3个月，有搭档可缩短到2个月。印刷成本¥800-1000在完成时支付。搭档有稿费成本，但可以加速进度。这就是HVP的"资本准入壁垒"(Q29: 23.5%认为成本太高)。' },
   hvpContinue: { label: '坚持创作', text: '同人本创作需要持续投入。每个月都在消耗热情，但完成后的声誉积累远高于谷子(γ_H=0.35 vs γ_L=0.04)。中途放弃意味着前期投入全部沉没。' },
-  hvpComplete: { label: '🎉 作品完成', text: 'HVP完成！如果最近也做了谷子，会自动触发"互补效应"(Q13, d=0.47)——买了本子的人会顺手买配套谷子。先做谷子再出本是好策略。' },
-  lvp: { label: '经济学原理', text: 'LVP一个月就能完成，低门槛、低风险。信息透明度对销量关键——宣发后立刻制作，抓住窗口。如果接下来要出同人本，先做谷子可以触发互补效应。' },
+  hvpComplete: { label: '🎉 作品完成·入库', text: '同人本完成并入库！现在去参加同人展售卖，或等待网上零售慢慢出货。同时携带同人本和谷子参展会触发联动加成。记得关注库存——卖光了要追加印刷！' },
+  lvp: { label: '谷子入库', text: 'LVP一个月就能完成并入库，低门槛低风险。去同人展售卖可以一次卖出大量库存。网上也会有少量零售。注意库存管理——制作太多会积压资金，太少则展会上供不应求。' },
   rest: { label: '热情预算理论', text: '休息恢复热情的效率随入坑年限递减——第1年恢复100%，第5年只剩50%。长期疲惫是不可逆的。同时注意：停滞创作超过3个月后，热情会加速衰减——"不用就会生锈"。' },
   doujinEvent: { label: '同人展经济学 (Stigler)', text: '同人展是"搜寻成本→0"的极端场景：消费者直接翻阅实物(I→1)，面对面交易消除信息不对称。声誉的"下位替代"属性在展会上最弱——产品质量直接说话。路费是参展的机会成本，大社群有更多展会选择（规模经济）。' },
   promoteLight: { label: '轻度宣发', text: '低成本维持曝光。信号通胀越严重效果越差，但始终有保底(+3%)。适合资源紧张时维持存在感。信息透明度每月-10%快速衰减，注意节奏。' },

@@ -5,7 +5,7 @@
 
 import './style.css';
 import { createInitialState, executeTurn, rollEvent, applyEvent } from './engine.js';
-import { renderTitle, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector } from './ui.js';
+import { renderTitle, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector } from './ui.js';
 
 let state = null;
 
@@ -22,6 +22,8 @@ function needsPricing(actionId) {
 }
 
 function handleAction(actionId) {
+  const cancelBack = () => renderGame(state, handleAction);
+
   // === Attend Event: event selection → mini-game → proceed ===
   if (actionId === 'attendEvent') {
     const launchMinigame = (chosenEvent) => {
@@ -41,10 +43,19 @@ function handleAction(actionId) {
     };
 
     if (state.availableEvents && state.availableEvents.length > 1) {
-      renderEventSelector(state, launchMinigame);
+      renderEventSelector(state, launchMinigame, cancelBack);
     } else if (state.availableEvents && state.availableEvents.length === 1) {
       launchMinigame(state.availableEvents[0]);
     }
+    return;
+  }
+
+  // === Reprint: type selection → proceed ===
+  if (actionId === 'reprint') {
+    renderReprintSelector(state, (reprintType) => {
+      state._reprintType = reprintType;
+      proceedWithTurn(actionId);
+    }, cancelBack);
     return;
   }
 
@@ -54,7 +65,7 @@ function handleAction(actionId) {
     renderPriceSelector(state, type, (chosenPrice) => {
       state.playerPrice[type] = chosenPrice;
       proceedWithTurn(actionId);
-    });
+    }, cancelBack);
     return;
   }
 

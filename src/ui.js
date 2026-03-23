@@ -173,6 +173,12 @@ function renderStats(state) {
         <span class="stat-value">${Math.round(infoPct)}%</span>
       </div>
       ${infoPct > 15 ? `<div style="font-size:0.65rem;color:var(--text-muted);text-align:right;padding-right:4px;margin-top:-4px">每月-10% · ${Math.ceil((infoPct - 8) / 10)}月后回到底线</div>` : ''}
+      ${(state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) ? `
+      <div style="display:flex;justify-content:center;gap:16px;padding:6px 0;margin-top:4px;border-top:1px dashed var(--border);font-size:0.78rem">
+        <span>📦 库存</span>
+        <span style="color:${state.inventory.hvpStock > 0 ? 'var(--primary)' : 'var(--text-muted)'}">📖 同人本×${state.inventory.hvpStock}</span>
+        <span style="color:${state.inventory.lvpStock > 0 ? 'var(--secondary)' : 'var(--text-muted)'}">🔑 谷子×${state.inventory.lvpStock}</span>
+      </div>` : ''}
     </div>
   `;
 }
@@ -401,7 +407,7 @@ function renderSalesBreakdown(s) {
 }
 
 // === Price Selection Screen ===
-export function renderPriceSelector(state, productType, onSelect) {
+export function renderPriceSelector(state, productType, onSelect, onCancel) {
   const basePrice = productType === 'hvp' ? 50 : 15;
   const tiers = getPriceTiers(basePrice, productType);
   const label = productType === 'hvp' ? '同人本' : '谷子';
@@ -440,6 +446,7 @@ export function renderPriceSelector(state, productType, onSelect) {
           ? '同人本ε=1.06 > 1：涨价30%→需求降约33%→收入降低。定价权弱，高价策略有风险。'
           : '谷子ε=0.92 < 1：涨价30%→需求只降约25%→收入反而微增。必需品属性给了一定定价空间。'}</div>
       </div>
+      <button class="btn btn-block btn-cancel-overlay" style="margin-top:12px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -450,10 +457,14 @@ export function renderPriceSelector(state, productType, onSelect) {
       onSelect(parseInt(btn.dataset.price));
     });
   });
+  overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
+    overlay.remove();
+    if (onCancel) onCancel();
+  });
 }
 
 // === Doujin Event Selector ===
-export function renderEventSelector(state, onSelect) {
+export function renderEventSelector(state, onSelect, onCancel) {
   const events = state.availableEvents || [];
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
@@ -461,7 +472,8 @@ export function renderEventSelector(state, onSelect) {
     <div class="event-card" style="max-width:360px">
       <div class="event-emoji">🎪</div>
       <div class="event-title">选择同人展</div>
-      <div class="event-desc" style="margin-bottom:12px">本月有${events.length}个同人展可以参加（一个月只能去一个）</div>
+      <div class="event-desc" style="margin-bottom:8px">本月有${events.length}个同人展可以参加（一个月只能去一个）</div>
+      <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">📦 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
       ${events.map((e, i) => `
         <div class="price-btn" data-idx="${i}" style="margin-bottom:8px;text-align:left;padding:12px">
           <div style="font-weight:700">${e.size === 'mega' ? '🌟' : e.size === 'big' ? '🎪' : '📋'} ${e.name}</div>
@@ -472,6 +484,7 @@ export function renderEventSelector(state, onSelect) {
         <div class="tip-label">同人展经济学</div>
         <div class="tip-text">大型展会销量倍率高但路费贵（机会成本）。本市小展路费便宜但销量加成低。选择取决于你当前的资金和库存状态。</div>
       </div>
+      <button class="btn btn-block btn-cancel-overlay" style="margin-top:12px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -480,6 +493,55 @@ export function renderEventSelector(state, onSelect) {
       overlay.remove();
       onSelect(events[parseInt(btn.dataset.idx)]);
     });
+  });
+  overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
+    overlay.remove();
+    if (onCancel) onCancel();
+  });
+}
+
+// === Reprint Type Selector ===
+export function renderReprintSelector(state, onSelect, onCancel) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  const hasHVP = state.totalHVP > 0;
+  const hasLVP = state.totalLVP > 0;
+
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:360px">
+      <div class="event-emoji">🖨️</div>
+      <div class="event-title">追加印刷</div>
+      <div class="event-desc" style="margin-bottom:8px">选择要追印的类型</div>
+      <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">📦 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
+      <div class="price-selector">
+        ${hasHVP ? `<div class="price-btn" data-type="hvp">
+          <div class="price-label">📖 同人本</div>
+          <div class="price-value">30本 ¥1,200</div>
+          <div class="price-desc">¥40/本 定价¥${state.inventory.hvpPrice}</div>
+        </div>` : ''}
+        ${hasLVP ? `<div class="price-btn" data-type="lvp">
+          <div class="price-label">🔑 谷子</div>
+          <div class="price-value">20个 ¥120</div>
+          <div class="price-desc">¥6/个 定价¥${state.inventory.lvpPrice}</div>
+        </div>` : ''}
+      </div>
+      <div class="tip-box" style="text-align:left;margin-bottom:0">
+        <div class="tip-label">追印经济学</div>
+        <div class="tip-text">追印单价比首印便宜（印版/模具已有）。关键是预判展会需求——库存太多积压资金，太少则展会售罄错失收入。</div>
+      </div>
+      <button class="btn btn-block btn-cancel-overlay" style="margin-top:12px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('.price-btn[data-type]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.remove();
+      onSelect(btn.dataset.type);
+    });
+  });
+  overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
+    overlay.remove();
+    if (onCancel) onCancel();
   });
 }
 
@@ -542,6 +604,7 @@ export function renderGameOver(state, onRestart) {
         <div class="go-stat-item"><span>最高声誉</span><span class="go-stat-val">${state.maxReputation.toFixed(1)}</span></div>
         <div class="go-stat-item"><span>同人志</span><span class="go-stat-val">${state.totalHVP} 本</span></div>
         <div class="go-stat-item"><span>谷子</span><span class="go-stat-val">${state.totalLVP} 批</span></div>
+        <div class="go-stat-item"><span>总销量</span><span class="go-stat-val">${state.totalSales} 件</span></div>
         <div class="go-stat-item"><span>总销售额</span><span class="go-stat-val">¥${state.totalRevenue.toLocaleString()}</span></div>
       </div>
 

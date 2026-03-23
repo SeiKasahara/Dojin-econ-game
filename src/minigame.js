@@ -51,6 +51,11 @@ function createState(mainState, event) {
     neighborChatTimer: 15000 + Math.random() * 20000, // first chat after 15-35s
     neighborChatsUsed: 0,
     passionBonus: 0,
+    // Info disclosure affects how many fans come directly
+    playerInfoDisclosure: mainState.infoDisclosure || 0.2,
+    // Neighbor booth activity (competitors)
+    neighborLeft:  { nextAction: 3000 + Math.random() * 5000 },
+    neighborRight: { nextAction: 5000 + Math.random() * 5000 },
     // Particles (purchase animations)
     particles: [],
     // Animation frame
@@ -66,22 +71,55 @@ function spawnCustomer(mg) {
   const prefRoll = Math.random();
   const preference = prefRoll < 0.35 ? 'hvp' : prefRoll < 0.7 ? 'lvp' : 'any';
 
+  // Determine destination: info disclosure → more fans come directly
+  const fanChance = Math.min(0.25, mg.playerInfoDisclosure * 0.3);
+  const roll = Math.random();
+  let target, targetX, targetY, initSat = 0, initBubble = null;
+
+  if (roll < fanChance) {
+    // Direct fan — saw promo online, comes to player booth with intent
+    target = 'player_fan';
+    targetX = mg.boothX + 20 + Math.random() * (mg.boothW - 40);
+    targetY = mg.boothY - 40 + Math.random() * 20;
+    initSat = 40 + Math.random() * 15; // near the 60 buy threshold
+    initBubble = '❤️';
+  } else if (roll < fanChance + 0.30) {
+    // General passerby near player area
+    target = 'player';
+    targetX = 80 + Math.random() * 320;
+    targetY = 100 + Math.random() * 80;
+  } else if (roll < fanChance + 0.30 + (1 - fanChance - 0.30) / 2) {
+    // Heads to left neighbor booth
+    target = 'left';
+    targetX = 15 + Math.random() * 55;
+    targetY = 130 + Math.random() * 50;
+  } else {
+    // Heads to right neighbor booth
+    target = 'right';
+    targetX = 395 + Math.random() * 55;
+    targetY = 130 + Math.random() * 50;
+  }
+
   mg.customers.push({
     id: mg.totalSpawned++,
     x: 40 + Math.random() * 400,
     y: -20,
-    targetX: 80 + Math.random() * 320,
-    targetY: 100 + Math.random() * 80,
-    state: 'walking', // walking | browsing | interested | buying | leaving
-    preference,
-    patience: 4000 + Math.random() * 4000, // 4-8 seconds
-    satisfaction: 0,
+    targetX, targetY,
+    state: 'walking',
+    // walking | browsing | interested | buying | browsing_neighbor | buying_neighbor | leaving
+    preference, target,
+    patience: 4000 + Math.random() * 4000,
+    satisfaction: initSat,
     emoji: CUSTOMER_EMOJIS[Math.floor(Math.random() * CUSTOMER_EMOJIS.length)],
-    thoughtBubble: null,
+    thoughtBubble: initBubble,
     speed: 0.03 + Math.random() * 0.02,
     stateTimer: 0,
   });
 }
+
+// === Neighbor booth centers ===
+const NB_LEFT_CX = 50, NB_LEFT_CY = 210;
+const NB_RIGHT_CX = 430, NB_RIGHT_CY = 210;
 
 // === Update Customers ===
 function updateCustomers(mg, dt) {
@@ -96,60 +134,96 @@ function updateCustomers(mg, dt) {
       c.x += (c.targetX - c.x) * c.speed * dt * 0.06;
       c.y += (c.targetY - c.y) * c.speed * dt * 0.06;
 
-      // Check if near booth zone
-      const nearBooth = Math.abs(c.x - boothCX) < mg.boothW && Math.abs(c.y - boothCY) < 60;
-      if (nearBooth && c.y > 100) {
-        // Base 30% chance to stop, +reputation bonus
-        const stopChance = 0.3 + Math.min(0.3, mg.playerReputation * 0.03);
-        if (Math.random() < stopChance) {
-          c.state = 'browsing';
+      if (c.target === 'left' || c.target === 'right') {
+        // --- Heading to a NEIGHBOR booth ---
+        const nbCX = c.target === 'left' ? NB_LEFT_CX : NB_RIGHT_CX;
+        const nbCY = c.target === 'left' ? NB_LEFT_CY : NB_RIGHT_CY;
+        const nearNB = Math.abs(c.x - nbCX) < 40 && Math.abs(c.y - nbCY) < 50 && c.y > 100;
+        if (nearNB) {
+          c.state = 'browsing_neighbor';
+          c.patience = 2000 + Math.random() * 3000;
           c.thoughtBubble = PREF_MAP[c.preference];
-          mg.browsedCount++;
-        } else if (c.y > 160) {
-          c.state = 'leaving';
-          c.targetY = 340;
+        }
+        if (c.y > 250 && c.state === 'walking') {
+          c.state = 'leaving'; c.targetY = 340;
+        }
+      } else {
+        // --- Heading toward PLAYER booth area ---
+        const nearBooth = Math.abs(c.x - boothCX) < mg.boothW && Math.abs(c.y - boothCY) < 60;
+        if (nearBooth && c.y > 100) {
+          if (c.target === 'player_fan') {
+            // Fan: directly starts browsing with high satisfaction
+            c.state = c.satisfaction >= 50 ? 'interested' : 'browsing';
+            c.thoughtBubble = '❤️';
+            mg.browsedCount++;
+          } else {
+            // Regular passerby: chance to stop
+            const stopChance = 0.3 + Math.min(0.3, mg.playerReputation * 0.03);
+            if (Math.random() < stopChance) {
+              c.state = 'browsing';
+              c.thoughtBubble = PREF_MAP[c.preference];
+              mg.browsedCount++;
+            } else if (c.y > 160) {
+              c.state = 'leaving'; c.targetY = 340;
+            }
+          }
+        }
+        if (c.y > 250 && c.state === 'walking') {
+          c.state = 'leaving'; c.targetY = 340;
         }
       }
-      // If walked past without stopping
-      if (c.y > 250 && c.state === 'walking') {
-        c.state = 'leaving';
-        c.targetY = 340;
+
+    } else if (c.state === 'browsing_neighbor') {
+      // --- Browsing at a NEIGHBOR booth ---
+      c.patience -= dt;
+      const nbCX = c.target === 'left' ? NB_LEFT_CX : NB_RIGHT_CX;
+      const nbCY = c.target === 'left' ? NB_LEFT_CY : NB_RIGHT_CY;
+      c.x += (nbCX + (c.id % 2 === 0 ? -15 : 15) - c.x) * 0.02;
+      c.y += (nbCY - 25 - c.y) * 0.02;
+      if (c.patience <= 0) {
+        if (Math.random() < 0.55) {
+          c.state = 'buying_neighbor';
+          c.stateTimer = 800;
+        } else {
+          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = null;
+        }
+      }
+
+    } else if (c.state === 'buying_neighbor') {
+      // --- Buying at a NEIGHBOR booth ---
+      c.stateTimer -= dt;
+      if (c.stateTimer <= 0) {
+        const nbCX = c.target === 'left' ? NB_LEFT_CX : NB_RIGHT_CX;
+        mg.particles.push({ x: nbCX, y: c.y - 5, text: '💰', life: 800, vy: -0.06 });
+        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😊';
       }
 
     } else if (c.state === 'browsing') {
+      // --- Browsing at PLAYER booth ---
       c.patience -= dt;
-      // Hover near booth
       c.x += (boothCX + (c.id % 2 === 0 ? -30 : 30) - c.x) * 0.02;
       c.y += (boothCY - 30 - c.y) * 0.02;
       if (c.satisfaction >= 60) {
-        c.state = 'buying';
-        c.stateTimer = 800;
+        c.state = 'buying'; c.stateTimer = 800;
       } else if (c.patience <= 0) {
-        c.state = 'leaving';
-        c.targetY = 340;
-        c.thoughtBubble = null;
+        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = null;
       }
 
     } else if (c.state === 'interested') {
-      c.patience -= dt * 0.5; // interested customers are more patient
+      c.patience -= dt * 0.5;
       c.x += (boothCX - c.x) * 0.01;
       if (c.satisfaction >= 60) {
-        c.state = 'buying';
-        c.stateTimer = 800;
+        c.state = 'buying'; c.stateTimer = 800;
       } else if (c.patience <= 0) {
-        c.state = 'leaving';
-        c.targetY = 340;
+        c.state = 'leaving'; c.targetY = 340;
       }
 
     } else if (c.state === 'buying') {
       c.stateTimer -= dt;
       if (c.stateTimer <= 0) {
         mg.score.sold++;
-        // Particle effect
         mg.particles.push({ x: c.x, y: c.y, text: '💰', life: 1000, vy: -0.08 });
-        c.state = 'leaving';
-        c.targetY = 340;
-        c.thoughtBubble = '😊';
+        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😊';
       }
 
     } else if (c.state === 'leaving') {
@@ -159,6 +233,18 @@ function updateCustomers(mg, dt) {
         mg.customers.splice(i, 1);
       }
     }
+  }
+
+  // --- Neighbor booth periodic activity (visual greet particles) ---
+  mg.neighborLeft.nextAction -= dt;
+  if (mg.neighborLeft.nextAction <= 0) {
+    mg.particles.push({ x: NB_LEFT_CX, y: NB_LEFT_CY - 20, text: '🗣️', life: 500, vy: -0.04 });
+    mg.neighborLeft.nextAction = 4000 + Math.random() * 6000;
+  }
+  mg.neighborRight.nextAction -= dt;
+  if (mg.neighborRight.nextAction <= 0) {
+    mg.particles.push({ x: NB_RIGHT_CX, y: NB_RIGHT_CY - 20, text: '🗣️', life: 500, vy: -0.04 });
+    mg.neighborRight.nextAction = 4000 + Math.random() * 6000;
   }
 
   // Update particles
@@ -191,11 +277,12 @@ export function performAction(mg, actionId) {
 
   if (actionId === 'greet') {
     mg.score.greeted++;
-    // Attract walking customers
+    // Attract walking customers (can steal from neighbor-targeted ones too)
     let attracted = 0;
     for (const c of nearby) {
       if (c.state === 'walking' && attracted < 3) {
         c.state = 'browsing';
+        c.target = 'player'; // redirect to player
         c.thoughtBubble = PREF_MAP[c.preference];
         c.satisfaction += 15;
         mg.browsedCount++;
@@ -224,13 +311,29 @@ export function performAction(mg, actionId) {
     mg.score.freebiesGiven++;
     for (const c of nearby) {
       if (c.state === 'browsing' || c.state === 'interested' || c.state === 'walking') {
-        c.satisfaction += 50;
-        if (c.state === 'walking') {
-          c.state = 'browsing';
-          c.thoughtBubble = PREF_MAP[c.preference];
-          mg.browsedCount++;
+        // Freebie doesn't always work
+        const freebieRoll = Math.random();
+        if (freebieRoll < 0.65) {
+          // Full effect
+          c.satisfaction += 50;
+          if (c.state === 'walking') {
+            c.state = 'browsing';
+            c.target = 'player';
+            c.thoughtBubble = PREF_MAP[c.preference];
+            mg.browsedCount++;
+          }
+          if (c.state === 'browsing') c.state = 'interested';
+        } else if (freebieRoll < 0.90) {
+          // Partial effect — takes freebie but not very impressed
+          c.satisfaction += 20;
+          if (c.state === 'walking') {
+            c.state = 'browsing';
+            c.target = 'player';
+            c.thoughtBubble = '🎁';
+            mg.browsedCount++;
+          }
         }
-        if (c.state === 'browsing') c.state = 'interested';
+        // else 10%: customer ignores/misses the freebie
       }
     }
     mg.particles.push({ x: mg.boothX + mg.boothW / 2, y: mg.boothY - 10, text: '🎁', life: 800, vy: -0.04 });
