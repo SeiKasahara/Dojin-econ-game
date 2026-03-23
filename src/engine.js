@@ -113,11 +113,130 @@ function rollPartnerType(social = 0) {
   return 'toxic';
 }
 
+// === Work Subtypes ===
+export const HVP_SUBTYPES = {
+  manga:    { id: 'manga',    name: '漫画本',       emoji: '📕', monthsSolo: 3, monthsPartner: 2, costRange: [2500, 3000], repMult: 1.0,  audienceMult: 1.0,  requiredRep: 0, desc: '标准同人本' },
+  novel:    { id: 'novel',    name: '小说本',       emoji: '📗', monthsSolo: 2, monthsPartner: 1, costRange: [1500, 2000], repMult: 0.8,  audienceMult: 0.75, requiredRep: 0, desc: '成本低周期短，受众略小' },
+  artbook:  { id: 'artbook',  name: '创意绘本',     emoji: '🎨', monthsSolo: 3, monthsPartner: 2, costRange: [3500, 4500], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
+  lorebook: { id: 'lorebook', name: '设定集',       emoji: '📜', monthsSolo: 2, monthsPartner: 1, costRange: [2000, 2800], repMult: 1.2,  audienceMult: 0.6,  requiredRep: 2, desc: '小众高价值，需声誉≥2' },
+  music:    { id: 'music',    name: '同人音乐专辑', emoji: '🎵', monthsSolo: 4, monthsPartner: 3, costRange: [4000, 5000], repMult: 1.3,  audienceMult: 0.7,  requiredRep: 0, desc: '独特受众，周期长' },
+};
+export const LVP_SUBTYPES = {
+  acrylic:  { id: 'acrylic',  name: '亚克力',     emoji: '💠', cost: 200, batchSize: 28, marginMult: 1.0, desc: '标准谷子' },
+  badge:    { id: 'badge',    name: '吧唧',       emoji: '🔘', cost: 100, batchSize: 40, marginMult: 0.7, desc: '便宜量大走量型' },
+  shikishi: { id: 'shikishi', name: '色纸',       emoji: '🖼️', cost: 150, batchSize: 25, marginMult: 1.1, desc: '利润率较高' },
+  postcard: { id: 'postcard', name: '明信片套组', emoji: '💌', cost: 120, batchSize: 50, marginMult: 0.8, desc: '成本低量大' },
+};
+
+// === Creative Choices ===
+export const CREATIVE_CHOICES = {
+  theme: {
+    title: '选择创作方向', desc: '这部作品的基调是什么？',
+    options: [
+      { id: 'sweet',     name: '甜文日常', emoji: '🍰', desc: '温暖治愈的日常故事', tag: '甜文' },
+      { id: 'angst',     name: '刀子虐心', emoji: '🗡️', desc: '虐心催泪的情感冲击', tag: '虐心' },
+      { id: 'adventure', name: '热血冒险', emoji: '⚔️', desc: '热血沸腾的冒险故事', tag: '热血' },
+    ],
+  },
+  execution: {
+    title: '创作进度决策', desc: '目前进展如何？接下来要怎么做？',
+    options: [
+      { id: 'rush',   name: '赶工加速', emoji: '⚡', desc: '压缩工期，省一个月但可能影响品质' },
+      { id: 'normal', name: '正常进度', emoji: '📝', desc: '按部就班，稳扎稳打' },
+      { id: 'polish', name: '精雕细琢', emoji: '✨', desc: '花更多心思打磨，额外消耗一些精力' },
+    ],
+  },
+  finalPolish: {
+    title: '最后冲刺', desc: '作品即将完成，最后阶段如何处理？',
+    options: [
+      { id: 'safe',       name: '保守完成',     emoji: '📦', desc: '安全收尾，稳定输出' },
+      { id: 'overhaul',   name: '大改封面/曲目', emoji: '🔄', desc: '推翻重做，可能翻车也可能惊艳' },
+      { id: 'experiment', name: '加入实验性元素', emoji: '🧪', desc: '大胆尝试，也许会成为cult经典' },
+    ],
+  },
+  lvpProcess: {
+    title: '制作工艺', desc: '选择这批谷子的制作方式',
+    options: [
+      { id: 'standard', name: '标准工艺', emoji: '📦', desc: '正常制作，品质适中' },
+      { id: 'premium',  name: '精装工艺', emoji: '💎', desc: '更好的材料和做工，成本更高' },
+      { id: 'budget',   name: '简装快出', emoji: '📋', desc: '压低成本快速出货，量大但品质一般' },
+    ],
+  },
+};
+
+// === Creative Choice Effects (hidden from player) ===
+const CHOICE_EFFECTS = {
+  // Theme choices
+  sweet:     { qualityMod: 0,     audienceMod: 0.15,  uniqueMod: -0.1 },
+  angst:     { qualityMod: 0.05,  audienceMod: -0.05, uniqueMod: 0.15 },
+  adventure: { qualityMod: 0,     audienceMod: -0.1,  uniqueMod: 0.1 },
+  // Execution choices
+  rush:      { qualityMod: -0.15, speedMod: -1, passionExtra: 0 },
+  normal:    { qualityMod: 0,     speedMod: 0,  passionExtra: 0 },
+  polish:    { qualityMod: 0.15,  speedMod: 0,  passionExtra: 5 },
+  // Final polish choices
+  safe:      { qualityMod: 0,     riskMod: 0,   cultChance: 0 },
+  overhaul:  { qualityMod: 0,     riskMod: 0.3, cultChance: 0 },
+  experiment:{ qualityMod: 0.05,  riskMod: 0,   cultChance: 0.15 },
+  // LVP process choices
+  standard:  { qualityMod: 0,     costMod: 1.0, batchMod: 1.0 },
+  premium:   { qualityMod: 0.2,   costMod: 1.5, batchMod: 0.8 },
+  budget:    { qualityMod: -0.15, costMod: 0.7, batchMod: 1.3 },
+};
+
+// Apply a creative choice to an HVP project, returns flavor text for display
+export function applyCreativeChoice(project, choiceCategory, optionId) {
+  const fx = CHOICE_EFFECTS[optionId];
+  if (!fx) return '';
+  if (choiceCategory === 'theme') {
+    const opt = CREATIVE_CHOICES.theme.options.find(o => o.id === optionId);
+    project.styleTag = opt?.tag || null;
+    project.workQuality += fx.qualityMod;
+  } else if (choiceCategory === 'execution') {
+    project.workQuality += fx.qualityMod;
+    if (fx.speedMod) project.needed = Math.max(1, project.needed + fx.speedMod);
+    if (fx.passionExtra) project._extraPassionCost = fx.passionExtra;
+  } else if (choiceCategory === 'finalPolish') {
+    project.workQuality += fx.qualityMod;
+    if (fx.riskMod && Math.random() < fx.riskMod) {
+      // Overhaul gamble: 50/50 great or terrible
+      project.workQuality += Math.random() < 0.5 ? 0.2 : -0.2;
+    }
+    if (fx.cultChance && Math.random() < fx.cultChance) {
+      project.isCultHit = true;
+    }
+  }
+  project.workQuality = Math.max(0.5, Math.min(1.8, project.workQuality));
+  project.choices.push(optionId);
+}
+
+// Work quality effects on sales/reputation (hidden multipliers)
+export function getWorkQualityEffects(quality) {
+  return {
+    salesMult: 0.4 + quality * 0.6,          // quality 0.5→0.7, 1.0→1.0, 1.5→1.3, 1.8→1.48
+    repMult: 0.5 + quality * 0.5,             // quality 0.5→0.75, 1.0→1.0, 1.5→1.25
+    breakthroughMod: (quality - 1.0) * 0.1,   // quality 0.5→-0.05, 1.0→0, 1.5→+0.05
+  };
+}
+
+// Trend bonus on sales/reputation
+export function getTrendBonus(styleTag, currentTrend) {
+  if (!currentTrend || !styleTag) return { salesMult: 1.0, repMult: 1.0 };
+  if (styleTag === currentTrend.tag) return { salesMult: currentTrend.strength, repMult: 0.85 };
+  return { salesMult: 0.8, repMult: 1.0 }; // off-trend slight penalty
+}
+
+// Sync inventory aggregates from works array (backward compat)
+export function syncInventoryAggregates(state) {
+  state.inventory.hvpStock = state.inventory.works.filter(w => w.type === 'hvp').reduce((s, w) => s + w.qty, 0);
+  state.inventory.lvpStock = state.inventory.works.filter(w => w.type === 'lvp').reduce((s, w) => s + w.qty, 0);
+}
+
 // === Initial State ===
 // === Endowment definitions ===
 export const ENDOWMENTS = {
   talent:     { name: '创作天赋', emoji: '🎨', desc: '作品质量与声誉积累速度', effects: ['声誉积累+15%/级', '印刷成本-5%/级'] },
-  stamina:    { name: '体力精力', emoji: '💪', desc: '热情恢复力与创作消耗', effects: ['休息恢复+3/级', 'HVP月耗-1/级'] },
+  stamina:    { name: '体力精力', emoji: '💪', desc: '热情恢复力与创作消耗', effects: ['休息恢复+3/级', '制作同人本时间月耗-1/级'] },
   social:     { name: '社交魅力', emoji: '🤝', desc: '搭档质量与展会表现', effects: ['找搭档+8%/级', '毒搭档率-2%/级'] },
   marketing:  { name: '营销直觉', emoji: '📢', desc: '宣发效果与信息衰减', effects: ['宣发效果+12%/级', '信息衰减-1%/级'] },
   resilience: { name: '心理韧性', emoji: '🛡️', desc: '抵抗现实消耗与负面事件', effects: ['现实消耗-0.5/级', '负债焦虑阈+200/级'] },
@@ -171,7 +290,7 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     attendingEvent: null,     // current event being attended: { name, salesBoost, cost }
     availableEvents: [],      // events available this month
     // Inventory system (库存管理)
-    inventory: { hvpStock: 0, lvpStock: 0, hvpPrice: 50, lvpPrice: 15 },
+    inventory: { hvpStock: 0, lvpStock: 0, hvpPrice: 50, lvpPrice: 15, works: [], nextWorkId: 1 },
     // Personal goods collection (as consumer)
     goodsCollection: 0,   // purchased goods owned, can sell to secondhand market
     // Market ecosystem (Phase 2)
@@ -271,19 +390,18 @@ export function getActionDisplay(actionId, state) {
     return { ...base, costLabel: base.costLabel + sigLabel };
   }
   if (actionId === 'hvp') {
-    const recTag = state.recessionTurnsLeft > 0 ? ' 📉成本+20%' : '';
+    const recTag = state.recessionTurnsLeft > 0 ? ' 📉' : '';
     const staCost = Math.max(8, 15 - (state.endowments?.stamina || 0));
     if (state.hvpProject) {
       const p = state.hvpProject;
-      return { ...base, name: `继续创作同人本`, costLabel: `进度 ${p.progress}/${p.needed} · 热情-${staCost} 需闲暇≥4${recTag}` };
+      const sub = HVP_SUBTYPES[p.subtype] || HVP_SUBTYPES.manga;
+      return { ...base, name: `继续创作${sub.name}`, emoji: sub.emoji, costLabel: `进度 ${p.progress}/${p.needed} · 热情-${staCost}${recTag}` };
     }
-    const solo = '独自:3个月';
-    const partner = state.hasPartner ? ' 搭档:2个月' : '';
-    return { ...base, costLabel: `${solo}${partner} 热情-${staCost}/月 需闲暇≥4${recTag}` };
+    return { ...base, costLabel: `选择类型后开始创作${recTag}` };
   }
   if (actionId === 'lvp') {
-    const recTag = state.recessionTurnsLeft > 0 ? ' 📉成本+20%' : '';
-    return { ...base, costLabel: `热情-8 资金-${state.recessionTurnsLeft > 0 ? 240 : 200} 需闲暇≥2${recTag}` };
+    const recTag = state.recessionTurnsLeft > 0 ? ' 📉' : '';
+    return { ...base, costLabel: `选择类型和工艺${recTag}` };
   }
   if (actionId === 'reprint') {
     if (state.totalHVP === 0 && state.totalLVP === 0) {
@@ -471,8 +589,13 @@ function calculateSales(actionId, state) {
   const advMod = state.advanced ? getAdvancedSalesMod(state.advanced, type) : 1.0;
   const noise = 0.85 + Math.random() * 0.3;
 
+  // --- Work quality & trend modifiers ---
+  const recentWork = state.inventory?.works?.filter(w => w.type === type).slice(-1)[0];
+  const wqFx = recentWork ? getWorkQualityEffects(recentWork.workQuality) : { salesMult: 1, repMult: 1, breakthroughMod: 0 };
+  const trendFx = recentWork ? getTrendBonus(recentWork.styleTag, state.market?.currentTrend) : { salesMult: 1, repMult: 1 };
+
   // --- Calculate final sales ---
-  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise;
+  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * wqFx.salesMult * trendFx.salesMult;
   const sales = Math.max(1, Math.round(rawSales));
 
   // === Full breakdown for educational display ===
@@ -789,7 +912,7 @@ const RANDOM_EVENTS = [
         s.official.secondHandPool.hvp += Math.floor((s.market?.communitySize || 10000) * 0.003);
       }
     },
-    tip: '泡沫破裂时，投机客理性泡沫B归零，价格回落到基础价值F。大量抛售使二手池膨胀，LVP受冲击最大（替代弹性ρ→1，二手是近完美替代品）。这是鞅过程崩溃的实际表现。',
+    tip: '泡沫破裂时，投机客理性泡沫B归零，价格回落到基础价值F。大量抛售使二手池膨胀，同人谷受冲击最大。',
     weight: 2, when: (s) => s.turn > 18 && (s.eventCounts['speculator_rush'] || 0) > 0, maxTotal: 3,
   },
   {
@@ -1171,17 +1294,27 @@ export function executeTurn(state, actionId) {
     result.deltas.push({ icon: '❤️', label: '本月创作消耗', value: '-15', positive: false });
 
     if (!state.hvpProject) {
-      // Start new project — skill affects solo speed at mastery (Arrow's learning curve)
+      // Start new project with subtype
+      const subtypeId = state._selectedHVPSubtype || 'manga';
+      state._selectedHVPSubtype = null;
+      const sub = HVP_SUBTYPES[subtypeId] || HVP_SUBTYPES.manga;
       const skill = getCreativeSkill(state);
       const fx = getSkillEffects(skill);
-      const soloNeeded = fx.soloHVPMonths; // 3 normally, 2 at mastery (skill≥4)
-      const needed = state.hasPartner ? 2 : soloNeeded;
-      const printCost = 2500 + Math.floor(Math.random() * 500);
-      state.hvpProject = { progress: 1, needed, printCost };
-      result.deltas.push({ icon: '📖', label: `开始创作同人本！`, value: `进度 1/${needed}`, positive: true });
-      if (soloNeeded < 3 && !state.hasPartner) {
-        result.deltas.push({ icon: '🎯', label: '熟练度加成', value: `独自${soloNeeded}月完成`, positive: true });
+      let soloNeeded = sub.monthsSolo;
+      if (fx.soloHVPMonths < 3 && soloNeeded >= 3) soloNeeded--; // mastery -1 month
+      const needed = state.hasPartner ? sub.monthsPartner : soloNeeded;
+      const [costMin, costMax] = sub.costRange;
+      const printCost = costMin + Math.floor(Math.random() * (costMax - costMin));
+      state.hvpProject = { progress: 1, needed, printCost, subtype: subtypeId, workQuality: 1.0, styleTag: null, choices: [], isCultHit: false };
+
+      // Apply pending creative choices (theme from UI flow)
+      if (state._pendingChoices) {
+        for (const c of state._pendingChoices) applyCreativeChoice(state.hvpProject, c.category, c.optionId);
+        state._pendingChoices = null;
       }
+
+      result.deltas.push({ icon: sub.emoji, label: `开始创作${sub.name}！`, value: `进度 1/${needed}`, positive: true });
+      if (state.hvpProject.styleTag) result.deltas.push({ icon: '🎭', label: `风格：${state.hvpProject.styleTag}`, value: '', positive: true });
       if (state.hasPartner) {
         result.deltas.push({ icon: '🤝', label: '搭档协作', value: `${needed}个月完成`, positive: true });
         if (state.partnerFee > 0) result.deltas.push({ icon: '💰', label: '预计搭档稿费', value: `¥${state.partnerFee}（完成时付）`, positive: false });
@@ -1189,6 +1322,17 @@ export function executeTurn(state, actionId) {
       result.tip = TIPS.hvpStart;
     } else {
       // Continue project
+      // Apply any pending creative choices from UI flow
+      if (state._pendingChoices) {
+        for (const c of state._pendingChoices) applyCreativeChoice(state.hvpProject, c.category, c.optionId);
+        // Extra passion cost from "polish" choice
+        if (state.hvpProject._extraPassionCost) {
+          state.passion -= state.hvpProject._extraPassionCost;
+          result.deltas.push({ icon: '✨', label: '精雕细琢的额外消耗', value: `-${state.hvpProject._extraPassionCost}`, positive: false });
+          state.hvpProject._extraPassionCost = 0;
+        }
+        state._pendingChoices = null;
+      }
       state.hvpProject.progress++;
       const p = state.hvpProject;
       if (p.progress >= p.needed) {
@@ -1211,10 +1355,23 @@ export function executeTurn(state, actionId) {
 
         // Calculate batch size and add to inventory
         const batchQty = Math.max(20, Math.round(printCost / 50));
+        const hvpPrice = state.playerPrice.hvp || 50;
+        state.inventory.hvpPrice = hvpPrice;
+        // Add to works array
+        const subInfo = HVP_SUBTYPES[savedProject.subtype] || HVP_SUBTYPES.manga;
+        state.inventory.works.push({
+          id: state.inventory.nextWorkId++,
+          type: 'hvp', subtype: savedProject.subtype || 'manga',
+          qty: batchQty, price: hvpPrice,
+          workQuality: savedProject.workQuality || 1.0,
+          styleTag: savedProject.styleTag || null,
+          isCultHit: savedProject.isCultHit || false,
+          turn: state.turn,
+        });
         state.inventory.hvpStock += batchQty;
-        state.inventory.hvpPrice = state.playerPrice.hvp || 50;
+        syncInventoryAggregates(state);
 
-        result.deltas.push({ icon: '🎉', label: '同人本完成！', value: '', positive: true });
+        result.deltas.push({ icon: subInfo.emoji, label: `${subInfo.name}完成！`, value: '', positive: true });
         const costLabels = [];
         if (costMult > 1) costLabels.push('下行+20%');
         if (fx.costReduction > 0.01) costLabels.push(`熟练-${Math.round(fx.costReduction * 100)}%`);
@@ -1275,28 +1432,47 @@ export function executeTurn(state, actionId) {
     }
 
   } else if (action.type === 'lvp') {
-    // === LVP: single-turn → ADD TO INVENTORY ===
+    // === LVP: single-turn → ADD TO INVENTORY (with subtype + process choice) ===
+    const subtypeId = state._selectedLVPSubtype || 'acrylic';
+    state._selectedLVPSubtype = null;
+    const sub = LVP_SUBTYPES[subtypeId] || LVP_SUBTYPES.acrylic;
+    const processChoice = state._lvpProcessChoice || 'standard';
+    state._lvpProcessChoice = null;
+    const pfx = CHOICE_EFFECTS[processChoice] || CHOICE_EFFECTS.standard;
+    const lvpQuality = Math.max(0.5, Math.min(1.8, 1.0 + (pfx.qualityMod || 0)));
+
     const skill = getCreativeSkill(state);
     const fx = getSkillEffects(skill);
 
     state.passion -= 8;
-    const lvpCost = 200;
     const costMult = state.recessionTurnsLeft > 0 ? 1.2 : 1.0;
     const skillDiscount = 1 - fx.costReduction;
-    const actualCost = Math.round(lvpCost * costMult * skillDiscount);
+    const actualCost = Math.round(sub.cost * (pfx.costMod || 1.0) * costMult * skillDiscount);
     state.money -= actualCost;
     result.deltas.push({ icon: '❤️', label: '创作消耗', value: '-8', positive: false });
     const lvpCostLabels = [];
     if (costMult > 1) lvpCostLabels.push('下行+20%');
     if (fx.costReduction > 0.01) lvpCostLabels.push(`熟练-${Math.round(fx.costReduction * 100)}%`);
+    if ((pfx.costMod || 1) !== 1) lvpCostLabels.push(pfx.costMod > 1 ? '精装' : '简装');
     result.deltas.push({ icon: '💰', label: `制作成本${lvpCostLabels.length ? '(' + lvpCostLabels.join(' ') + ')' : ''}`, value: `-¥${actualCost}`, positive: false });
 
-    // Calculate batch size and add to inventory
-    const batchQty = Math.max(10, Math.round(actualCost / 7));
+    // Calculate batch size with subtype + process modifier
+    const batchQty = Math.max(5, Math.round(sub.batchSize * (pfx.batchMod || 1.0)));
+    const lvpPrice = state.playerPrice.lvp || Math.round(15 * sub.marginMult);
+    state.inventory.lvpPrice = lvpPrice;
+    // Add to works array
+    state.inventory.works.push({
+      id: state.inventory.nextWorkId++,
+      type: 'lvp', subtype: subtypeId,
+      qty: batchQty, price: lvpPrice,
+      workQuality: lvpQuality,
+      styleTag: null, isCultHit: false,
+      turn: state.turn,
+    });
     state.inventory.lvpStock += batchQty;
-    state.inventory.lvpPrice = state.playerPrice.lvp || 15;
+    syncInventoryAggregates(state);
 
-    result.deltas.push({ icon: '📦', label: `制作${batchQty}个入库`, value: `库存${state.inventory.lvpStock}个 定价¥${state.inventory.lvpPrice}`, positive: true });
+    result.deltas.push({ icon: sub.emoji, label: `${sub.name}×${batchQty}入库`, value: `库存${state.inventory.lvpStock}个 定价¥${lvpPrice}`, positive: true });
 
     state.totalLVP++;
     state.recentLVP = 1;
@@ -1356,15 +1532,22 @@ export function executeTurn(state, actionId) {
     state.money -= cost;
     result.deltas.push({ icon: '💰', label: '购买谷子', value: `-¥${cost}`, positive: false });
 
-    // Passion gain diminishes with years in the hobby
+    // Passion gain diminishes with: years in hobby + idle months without creating
     const yearsIn = state.turn / 12;
-    const efficiency = Math.max(0.3, 1 - yearsIn * 0.08);
-    const passionGain = Math.round(12 * efficiency);
+    const yearDecay = Math.max(0.3, 1 - yearsIn * 0.08);
+    // If not creating, buying gives less joy — "只买不做" fatigue
+    const idleMonths = state.turn - state.lastCreativeTurn;
+    const idleDecay = idleMonths >= 3 ? Math.max(0.3, 1 - (idleMonths - 2) * 0.1) : 1.0;
+    const efficiency = yearDecay * idleDecay;
+    const passionGain = Math.max(2, Math.round(12 * efficiency));
     state.passion = Math.min(100, state.passion + passionGain);
     result.deltas.push({ icon: '❤️', label: '买到心仪的谷子！', value: `热情+${passionGain}`, positive: true });
 
-    if (efficiency < 0.8) {
-      result.deltas.push({ icon: '📉', label: '收集热情递减', value: `效率${Math.round(efficiency * 100)}%`, positive: false });
+    if (yearDecay < 0.8 || idleDecay < 1) {
+      const reasons = [];
+      if (yearDecay < 0.8) reasons.push('年限递减');
+      if (idleDecay < 1) reasons.push(`已${idleMonths}月未创作`);
+      result.deltas.push({ icon: '📉', label: reasons.join('+'), value: `效率${Math.round(efficiency * 100)}%`, positive: false });
     }
 
     // Small info disclosure gain (you're engaging with the community)
@@ -1427,9 +1610,12 @@ export function executeTurn(state, actionId) {
 
   // --- Track creative activity (resets inactivity counter) ---
   // Creating, attending events, finding partners, heavy promotion all count as "active in the scene"
-  const isActive = ['hvp', 'lvp', 'promote_heavy', 'attendEvent', 'buyGoods', 'reprint'].includes(actionId)
-    || (actionId === 'findPartner' && state.hasPartner); // only if actually found one
-  if (isActive) state.lastCreativeTurn = state.turn;
+  // Only actual creative/community actions reset the inactivity counter
+  // buyGoods/reprint/sellGoods are NOT creative activity — buying stuff doesn't count as creating
+  const isCreative = ['hvp', 'lvp', 'attendEvent'].includes(actionId)
+    || (actionId === 'promote_heavy') // heavy promotion shows creative intent
+    || (actionId === 'findPartner' && state.hasPartner);
+  if (isCreative) state.lastCreativeTurn = state.turn;
 
   // --- Reality drain ---
   const rawDrain = getRealityDrain(state.turn);
@@ -1701,6 +1887,7 @@ function checkAchievements(state) {
     { id: 'ai_survivor', cond: state.advanced && state.advanced.aiRevolution && state.totalHVP > 0 && state.passion > 20 },
     { id: 'stagflation_survivor', cond: state.advanced && (state.eventCounts['stagflation'] || 0) > 0 && state.advanced.stagflationTurnsLeft === 0 && state.passion > 0 },
     { id: 'veblen', cond: (state.eventCounts['veblen_hype'] || 0) > 0 },
+    { id: 'collector', cond: state.goodsCollection >= 10 && state.totalHVP === 0 && state.totalLVP === 0 },
   ];
   for (const c of checks) if (c.cond && !state.achievements.includes(c.id)) state.achievements.push(c.id);
   if (state.partnerType === 'toxic' && !state.achievements.includes('toxic_encounter')) state.achievements.push('toxic_encounter');
@@ -1726,6 +1913,7 @@ export function getAchievementInfo(id) {
     ai_survivor: { name: 'AI时代的人类', desc: '在AI革命后仍坚持人工创作', emoji: '🤖' },
     stagflation_survivor: { name: '滞胀幸存者', desc: '经历滞胀后仍在创作', emoji: '🔥' },
     veblen: { name: '圣遗物制造者', desc: '作品成为韦伯仑商品', emoji: '💎' },
+    collector: { name: '纯粹的消费者', desc: '收藏了10件谷子却从未创作过', emoji: '🛒' },
   };
   return map[id] || { name: id, desc: '', emoji: '🎖️' };
 }

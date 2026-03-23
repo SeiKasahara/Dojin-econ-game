@@ -5,7 +5,8 @@
 
 import './style.css';
 import { createInitialState, executeTurn, rollEvent, applyEvent, ACTIONS } from './engine.js';
-import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector } from './ui.js';
+import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice } from './ui.js';
+import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice } from './engine.js';
 
 let state = null;
 
@@ -19,18 +20,22 @@ function startGame(communityPreset, ipType) {
   renderEndowments((endowments, backgroundId) => {
     state = createInitialState(selectedPreset, endowments, backgroundId, selectedIpType);
     state._prevAchievementCount = 0;
-    renderGame(state, handleAction);
+    renderGame(state, handleAction, handleRetire);
   });
 }
 
+function handleRetire() {
+  renderGameOver(state, () => renderTitle(startGame));
+}
+
 function needsPricing(actionId) {
-  if (actionId === 'lvp') return true;
+  // LVP pricing is now handled in the LVP subtype flow
   if (actionId === 'hvp' && state.hvpProject && state.hvpProject.progress + 1 >= state.hvpProject.needed) return true;
   return false;
 }
 
 function handleAction(actionId) {
-  const cancelBack = () => renderGame(state, handleAction);
+  const cancelBack = () => renderGame(state, handleAction, handleRetire);
 
   // === Attend Event: event selection → mode → mini-game/consign → proceed ===
   if (actionId === 'attendEvent') {
@@ -90,26 +95,69 @@ function handleAction(actionId) {
     return;
   }
 
-  // === HVP confirmation (multi-turn commitment) ===
+  // === HVP flow: new project → subtype + theme choice; continue → execution/polish choice ===
   if (actionId === 'hvp' && !needsPricing(actionId)) {
-    const isNew = !state.hvpProject;
-    const needed = state.hasPartner ? 2 : 3;
-    const overlay = document.createElement('div');
-    overlay.className = 'event-overlay';
-    overlay.innerHTML = `
-      <div class="event-card" style="max-width:340px">
-        <div class="event-emoji">📖</div>
-        <div class="event-title">${isNew ? '开始创作同人本？' : '继续创作同人本？'}</div>
-        <div class="event-desc" style="margin-bottom:12px">${isNew
-          ? `需要${needed}个月完成${state.hasPartner ? '（搭档协作）' : '（独自创作）'}，每月消耗热情。完成后印刷入库。`
-          : `当前进度 ${state.hvpProject.progress}/${state.hvpProject.needed}，继续投入本月的创作时间。`}</div>
-        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">每月消耗：热情-${Math.max(8, 15 - (state.endowments?.stamina || 0))} · 需闲暇≥4</div>
-        <button class="btn btn-primary btn-block" id="btn-hvp-go" style="margin-bottom:8px">${isNew ? '开始创作' : '继续创作'}</button>
-        <button class="btn btn-block" id="btn-hvp-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
-      </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector('#btn-hvp-go').addEventListener('click', () => { overlay.remove(); proceedWithTurn(actionId); });
-    overlay.querySelector('#btn-hvp-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+    if (!state.hvpProject) {
+      // New project: select subtype → theme choice → proceed
+      renderSubtypeSelector(state, 'hvp', (subtypeId) => {
+        state._selectedHVPSubtype = subtypeId;
+        const sub = HVP_SUBTYPES[subtypeId];
+        renderCreativeChoice(CREATIVE_CHOICES.theme, (themeId) => {
+          state._pendingChoices = [{ category: 'theme', optionId: themeId }];
+          proceedWithTurn(actionId);
+        });
+      }, cancelBack);
+    } else {
+      // Continue project: show creative choice for this month
+      const nextMonth = state.hvpProject.progress + 1;
+      const choicesMade = state.hvpProject.choices?.length || 0;
+      // Month 2: execution choice (if not yet made and we have >1 month projects)
+      if (nextMonth === 2 && choicesMade < 2) {
+        renderCreativeChoice(CREATIVE_CHOICES.execution, (choiceId) => {
+          state._pendingChoices = [{ category: 'execution', optionId: choiceId }];
+          proceedWithTurn(actionId);
+        });
+      // Month 3+: final polish choice (if 3+ month project and not yet made)
+      } else if (nextMonth >= 3 && nextMonth >= state.hvpProject.needed && choicesMade < 3) {
+        renderCreativeChoice(CREATIVE_CHOICES.finalPolish, (choiceId) => {
+          state._pendingChoices = [{ category: 'finalPolish', optionId: choiceId }];
+          proceedWithTurn(actionId);
+        });
+      } else {
+        // No choice needed this month, just confirm
+        const p = state.hvpProject;
+        const sub = HVP_SUBTYPES[p.subtype] || HVP_SUBTYPES.manga;
+        const overlay = document.createElement('div');
+        overlay.className = 'event-overlay';
+        overlay.innerHTML = `
+          <div class="event-card" style="max-width:340px">
+            <div style="font-size:1.3rem">${sub.emoji}</div>
+            <div style="font-weight:700;margin:4px 0">继续创作${sub.name}</div>
+            <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">进度 ${p.progress}/${p.needed}</div>
+            <button class="btn btn-primary btn-block" id="btn-hvp-go" style="margin-bottom:6px">继续创作</button>
+            <button class="btn btn-block" id="btn-hvp-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+          </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#btn-hvp-go').addEventListener('click', () => { overlay.remove(); proceedWithTurn(actionId); });
+        overlay.querySelector('#btn-hvp-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+      }
+    }
+    return;
+  }
+
+  // === LVP flow: select subtype → process choice → pricing ===
+  if (actionId === 'lvp') {
+    renderSubtypeSelector(state, 'lvp', (subtypeId) => {
+      state._selectedLVPSubtype = subtypeId;
+      renderCreativeChoice(CREATIVE_CHOICES.lvpProcess, (processId) => {
+        state._lvpProcessChoice = processId;
+        // Now pricing
+        renderPriceSelector(state, 'lvp', (chosenPrice) => {
+          state.playerPrice.lvp = chosenPrice;
+          proceedWithTurn(actionId);
+        }, cancelBack);
+      });
+    }, cancelBack);
     return;
   }
 
@@ -166,11 +214,11 @@ function proceedWithTurn(actionId) {
           applyEvent(state, event);
           if (state.phase === 'gameover') { renderGameOver(state, () => renderTitle(startGame)); return; }
           state.phase = 'action';
-          renderGame(state, handleAction);
+          renderGame(state, handleAction, handleRetire);
         });
       } else {
         state.phase = 'action';
-        renderGame(state, handleAction);
+        renderGame(state, handleAction, handleRetire);
       }
     });
   });

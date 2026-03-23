@@ -3,7 +3,7 @@
  * Market ecosystem panel, pricing UI, diversity indicators
  */
 
-import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground } from './engine.js';
+import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground, HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES } from './engine.js';
 import { createChartCanvas, drawSupplyDemand } from './chart.js';
 import { getMarketNarratives, getPriceTiers, calculatePricedSales, getMarketAvgPrice, IP_TYPES } from './market.js';
 import { getOfficialNarratives } from './official.js';
@@ -19,7 +19,7 @@ export function renderTitle(onStart) {
       <h1>同人社团物语</h1>
       <p class="subtitle">一个关于热情、声誉与选择的<br/>同人经济学模拟游戏</p>
       <p class="tagline">
-        基于真实问卷数据(n=192)构建的经济学模型<br/>
+        基于真实问卷数据构建的经济学模型<br/>
         从高考后的暑假开始，经历大学、工作<br/>
         你的同人创作之路能走多远？
       </p>
@@ -190,7 +190,7 @@ export function renderEndowments(onConfirm) {
 }
 
 // === Game Screen ===
-export function renderGame(state, onAction) {
+export function renderGame(state, onAction, onRetire) {
   const partnerInfo = state.hasPartner && state.partnerType
     ? (() => {
         const pt = PARTNER_TYPES[state.partnerType];
@@ -221,8 +221,9 @@ export function renderGame(state, onAction) {
     <div class="screen">
       <div class="game-header">
         <span class="turn-badge">第 ${state.turn + 1} 回合</span>
-        <span style="display:flex;align-items:center;gap:8px">
-          <button class="btn btn-secondary" id="btn-dashboard" style="padding:2px 10px;font-size:0.75rem;min-height:28px">📊 数据</button>
+        <span style="display:flex;align-items:center;gap:6px">
+          <button class="btn btn-secondary" id="btn-dashboard" style="padding:2px 10px;font-size:0.75rem;min-height:28px">📊</button>
+          <button class="btn btn-secondary" id="btn-retire" style="padding:2px 10px;font-size:0.75rem;min-height:28px;color:var(--text-muted)">😮‍💨</button>
           <span class="money-badge" ${state.money < 0 ? 'style="color:var(--danger)"' : ''}>¥${state.money.toLocaleString()}</span>
         </span>
       </div>
@@ -236,6 +237,7 @@ export function renderGame(state, onAction) {
 
       <div class="game-content">
         ${state.market ? renderMarketPanel(state.market, state.official) : ''}
+        ${state.market?.socialFeed?.length ? renderSocialFeed(state.market.socialFeed) : ''}
 
         <div class="narrative">
           <div class="turn-title">${getNarrativeTitle(state)}</div>
@@ -255,11 +257,50 @@ export function renderGame(state, onAction) {
   });
   // Dashboard button
   document.getElementById('btn-dashboard')?.addEventListener('click', () => renderDashboard(state));
+  // Retire button — voluntary exit
+  document.getElementById('btn-retire')?.addEventListener('click', () => {
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    const months = state.turn;
+    const hasWorks = state.totalHVP > 0 || state.totalLVP > 0;
+    overlay.innerHTML = `
+      <div class="event-card" style="max-width:340px">
+        <div style="font-size:2rem;margin-bottom:8px">😮‍💨</div>
+        <div style="font-weight:700;font-size:1rem;margin-bottom:8px">放下画笔</div>
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:16px;line-height:1.5">
+          ${months < 6 ? '才刚开始就想放弃了吗...也许同人创作不适合每个人。'
+            : hasWorks ? `创作了${months}个月，也许是时候去过另一种生活了。你的作品会留在这里。`
+            : `在圈子里待了${months}个月，虽然一直没动笔，但这段时光也不算白费。`}
+        </div>
+        <button class="btn btn-block" id="btn-retire-confirm" style="background:#F8F0F0;border:1px solid var(--danger);color:var(--danger);margin-bottom:8px">是的，我想退坑了</button>
+        <button class="btn btn-block" id="btn-retire-cancel" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">再坚持一下</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#btn-retire-cancel').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#btn-retire-confirm').addEventListener('click', () => {
+      overlay.remove();
+      state.passion = 0;
+      state.phase = 'gameover';
+      state.gameOverReason = months < 6
+        ? '你在同人创作的门口短暂驻足，最终选择了转身离开。这不是失败——只是人生有太多可能性。'
+        : hasWorks
+        ? '不是热情燃尽，而是你主动选择了放下。也许这叫"体面退坑"——带着所有美好的记忆，去拥抱下一段人生。'
+        : '你始终没能迈出创作的第一步，但在这个圈子里度过的每一天，看过的每一件作品，都是真实的快乐。';
+      if (onRetire) onRetire();
+    });
+  });
   // Market panel toggle
   const toggle = document.getElementById('market-toggle');
   if (toggle) {
     toggle.addEventListener('click', () => {
       toggle.closest('.market-panel').classList.toggle('collapsed');
+    });
+  }
+  // Social feed toggle
+  const feedToggle = document.getElementById('feed-toggle');
+  if (feedToggle) {
+    feedToggle.addEventListener('click', () => {
+      feedToggle.closest('.market-panel').classList.toggle('collapsed');
     });
   }
 }
@@ -539,11 +580,34 @@ function renderMarketPanel(market, official) {
           </div>
           <span class="stat-value">${ipHeat}</span>
         </div>
+        ${market.currentTrend ? `<div style="font-size:0.75rem;padding:4px 0;color:var(--primary);font-weight:600">🔥 热门话题: ${market.currentTrend.tag} (${market.currentTrend.turnsLeft}月)</div>` : ''}
         ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.72rem;color:var(--danger);padding:4px 0">⚠ 消费者同人本偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
         ${official && official.secondHandPressure.lvp > 0.1 ? `<div style="font-size:0.72rem;color:var(--warning);padding:2px 0">📦 二手同人谷压力: ${Math.round(official.secondHandPressure.lvp * 100)}%</div>` : ''}
         <div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
           ${npcFeed}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSocialFeed(feedItems) {
+  if (!feedItems || feedItems.length === 0) return '';
+  const typeEmoji = { npc: '✨', trend: '📊', fan: '❤️', market: '📦', flavor: '💭', drama: '⚡' };
+  const items = feedItems.map(f => `
+    <div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:0.73rem;color:var(--text-light);border-bottom:1px dashed var(--border)">
+      <span style="flex-shrink:0">${typeEmoji[f.type] || '💬'}</span>
+      <span>${f.text}</span>
+    </div>
+  `).join('');
+  return `
+    <div class="market-panel collapsed" style="margin-top:6px">
+      <div class="market-header" id="feed-toggle">
+        <span>💬 圈内动态</span>
+        <span class="market-arrow">▼</span>
+      </div>
+      <div class="market-body" style="padding:4px 0">
+        ${items}
       </div>
     </div>
   `;
@@ -873,6 +937,110 @@ export function renderPriceSelector(state, productType, onSelect, onCancel) {
   overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
     overlay.remove();
     if (onCancel) onCancel();
+  });
+}
+
+// === Subtype Selector ===
+export function renderSubtypeSelector(state, productType, onSelect, onCancel) {
+  const isHVP = productType === 'hvp';
+  const subtypes = isHVP ? HVP_SUBTYPES : LVP_SUBTYPES;
+  const label = isHVP ? '同人本' : '谷子';
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:380px;text-align:left">
+      <div style="text-align:center;margin-bottom:10px">
+        <span style="font-size:1.3rem">${isHVP ? '📖' : '🔑'}</span>
+        <div style="font-weight:700;font-size:1rem">选择${label}类型</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        ${Object.values(subtypes).map(s => {
+          const locked = isHVP && s.requiredRep > 0 && state.reputation < s.requiredRep;
+          const lockLabel = locked ? ` 🔒 声誉≥${s.requiredRep}` : '';
+          const detail = isHVP
+            ? `${s.monthsSolo}月(独)/${s.monthsPartner}月(搭) · ¥${s.costRange[0]}~${s.costRange[1]}`
+            : `¥${s.cost} · ${s.batchSize}个/批`;
+          return `
+          <div class="price-btn subtype-btn" data-subtype="${s.id}" ${locked ? 'data-locked="1"' : ''} style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:${locked ? 'not-allowed' : 'pointer'};${locked ? 'opacity:0.5;' : ''}">
+            <span style="font-size:1.3rem">${s.emoji}</span>
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:0.85rem">${s.name}${lockLabel}</div>
+              <div style="font-size:0.72rem;color:var(--text-light)">${s.desc}</div>
+              <div style="font-size:0.65rem;color:var(--text-muted)">${detail}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-subtype-confirm" disabled style="opacity:0.5">请选择类型</button>
+      <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  let selected = null;
+  overlay.querySelectorAll('.subtype-btn').forEach(btn => {
+    if (btn.dataset.locked === '1') return;
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.subtype-btn').forEach(b => { if (b.dataset.locked !== '1') { b.style.border = '1px solid var(--border)'; b.style.background = ''; }});
+      btn.style.border = '2px solid var(--primary)';
+      btn.style.background = '#F0F4FF';
+      selected = btn.dataset.subtype;
+      const cfm = overlay.querySelector('#btn-subtype-confirm');
+      cfm.disabled = false;
+      cfm.style.opacity = '1';
+      const name = subtypes[selected]?.name || selected;
+      cfm.textContent = `确认: ${name}`;
+    });
+  });
+  overlay.querySelector('#btn-subtype-confirm').addEventListener('click', () => {
+    if (!selected) return;
+    overlay.remove();
+    onSelect(selected);
+  });
+  overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => { overlay.remove(); if (onCancel) onCancel(); });
+}
+
+// === Creative Choice Overlay (VN-style, no numbers shown) ===
+export function renderCreativeChoice(choiceData, onSelect) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:360px;text-align:left">
+      <div style="text-align:center;margin-bottom:10px">
+        <div style="font-weight:700;font-size:1rem">${choiceData.title}</div>
+        <div style="font-size:0.8rem;color:var(--text-light)">${choiceData.desc}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+        ${choiceData.options.map(o => `
+          <div class="price-btn choice-btn" data-choice="${o.id}" style="display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer">
+            <span style="font-size:1.5rem">${o.emoji}</span>
+            <div>
+              <div style="font-weight:700;font-size:0.9rem">${o.name}</div>
+              <div style="font-size:0.75rem;color:var(--text-light)">${o.desc}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-choice-confirm" disabled style="opacity:0.5">请选择</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  let selected = null;
+  overlay.querySelectorAll('.choice-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.choice-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
+      btn.style.border = '2px solid var(--primary)';
+      btn.style.background = '#F0F4FF';
+      selected = btn.dataset.choice;
+      const cfm = overlay.querySelector('#btn-choice-confirm');
+      cfm.disabled = false;
+      cfm.style.opacity = '1';
+      cfm.textContent = '确认选择';
+    });
+  });
+  overlay.querySelector('#btn-choice-confirm').addEventListener('click', () => {
+    if (!selected) return;
+    overlay.remove();
+    onSelect(selected);
   });
 }
 
