@@ -105,7 +105,7 @@ function handleAction(actionId) {
         renderCreativeChoice(CREATIVE_CHOICES.theme, (themeId) => {
           state._pendingChoices = [{ category: 'theme', optionId: themeId }];
           proceedWithTurn(actionId);
-        });
+        }, cancelBack);
       }, cancelBack);
     } else {
       // Continue project: show creative choice for this month
@@ -116,13 +116,13 @@ function handleAction(actionId) {
         renderCreativeChoice(CREATIVE_CHOICES.execution, (choiceId) => {
           state._pendingChoices = [{ category: 'execution', optionId: choiceId }];
           proceedWithTurn(actionId);
-        });
+        }, cancelBack);
       // Month 3+: final polish choice (if 3+ month project and not yet made)
       } else if (nextMonth >= 3 && nextMonth >= state.hvpProject.needed && choicesMade < 3) {
         renderCreativeChoice(CREATIVE_CHOICES.finalPolish, (choiceId) => {
           state._pendingChoices = [{ category: 'finalPolish', optionId: choiceId }];
           proceedWithTurn(actionId);
-        });
+        }, cancelBack);
       } else {
         // No choice needed this month, just confirm
         const p = state.hvpProject;
@@ -156,7 +156,7 @@ function handleAction(actionId) {
           state.playerPrice.lvp = chosenPrice;
           proceedWithTurn(actionId);
         }, cancelBack);
-      });
+      }, cancelBack);
     }, cancelBack);
     return;
   }

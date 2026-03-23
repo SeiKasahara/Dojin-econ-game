@@ -330,9 +330,9 @@ export const ACTIONS = {
   findPartner: { id: 'findPartner', name: '寻找搭档',   emoji: '🤝', type: 'social',
                  costLabel: '热情-3 搭档有稿费成本', requires: { passion: 3, time: 2 } },
   partTimeJob: { id: 'partTimeJob', name: '普通打工',   emoji: '🏪', type: 'work',
-                 costLabel: '热情-8 赚¥300~500 仅学生/失业', requires: { passion: 5, time: 3 } },
+                 costLabel: '赚¥300~500 下月闲暇-1h 仅学生/失业', requires: { passion: 2, time: 3 } },
   freelance:   { id: 'freelance',   name: '接稿赚钱',   emoji: '🎨', type: 'freelance',
-                 costLabel: '热情-12 收入看声誉 时间看状态', requires: { passion: 8, time: 2 } },
+                 costLabel: '热情-4 下月闲暇-2h 收入看声誉', requires: { passion: 4, time: 2 } },
   attendEvent: { id: 'attendEvent', name: '参加同人展', emoji: '🎪', type: 'attendEvent',
                  costLabel: '需有同人展·路费·闲暇≥3', requires: { passion: 5, time: 3 } },
   jobSearch:   { id: 'jobSearch',   name: '找工作',     emoji: '💼', type: 'jobSearch',
@@ -364,13 +364,13 @@ export function getActionDisplay(actionId, state) {
     const tc = getFreelanceTimeCost(state);
     const label = state.unemployed ? '失业接稿' : getLifeStage(state.turn) === 'university' ? '课余接稿' : '下班接稿';
     const recTag = state.recessionTurnsLeft > 0 ? ' 📉-50%' : '';
-    return { ...base, costLabel: `热情-12 需闲暇≥${tc} ${label}${recTag}` };
+    return { ...base, costLabel: `热情-4 下月闲暇-2h 需≥${tc}h ${label}${recTag}` };
   }
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
     if (stage === 'work' && !state.unemployed) return { ...base, costLabel: '仅学生/失业可用' };
-    const recTag = state.recessionTurnsLeft > 0 ? ' 📉-40%' : '';
-    return { ...base, costLabel: `热情-8 赚¥300~500${recTag}` };
+    const recTag = state.recessionTurnsLeft > 0 ? ' 📉' : '';
+    return { ...base, costLabel: `赚¥300~500 下月闲暇-1h${recTag}` };
   }
   if (actionId === 'attendEvent') {
     if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) {
@@ -1042,26 +1042,31 @@ export function executeTurn(state, actionId) {
     }
 
   } else if (action.type === 'work') {
-    state.passion -= 8;
+    // Part-time job: drains ENERGY (→ time debuff), not passion
+    state.passion -= 2; // minimal passion cost (opportunity cost feeling)
     const baseWage = 300 + Math.floor(Math.random() * 200);
-    const recessionCut = state.recessionTurnsLeft > 0 ? 0.6 : 1.0; // recession: jobs pay less
+    const recessionCut = state.recessionTurnsLeft > 0 ? 0.6 : 1.0;
     const wage = Math.floor(baseWage * recessionCut);
     state.money += wage;
-    result.deltas.push({ icon: '❤️', label: '打工消耗', value: '-8', positive: false });
+    state.timeDebuffs.push({ id: 'tired_work', reason: '打工疲惫', turnsLeft: 1, delta: -1 });
+    result.deltas.push({ icon: '💪', label: '体力消耗', value: '下月闲暇-1h', positive: false });
     result.deltas.push({ icon: '💰', label: '打工收入', value: `+¥${wage}`, positive: true });
     if (recessionCut < 1) result.deltas.push({ icon: '📉', label: '经济下行压低工资', value: '-40%', positive: false });
     result.tip = TIPS.partTimeJob;
 
   } else if (action.type === 'freelance') {
-    state.passion -= 12;
+    // Freelance: creative labor → some passion drain + energy (time debuff)
+    state.passion -= 4; // uses creative energy, but less than original creation
     const base = 200, repBonus = Math.floor(state.reputation * 150);
     const rawIncome = base + repBonus + Math.floor(Math.random() * 150);
-    const recessionCut = state.recessionTurnsLeft > 0 ? 0.5 : 1.0; // recession: fewer commissions
+    const recessionCut = state.recessionTurnsLeft > 0 ? 0.5 : 1.0;
     const income = Math.floor(rawIncome * recessionCut);
     state.money += income;
     const repGain = 0.02 + state.reputation * 0.01;
     state.reputation += repGain;
-    result.deltas.push({ icon: '❤️', label: '接稿消耗', value: '-12', positive: false });
+    state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: -2 });
+    result.deltas.push({ icon: '❤️', label: '创作精力', value: '-4', positive: false });
+    result.deltas.push({ icon: '💪', label: '体力消耗', value: '下月闲暇-2h', positive: false });
     result.deltas.push({ icon: '💰', label: '接稿收入', value: `+¥${income}`, positive: true });
     if (recessionCut < 1) result.deltas.push({ icon: '📉', label: '经济下行需求萎缩', value: '-50%', positive: false });
     result.deltas.push({ icon: '⭐', label: '商业声誉', value: `+${repGain.toFixed(2)}`, positive: true });

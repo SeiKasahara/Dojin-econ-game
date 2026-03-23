@@ -1000,7 +1000,7 @@ export function renderSubtypeSelector(state, productType, onSelect, onCancel) {
 }
 
 // === Creative Choice Overlay (VN-style, no numbers shown) ===
-export function renderCreativeChoice(choiceData, onSelect) {
+export function renderCreativeChoice(choiceData, onSelect, onCancel) {
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
   overlay.innerHTML = `
@@ -1021,6 +1021,7 @@ export function renderCreativeChoice(choiceData, onSelect) {
         `).join('')}
       </div>
       <button class="btn btn-primary btn-block" id="btn-choice-confirm" disabled style="opacity:0.5">请选择</button>
+      ${onCancel ? '<button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>' : ''}
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1041,6 +1042,10 @@ export function renderCreativeChoice(choiceData, onSelect) {
     if (!selected) return;
     overlay.remove();
     onSelect(selected);
+  });
+  overlay.querySelector('.btn-cancel-overlay')?.addEventListener('click', () => {
+    overlay.remove();
+    if (onCancel) onCancel();
   });
 }
 
