@@ -5,14 +5,20 @@
 
 import './style.css';
 import { createInitialState, executeTurn, rollEvent, applyEvent } from './engine.js';
-import { renderTitle, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector } from './ui.js';
+import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector } from './ui.js';
 
 let state = null;
 
+let selectedPreset = 'mid';
+
 function startGame(communityPreset) {
-  state = createInitialState(communityPreset || 'mid');
-  state._prevAchievementCount = 0;
-  renderGame(state, handleAction);
+  selectedPreset = communityPreset || 'mid';
+  // Show endowment allocation screen before game starts
+  renderEndowments((endowments) => {
+    state = createInitialState(selectedPreset, endowments);
+    state._prevAchievementCount = 0;
+    renderGame(state, handleAction);
+  });
 }
 
 function needsPricing(actionId) {
@@ -27,6 +33,28 @@ function handleAction(actionId) {
   // === Attend Event: event selection → mini-game → proceed ===
   if (actionId === 'attendEvent') {
     const launchMinigame = (chosenEvent) => {
+      // Roll event condition: cancelled / normal / popular
+      const condRoll = Math.random();
+      if (condRoll < 0.05) {
+        // ~5%: event cancelled (流展)
+        chosenEvent.condition = 'cancelled';
+        state.attendingEvent = chosenEvent;
+        state._minigameResult = null;
+        renderEvent({
+          emoji: '😱', title: '展会流展了！',
+          desc: `${chosenEvent.name}@${chosenEvent.city}因故取消，到了现场才知道消息……路费白花了。`,
+          effect: `路费-¥${chosenEvent.travelCost} 热情-5`, effectClass: 'negative',
+          tip: '流展是同人展会的现实风险之一。主办方跑路、场地问题、审批不通过都可能导致。路费变成沉没成本，只能认栽。好在这种情况很少见。',
+        }, () => proceedWithTurn(actionId));
+        return;
+      }
+      if (condRoll < 0.05 + 0.25) {
+        // ~25%: popular event
+        chosenEvent.condition = 'popular';
+      } else {
+        chosenEvent.condition = 'normal';
+      }
+
       state.attendingEvent = chosenEvent;
       // Dynamic import for code splitting
       import('./minigame.js').then(({ startMinigame }) => {

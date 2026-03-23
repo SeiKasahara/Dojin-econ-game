@@ -165,7 +165,7 @@ export function getAdvancedNarratives(adv) {
     phrases.push(`💳 消费者债务危机：市场需求被永久性压缩(debt=${adv.consumerDebt.toFixed(0)})`);
   }
   if (adv.aiRevolution) {
-    phrases.push(`🤖 AI时代：LVP需求-${Math.round(adv.aiLvpPenalty * 100)}% · HVP稀缺溢价+${Math.round(adv.aiHvpBonus * 100)}%`);
+    phrases.push(`🤖 AI时代：同人谷需求-${Math.round(adv.aiLvpPenalty * 100)}% · 同人本稀缺溢价+${Math.round(adv.aiHvpBonus * 100)}%`);
   }
   if (adv.nicheDiscovered) {
     phrases.push(`🔍 发现细分需求"${adv.nicheDiscovered.name}"！制作相关内容销量×${adv.nicheDiscovered.bonusMult}（剩${adv.nicheDiscovered.turnsLeft}月）`);
@@ -193,7 +193,7 @@ export const ADVANCED_EVENTS = [
       s.advanced.costInflation = 0.3;
       s.recessionTurnsLeft = Math.max(s.recessionTurnsLeft, dur); // recession overlaps
     },
-    tip: '滞胀 = 衰退(m↓) + 通胀(p↑)同时。超量收入被"交叉压缩"：m^s = m(1-r) - p(1+π)γ。消除了所有缓冲策略。可能使多样性管道条件翻转(θ_LVP^ss < θ*)，导致不可逆的市场结构损害。',
+    tip: '滞胀 = 衰退+ 通胀同时。超量收入被交叉压缩。消除了所有缓冲策略。可能使多样性条件翻转，导致不可逆的市场结构损害。',
     weight: 2, when: (s) => s.turn > 36 && !s.advanced?.stagflationTurnsLeft && s.recessionTurnsLeft <= 0 && activeCrisisCount(s) < 2, maxTotal: 1,
   },
 
@@ -201,7 +201,7 @@ export const ADVANCED_EVENTS = [
   {
     id: 'debt_crisis', emoji: '💳', title: '消费者债务危机',
     desc: '大量消费者背负学贷和消费贷，有效可支配收入被永久扣减。更糟的是，消费者开始抛售收藏品来还债——二手市场涌入大量廉价商品...',
-    effect: '市场需求永久↓ 二手品存量倾泻 LVP利润崩溃', effectClass: 'negative',
+    effect: '市场需求永久下降， 二手品存量倾泻 同人谷利润崩溃...', effectClass: 'negative',
     apply: (s) => {
       s.advanced.consumerDebt = 15 + Math.floor(Math.random() * 10);
       s.advanced.debtCrisisActive = true;
@@ -212,15 +212,15 @@ export const ADVANCED_EVENTS = [
       }
       s.market.communitySize = Math.round(s.market.communitySize * 0.85);
     },
-    tip: '债务危机与纯衰退的关键区别：债务是"存量负担"(D_t)，不会随经济复苏自行消失。消费者的有效收入被永久扣减：m_eff = m - D_t。二手品"存量倾泻"直接摧毁LVP市场(完美替代)，HVP因差异化部分受保护。',
+    tip: '债务危机与纯衰退的关键区别：债务是"存量负担"，不会随经济复苏自行消失。消费者的有效收入被永久扣减。',
     weight: 1, when: (s) => s.turn > 48 && !s.advanced?.debtCrisisActive && activeCrisisCount(s) < 2, maxTotal: 1,
   },
 
   // --- AI STRUCTURAL SHIFT (lksj.md) ---
   {
     id: 'ai_revolution', emoji: '🤖', title: 'AI革命：市场结构永久改变',
-    desc: '生成式AI全面成熟。执行劳动被无限贬值——LVP（谷子）市场被AI量产内容淹没。但HVP（同人本）因"人的温度"和企业家敏锐度获得了稀缺性溢价。这不是一次冲击，而是永久的结构变化。',
-    effect: 'LVP需求永久-30% HVP获得稀缺溢价+15%', effectClass: 'neutral',
+    desc: '生成式AI全面成熟。执行劳动被无限贬值。这不是一次冲击，而是永久的结构变化。',
+    effect: '同人谷需求永久-30% 同人本获得稀缺溢价+15%', effectClass: 'neutral',
     apply: (s) => {
       s.advanced.aiRevolution = true;
       s.advanced.aiLvpPenalty = 0.3;
@@ -250,12 +250,12 @@ export const ADVANCED_EVENTS = [
   // --- NETWORK PHASE TRANSITION (pk45.md) ---
   {
     id: 'network_transition', emoji: '🌐', title: '社群网络发生相变！',
-    desc: '随着社群规模扩大，网络结构发生了根本性变化。全连接图的连通性崩溃，取而代之的是由三元闭包形成的团块(Clique)群。你的作品现在更难触达所有人——但在自己的圈层内更有影响力。',
+    desc: '随着社群规模扩大，网络结构发生了根本性变化。全连接图的连通性崩溃，取而代之的是由三元闭包形成的团块群。你的作品现在更难触达所有人——但在自己的圈层内更有影响力。',
     effect: '宣发成本↑ 圈层内声誉更集中', effectClass: 'neutral',
     apply: (s) => {
       s.passion += 3; // excitement of community growth
     },
-    tip: '齐美尔的三元闭包：如果A认识B和C，B和C建立连接的概率远高于随机。网络从全连接崩溃后形成Clique群而非随机稀疏。消费者的粘性巨大——一旦加入某个圈层形成路径依赖就很难脱离。Spence信号模型在此适用：信号通胀意味着新人的"自证清白"成本越来越高。',
+    tip: '齐美尔的三元闭包：如果A认识B和C，B和C建立连接的概率远高于随机。网络从全连接崩溃后形成团块群而非随机稀疏。消费者的粘性巨大——一旦加入某个圈层形成路径依赖就很难脱离。信号通胀意味着新人的"自证清白"成本越来越高。',
     weight: 3,
     when: (s) => {
       const phase = s.advanced?.networkPhase;
@@ -278,7 +278,7 @@ export const ADVANCED_EVENTS = [
       s.passion = Math.min(100, s.passion + 5);
       s.reputation = Math.max(0, s.reputation - 0.1);
     },
-    tip: '跨国竞争中，本土创作者面临Cobb-Douglas效用选择：U = Π^α · V^(1-α)。迎合母国审美(s高)赚更多，但表达自我的空间被压缩。最优解s*=α：纯为爱发电(α→0)的人完全不受外来竞争影响。',
+    tip: '跨国竞争中，本土创作者效用选择，迎合母国审美赚更多，但表达自我的空间被压缩。',
     weight: 4, when: (s) => s.turn > 6 && s.market?.communitySize > 3000, maxTotal: Infinity,
   },
 
@@ -288,7 +288,7 @@ export const ADVANCED_EVENTS = [
     desc: '你早期的一部作品因为绝版而被炒出高价。圈内开始有人把它当作"正统粉丝"的身份象征，价格越高反而越多人想要...',
     effect: '资金+800 声誉+0.3', effectClass: 'positive',
     apply: (s) => { s.money += 800; s.reputation += 0.3; },
-    tip: '韦伯仑效应(Veblen Good)：价格越高需求越大。绝版同人制品从消费品相变为金融资产。购买者消费的不再是内容本身，而是"克服高昂交易成本的证明"和"文化正统性"。林迪效应：存在越久的作品，预期继续存活越久。',
+    tip: '韦伯仑效应：价格越高需求越大。绝版同人制品从消费品相变为金融资产。购买者消费的不再是内容本身，而是"克服高昂交易成本的证明"和"文化正统性"。林迪效应：存在越久的作品，预期继续存活越久。',
     weight: 2, when: (s) => s.reputation > 4 && s.totalHVP > 2 && s.turn > 24, maxTotal: 3,
   },
 
@@ -300,7 +300,7 @@ export const ADVANCED_EVENTS = [
     apply: (s) => {
       s.advanced.signalInflation = Math.min(3.0, (s.advanced.signalInflation || 1) + 0.3);
     },
-    tip: 'Spence信号模型：高质量创作者需要发送可信信号s*来自证。但当情绪补偿V(s)使低质量者的边际信号成本趋向零时（狂热新人/AI），信号丧失区分力。消费者更依赖声誉这个"劣等品"——信息越不完全，声誉越重要。',
+    tip: '高质量创作者需要发送可信信号来自证。但当情绪补偿使低质量者的边际信号成本趋向零时，信号丧失区分力。消费者更依赖声誉这个"劣等品"——信息越不完全，声誉越重要。',
     weight: 3, when: (s) => s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented', maxTotal: Infinity,
   },
 ];

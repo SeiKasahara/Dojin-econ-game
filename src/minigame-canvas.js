@@ -204,6 +204,21 @@ export function renderFrame(ctx, mg, canvas) {
     ctx.fillText('💬嗨!', 35, 183);
   }
 
+  // --- Random event toast ---
+  if (mg.activeToast) {
+    const t = mg.activeToast;
+    const alpha = Math.min(1, t.life / 500); // fade out in last 500ms
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    roundRect(ctx, W / 2 - 105, 16, 210, 28, 10);
+    ctx.fill();
+    ctx.fillStyle = '#FFF';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${t.emoji} ${t.text}`, W / 2, 34);
+    ctx.globalAlpha = 1;
+  }
+
   // Update HUD
   if (canvas._updateHUD) canvas._updateHUD(mg, performance.now());
 }

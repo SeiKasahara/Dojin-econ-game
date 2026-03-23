@@ -42,7 +42,7 @@ export function tickOfficial(official, market, playerState) {
       events.push({ type: 'official_release', emoji: '🎬', title: '官方出新作了！',
         desc: 'IP官方发布了重大新内容！整个圈子沸腾了，社群人数激增，创作热情高涨。',
         effect: 'IP热度大幅↑ 社群+20% 热情+10', effectClass: 'positive',
-        tip: '官方新作是IP热度的"资本注入"I_official(t)。在hsls.md的折旧模型中：dK/dt = I_official + θ·N_D - λ·K。官方出新作时搭顺风车创作，声誉收益最大。',
+        tip: '官方新作是IP热度的资本注入。官方出新作时搭顺风车创作，声誉收益最大。',
         apply: (s) => {
           s.official.ipHeat = Math.min(100, s.official.ipHeat + 30);
           s.market.communitySize = Math.round(s.market.communitySize * 1.2);
@@ -57,7 +57,7 @@ export function tickOfficial(official, market, playerState) {
       events.push({ type: 'official_minor', emoji: '📰', title: '官方小更新',
         desc: '官方发布了一些新情报/活动/联动，圈子热度小幅回升。',
         effect: 'IP热度+10 社群+5%', effectClass: 'positive',
-        tip: '官方的持续运营维持IP热度K不跌破死亡阈值。即使是小更新也能重置信息半衰期，延长IP的社交货币寿命。',
+        tip: '官方的持续运营维持IP热度不跌破死亡阈值。即使是小更新也能重置信息半衰期，延长IP的社交货币寿命。',
         apply: (s) => {
           s.official.ipHeat = Math.min(100, s.official.ipHeat + 10);
           s.market.communitySize = Math.round(s.market.communitySize * 1.05);
@@ -69,8 +69,8 @@ export function tickOfficial(official, market, playerState) {
     if (Math.random() < 0.02) {
       events.push({ type: 'official_crackdown', emoji: '⚖️', title: '官方版权收紧',
         desc: '官方发布了更严格的二创指引，部分创作者被警告。创作成本和心理压力上升...',
-        effect: '影子价格↑ NPC创作者减少 热情-8', effectClass: 'negative',
-        tip: '拉姆齐定价P_D为正=官方对同人"收税"。创作者是高敏人群(y大)，哪怕小幅限制也会导致大批人退出。跨边外部性会放大效应：创作者减少→消费者也跟着流失。',
+        effect: '官方对同人的管制上升 NPC创作者减少 热情-8', effectClass: 'negative',
+        tip: '创作者是高敏人群，哪怕小幅限制也会导致大批人退出。跨边外部性会放大效应：创作者减少→消费者也跟着流失。',
         apply: (s) => {
           s.official.shadowPrice = 0.3;
           s.passion -= 8;
@@ -85,7 +85,7 @@ export function tickOfficial(official, market, playerState) {
       events.push({ type: 'official_subsidy', emoji: '🎁', title: '官方发布素材包/征稿',
         desc: '官方公开了创作素材库，并发起同人征集活动。相当于对创作者的隐性补贴！',
         effect: '制作成本↓ 新创作者涌入 声誉+0.2', effectClass: 'positive',
-        tip: '当P_D为负，影子价格变为补贴。官方主业赚钱时，补贴同人是理性的——每多一个创作者都能转化新的付费粉丝。这就是拉姆齐定价的第三项(P_C-c_C)·f\'γ在起作用。',
+        tip: '官方对同人的影子价格变为补贴。官方主业赚钱时，补贴同人是理性的——每多一个创作者都能转化新的付费粉丝。',
         apply: (s) => {
           s.official.shadowPrice = -0.2;
           s.reputation += 0.2;

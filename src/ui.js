@@ -3,7 +3,7 @@
  * Market ecosystem panel, pricing UI, diversity indicators
  */
 
-import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES } from './engine.js';
+import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT } from './engine.js';
 import { createChartCanvas, drawSupplyDemand } from './chart.js';
 import { getMarketNarratives, getPriceTiers, calculatePricedSales } from './market.js';
 import { getOfficialNarratives } from './official.js';
@@ -62,6 +62,86 @@ export function renderTitle(onStart) {
   $('#btn-start').addEventListener('click', () => onStart(selectedPreset));
 }
 
+// === Endowment Allocation Screen ===
+export function renderEndowments(onConfirm) {
+  const pts = { talent: 1, stamina: 1, social: 2, marketing: 1, resilience: 2 };
+  const MAX = ENDOWMENT_MAX_PER_TRAIT;
+  const TOTAL = ENDOWMENT_TOTAL_POINTS;
+
+  function remaining() { return TOTAL - Object.values(pts).reduce((s, v) => s + v, 0); }
+
+  function render() {
+    const rem = remaining();
+    const keys = Object.keys(ENDOWMENTS);
+    app().innerHTML = `
+      <div class="screen" style="padding:16px">
+        <h2 style="text-align:center;margin-bottom:4px">角色禀赋</h2>
+        <p style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-bottom:12px">
+          分配 <strong>${TOTAL}</strong> 点到 5 项禀赋（每项 0-${MAX}）<br/>
+          禀赋影响全局数值与随机事件触发
+        </p>
+        <div style="text-align:center;margin-bottom:12px">
+          <span style="font-size:1.1rem;font-weight:700;color:${rem > 0 ? 'var(--primary)' : 'var(--success)'}">剩余点数: ${rem}</span>
+        </div>
+        <div style="max-width:360px;margin:0 auto">
+          ${keys.map(k => {
+            const e = ENDOWMENTS[k];
+            const v = pts[k];
+            return `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:1.3rem;width:28px;text-align:center">${e.emoji}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:0.85rem">${e.name}</div>
+                <div style="font-size:0.7rem;color:var(--text-light)">${e.desc}</div>
+                <div style="font-size:0.65rem;color:var(--text-muted)">${e.effects.join(' · ')}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+                <button class="endow-btn" data-key="${k}" data-dir="-1" ${v <= 0 ? 'disabled' : ''} style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:1rem;cursor:pointer">−</button>
+                <div style="width:60px;text-align:center">
+                  <div style="font-size:1.1rem;font-weight:700">${v}</div>
+                  <div style="display:flex;gap:2px;justify-content:center">${Array.from({length: MAX}, (_, i) => `<div style="width:12px;height:4px;border-radius:2px;background:${i < v ? 'var(--primary)' : '#E0E0E0'}"></div>`).join('')}</div>
+                </div>
+                <button class="endow-btn" data-key="${k}" data-dir="1" ${v >= MAX || rem <= 0 ? 'disabled' : ''} style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:1rem;cursor:pointer">+</button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="max-width:360px;margin:12px auto 0">
+          <button class="btn btn-primary btn-block" id="btn-endow-confirm" ${rem !== 0 ? 'disabled style="opacity:0.5"' : ''}>确认禀赋 (${rem === 0 ? '✓' : `还剩${rem}点`})</button>
+          <div style="text-align:center;margin-top:8px">
+            <button class="btn btn-secondary" id="btn-endow-reset" style="font-size:0.8rem;padding:4px 16px">重置为默认</button>
+          </div>
+        </div>
+        <div class="tip-box" style="max-width:360px;margin:12px auto 0;text-align:left">
+          <div class="tip-label">禀赋与理论</div>
+          <div class="tip-text">禀赋差异源自生产者模型中的个体异质性：热情预算、时间禀赋、反馈敏感性各不相同。你的起点决定了不同的最优策略。</div>
+        </div>
+      </div>
+    `;
+
+    document.querySelectorAll('.endow-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const k = btn.dataset.key;
+        const dir = parseInt(btn.dataset.dir);
+        const newVal = pts[k] + dir;
+        if (newVal < 0 || newVal > MAX) return;
+        if (dir > 0 && remaining() <= 0) return;
+        pts[k] = newVal;
+        render();
+      });
+    });
+    const confirmBtn = document.getElementById('btn-endow-confirm');
+    if (confirmBtn && remaining() === 0) {
+      confirmBtn.addEventListener('click', () => onConfirm({ ...pts }));
+    }
+    document.getElementById('btn-endow-reset')?.addEventListener('click', () => {
+      pts.talent = 1; pts.stamina = 1; pts.social = 2; pts.marketing = 1; pts.resilience = 2;
+      render();
+    });
+  }
+  render();
+}
+
 // === Game Screen ===
 export function renderGame(state, onAction) {
   const partnerInfo = state.hasPartner && state.partnerType
@@ -94,7 +174,10 @@ export function renderGame(state, onAction) {
     <div class="screen">
       <div class="game-header">
         <span class="turn-badge">第 ${state.turn + 1} 回合</span>
-        <span class="money-badge" ${state.money < 0 ? 'style="color:var(--danger)"' : ''}>¥${state.money.toLocaleString()}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-secondary" id="btn-dashboard" style="padding:2px 10px;font-size:0.75rem;min-height:28px">📊 数据</button>
+          <span class="money-badge" ${state.money < 0 ? 'style="color:var(--danger)"' : ''}>¥${state.money.toLocaleString()}</span>
+        </span>
       </div>
 
       <div style="padding:0 16px 4px;font-size:0.8rem;color:var(--text-light)">
@@ -123,6 +206,8 @@ export function renderGame(state, onAction) {
   document.querySelectorAll('.action-card:not(.disabled)').forEach(el => {
     el.addEventListener('click', () => onAction(el.dataset.action));
   });
+  // Dashboard button
+  document.getElementById('btn-dashboard')?.addEventListener('click', () => renderDashboard(state));
   // Market panel toggle
   const toggle = document.getElementById('market-toggle');
   if (toggle) {
@@ -130,6 +215,176 @@ export function renderGame(state, onAction) {
       toggle.closest('.market-panel').classList.toggle('collapsed');
     });
   }
+}
+
+// === Dashboard Overlay ===
+function renderDashboard(state) {
+  const h = state.history || [];
+  const el = state.eventLog || [];
+  const e = state.endowments || {};
+
+  // --- Summary stats ---
+  const totalEvents = el.length;
+  const totalEventRev = el.reduce((s, x) => s + x.revenue, 0);
+  const avgEventRev = totalEvents > 0 ? Math.round(totalEventRev / totalEvents) : 0;
+
+  // --- Recent 12 months revenue bars ---
+  const recent = h.slice(-12);
+  const maxRev = Math.max(1, ...recent.map(r => r.turnRevenue));
+  // Revenue line chart data
+  const revLine = recent.map((r, i) => {
+    const x = Math.round(i / Math.max(1, recent.length - 1) * 200);
+    const y = Math.round((1 - r.turnRevenue / maxRev) * 50);
+    return { x, y, isEvent: r.action === 'attendEvent', rev: r.turnRevenue, turn: r.turn };
+  });
+  const revPolyline = revLine.map(p => `${p.x},${p.y}`).join(' ');
+  // Cumulative revenue line
+  const cumMax = Math.max(1, ...recent.map(r => r.cumRevenue));
+  const cumLine = recent.map((r, i) => {
+    const x = Math.round(i / Math.max(1, recent.length - 1) * 200);
+    const y = Math.round((1 - r.cumRevenue / cumMax) * 50);
+    return `${x},${y}`;
+  }).join(' ');
+
+  // --- Reputation trend (last 12) ---
+  const repRecent = h.slice(-12);
+  const repMax = Math.max(1, ...repRecent.map(r => r.reputation));
+  const repPoints = repRecent.map((r, i) => {
+    const x = Math.round(i / Math.max(1, repRecent.length - 1) * 200);
+    const y = Math.round((1 - r.reputation / repMax) * 40);
+    return `${x},${y}`;
+  }).join(' ');
+
+  // --- Inventory bars ---
+  const invMax = Math.max(1, state.inventory.hvpStock, state.inventory.lvpStock, 50);
+  const hvpPct = Math.round(state.inventory.hvpStock / invMax * 100);
+  const lvpPct = Math.round(state.inventory.lvpStock / invMax * 100);
+
+  // --- Passion trend sparkline ---
+  const passRecent = h.slice(-12);
+  const passPoints = passRecent.map((r, i) => {
+    const x = Math.round(i / Math.max(1, passRecent.length - 1) * 200);
+    const y = Math.round((1 - r.passion / 100) * 40);
+    return `${x},${y}`;
+  }).join(' ');
+
+  // --- Endowments radar-style display ---
+  const endowHtml = Object.entries(ENDOWMENTS).map(([k, def]) => {
+    const v = e[k] || 0;
+    const dots = Array.from({length: 3}, (_, i) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${i < v ? 'var(--primary)' : '#E0E0E0'};margin:0 1px"></span>`).join('');
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:0.75rem"><span>${def.emoji}</span><span style="width:48px">${def.name}</span>${dots}</div>`;
+  }).join('');
+
+  // --- Event log (last 5) ---
+  const recentEvents = el.slice(-5).reverse();
+  const eventRows = recentEvents.length > 0
+    ? recentEvents.map(ev => `<div style="display:flex;justify-content:space-between;font-size:0.72rem;padding:2px 0">
+        <span>${ev.condition === 'popular' ? '🔥' : '🎪'} 第${ev.turn + 1}月 ${ev.name}@${ev.city}</span>
+        <span style="color:${ev.revenue > 0 ? 'var(--success)' : 'var(--text-muted)'}">+¥${ev.revenue} (${ev.sold}件)</span>
+      </div>`).join('')
+    : '<div style="font-size:0.72rem;color:var(--text-muted)">还没有参展记录</div>';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:400px;max-height:85vh;overflow-y:auto;text-align:left">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:1rem">📊 创作者数据面板</div>
+        <button class="btn btn-secondary" id="btn-close-dash" style="padding:2px 12px;font-size:0.8rem;min-height:28px">关闭</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px">
+          <div style="font-size:1.1rem;font-weight:700;color:var(--primary)">¥${state.totalRevenue.toLocaleString()}</div>
+          <div style="font-size:0.65rem;color:var(--text-muted)">累计收入</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px">
+          <div style="font-size:1.1rem;font-weight:700">${state.totalSales}</div>
+          <div style="font-size:0.65rem;color:var(--text-muted)">总销量(件)</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px">
+          <div style="font-size:1.1rem;font-weight:700">${totalEvents}</div>
+          <div style="font-size:0.65rem;color:var(--text-muted)">参展次数</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px">
+          <div style="font-size:1rem;font-weight:700">${state.totalHVP}</div>
+          <div style="font-size:0.65rem;color:var(--text-muted)">同人志作品</div>
+        </div>
+        <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px">
+          <div style="font-size:1rem;font-weight:700">${state.totalLVP}</div>
+          <div style="font-size:0.65rem;color:var(--text-muted)">谷子批次</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">📦 库存</div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem;margin-bottom:4px">
+          <span style="width:36px">📖×${state.inventory.hvpStock}</span>
+          <div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${hvpPct}%;background:var(--primary);border-radius:5px"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem">
+          <span style="width:36px">🔑×${state.inventory.lvpStock}</span>
+          <div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${lvpPct}%;background:var(--secondary);border-radius:5px"></div></div>
+        </div>
+      </div>
+
+      ${recent.length > 1 ? `<div style="margin-bottom:12px">
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">💰 近${recent.length}月收入</div>
+        <div style="display:flex;gap:12px;font-size:0.65rem;color:var(--text-muted);margin-bottom:2px"><span>🔵 月收入</span><span>🟠 累计收入</span><span>● 展会月</span></div>
+        <svg viewBox="-10 -8 220 68" style="width:100%;height:65px">
+          <polyline points="${cumLine}" fill="none" stroke="#F39C12" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+          <polyline points="${revPolyline}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>
+          ${revLine.map(p => p.isEvent
+            ? `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--primary)" stroke="#fff" stroke-width="1"/>`
+            : `<circle cx="${p.x}" cy="${p.y}" r="2" fill="#81D4FA"/>`
+          ).join('')}
+          <text x="0" y="64" font-size="7" fill="#999">第${recent[0].turn + 1}月</text>
+          <text x="200" y="64" font-size="7" fill="#999" text-anchor="end">第${recent[recent.length - 1].turn + 1}月</text>
+        </svg>
+      </div>` : ''}
+
+      ${repRecent.length > 1 ? `<div style="margin-bottom:12px">
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">⭐ 声誉趋势 <span style="font-weight:400;color:var(--text-muted)">(当前 ${state.reputation.toFixed(1)})</span></div>
+        <svg viewBox="-5 -5 210 50" style="width:100%;height:50px">
+          <polyline points="${repPoints}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>
+          ${repRecent.map((r, i) => {
+            const x = Math.round(i / Math.max(1, repRecent.length - 1) * 200);
+            const y = Math.round((1 - r.reputation / repMax) * 40);
+            return `<circle cx="${x}" cy="${y}" r="2.5" fill="var(--primary)"/>`;
+          }).join('')}
+        </svg>
+      </div>` : ''}
+
+      ${passRecent.length > 1 ? `<div style="margin-bottom:12px">
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">❤️ 热情趋势 <span style="font-weight:400;color:var(--text-muted)">(当前 ${Math.round(state.passion)})</span></div>
+        <svg viewBox="-5 -5 210 50" style="width:100%;height:50px">
+          <polyline points="${passPoints}" fill="none" stroke="#E74C3C" stroke-width="2" stroke-linejoin="round"/>
+          ${passRecent.map((r, i) => {
+            const x = Math.round(i / Math.max(1, passRecent.length - 1) * 200);
+            const y = Math.round((1 - r.passion / 100) * 40);
+            return `<circle cx="${x}" cy="${y}" r="2.5" fill="#E74C3C"/>`;
+          }).join('')}
+        </svg>
+      </div>` : ''}
+
+      <div style="margin-bottom:12px">
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">🎪 参展记录 ${totalEvents > 0 ? `<span style="font-weight:400;color:var(--text-muted)">场均¥${avgEventRev}</span>` : ''}</div>
+        ${eventRows}
+      </div>
+
+      <div>
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">🎨 禀赋</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">${endowHtml}</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-close-dash').addEventListener('click', () => overlay.remove());
+  // Click outside to close
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
 }
 
 function renderStats(state) {
@@ -599,6 +854,7 @@ export function renderGameOver(state, onRestart) {
 
       <div class="go-stats">
         <div class="go-stat-item"><span>起点</span><span class="go-stat-val">18岁 高考后暑假</span></div>
+        <div class="go-stat-item"><span>禀赋</span><span class="go-stat-val">${Object.entries(state.endowments || {}).map(([k, v]) => `${ENDOWMENTS[k]?.emoji || ''}${v}`).join(' ')}</span></div>
         <div class="go-stat-item"><span>终点</span><span class="go-stat-val">${age}岁 · ${stageText}</span></div>
         <div class="go-stat-item"><span>坚持月数</span><span class="go-stat-val">${survived} 个月</span></div>
         <div class="go-stat-item"><span>最高声誉</span><span class="go-stat-val">${state.maxReputation.toFixed(1)}</span></div>
@@ -619,7 +875,7 @@ export function renderGameOver(state, onRestart) {
 
       <p class="tagline mt-16" style="font-size:0.7rem">
         理论基石：Stigler信息搜寻 · Translated CES · 热情预算方程<br/>
-        Producer模型 · 多样性条件 · 基于n=192实证数据
+        Producer模型 · 多样性条件 · 基于实证数据
       </p>
     </div>
   `;

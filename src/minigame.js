@@ -10,17 +10,18 @@ const PREF_MAP = { hvp: '📖', lvp: '🔑', any: '❓' };
 
 // === Actions ===
 const ACTIONS = {
-  greet:    { id: 'greet',    name: '招呼',     emoji: '🗣️', cooldown: 2000, energyCost: 5 },
-  explain:  { id: 'explain',  name: '介绍作品', emoji: '📖', cooldown: 3000, energyCost: 10 },
+  greet:    { id: 'greet',    name: '招呼',     emoji: '🗣️', cooldown: 2000, energyCost: 4 },
+  explain:  { id: 'explain',  name: '介绍作品', emoji: '📖', cooldown: 3000, energyCost: 7 },
   freebie:  { id: 'freebie',  name: '送无料',   emoji: '🎁', cooldown: 5000, moneyCost: 50 },
-  exchange: { id: 'exchange', name: '交换名片', emoji: '📇', cooldown: 4000, energyCost: 8 },
+  exchange: { id: 'exchange', name: '交换名片', emoji: '📇', cooldown: 4000, energyCost: 5 },
 };
 
 // === Create Mini-Game State ===
 function createState(mainState, event) {
   const cs = mainState.market?.communitySize || 10000;
-  const sizeMult = event.size === 'mega' ? 5 : event.size === 'big' ? 3 : 1.5;
-  const maxCustomers = Math.round(cs / 1000 * sizeMult);
+  const sizeMult = event.size === 'mega' ? 8 : event.size === 'big' ? 5 : 2.5;
+  const popularMult = event.condition === 'popular' ? 1.35 : 1.0;
+  const maxCustomers = Math.max(30, Math.round((cs / 1000 * sizeMult + 12) * popularMult));
   const duration = event.size === 'mega' ? 90 : event.size === 'big' ? 75 : 60;
 
   return {
@@ -53,9 +54,13 @@ function createState(mainState, event) {
     passionBonus: 0,
     // Info disclosure affects how many fans come directly
     playerInfoDisclosure: mainState.infoDisclosure || 0.2,
-    // Neighbor booth activity (competitors)
-    neighborLeft:  { nextAction: 3000 + Math.random() * 5000 },
-    neighborRight: { nextAction: 5000 + Math.random() * 5000 },
+    // Neighbor booth activity (competitors with their own reputation)
+    neighborLeft:  { nextAction: 3000 + Math.random() * 5000, reputation: 0.5 + Math.random() * 4 },
+    neighborRight: { nextAction: 5000 + Math.random() * 5000, reputation: 0.5 + Math.random() * 4 },
+    // Random in-game events
+    randomEventTimer: 12000 + Math.random() * 8000, // first event after 12-20s
+    randomEventsFired: 0,
+    activeToast: null, // { text, emoji, life }
     // Particles (purchase animations)
     particles: [],
     // Animation frame
@@ -65,13 +70,102 @@ function createState(mainState, event) {
   };
 }
 
+// === Random Mini-Game Events ===
+const MINIGAME_EVENTS = [
+  // --- Positive ---
+  { emoji: '📸', text: '有人拍了你的摊位发SNS！',
+    apply(mg) { // a small wave of walkers redirect to player
+      let redirected = 0;
+      for (const c of mg.customers) {
+        if (c.state === 'walking' && (c.target === 'left' || c.target === 'right') && redirected < 2) {
+          c.target = 'player';
+          c.targetX = mg.boothX + Math.random() * mg.boothW;
+          c.targetY = mg.boothY - 30 + Math.random() * 20;
+          redirected++;
+        }
+      }
+    }, weight: 3 },
+  { emoji: '🌊', text: '人潮涌入！客流量短暂增加',
+    apply(mg) { // spawn 2-3 extra customers
+      for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) spawnCustomer(mg);
+    }, weight: 3 },
+  { emoji: '☀️', text: '天气很好，大家心情不错',
+    apply(mg) { // all browsing customers get a small satisfaction bump
+      for (const c of mg.customers) {
+        if (c.state === 'browsing' || c.state === 'interested') c.satisfaction += 8;
+      }
+    }, weight: 3 },
+  { emoji: '⚡', text: '你突然来了灵感！精力恢复',
+    apply(mg) { mg.energy = Math.min(100, mg.energy + 15); }, weight: 2 },
+  { emoji: '🎵', text: '隔壁放了你喜欢的曲子～',
+    apply(mg) { mg.passionBonus += 2; }, weight: 2 },
+  { emoji: '🤝', text: '老粉来捧场了！',
+    apply(mg) { // spawn a direct fan
+      if (mg.totalSpawned < mg.maxCustomers) {
+        mg.totalSpawned++;
+        mg.customers.push({
+          id: mg.totalSpawned, x: mg.boothX + mg.boothW / 2, y: -10,
+          targetX: mg.boothX + mg.boothW / 2, targetY: mg.boothY - 30,
+          state: 'walking', preference: 'any', target: 'player_fan',
+          patience: 5000, satisfaction: 55, emoji: '🧑‍🎓',
+          thoughtBubble: '❤️', speed: 0.05, stateTimer: 0,
+        });
+      }
+    }, weight: 2 },
+  // --- Negative ---
+  { emoji: '🚻', text: '附近的人都去排队上厕所了...',
+    apply(mg) { // remove some walking customers
+      let removed = 0;
+      for (let i = mg.customers.length - 1; i >= 0; i--) {
+        if (mg.customers[i].state === 'walking' && removed < 3) {
+          mg.customers[i].state = 'leaving';
+          mg.customers[i].targetY = 340;
+          removed++;
+        }
+      }
+    }, weight: 3 },
+  { emoji: '😫', text: '站了太久有点累...',
+    apply(mg) { mg.energy = Math.max(5, mg.energy - 10); }, weight: 2 },
+  { emoji: '📢', text: '隔壁摊主大声吆喝抢客！',
+    apply(mg) { // some browsing customers at player get distracted
+      let lost = 0;
+      for (const c of mg.customers) {
+        if (c.state === 'browsing' && c.satisfaction < 30 && lost < 2) {
+          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = null;
+          lost++;
+        }
+      }
+    }, weight: 2 },
+  { emoji: '🔋', text: '手机没电，暂时不能发动态',
+    apply(mg) { // brief cooldown spike on all actions
+      for (const k of Object.keys(mg.cooldowns)) {
+        mg.cooldowns[k] = Math.max(mg.cooldowns[k], 1500);
+      }
+    }, weight: 1 },
+  { emoji: '🍱', text: '饭点到了，人流暂时变少',
+    apply(mg) { // slow spawning temporarily
+      mg.nextSpawnTime += 3000;
+    }, weight: 2 },
+];
+
+function rollRandomEvent(mg) {
+  const totalWeight = MINIGAME_EVENTS.reduce((s, e) => s + e.weight, 0);
+  let r = Math.random() * totalWeight;
+  for (const evt of MINIGAME_EVENTS) {
+    r -= evt.weight;
+    if (r <= 0) return evt;
+  }
+  return MINIGAME_EVENTS[0];
+}
+
 // === Spawn Customer ===
 function spawnCustomer(mg) {
   if (mg.totalSpawned >= mg.maxCustomers) return;
   const prefRoll = Math.random();
   const preference = prefRoll < 0.35 ? 'hvp' : prefRoll < 0.7 ? 'lvp' : 'any';
 
-  // Determine destination: info disclosure → more fans come directly
+  // Determine destination using reputation-weighted distribution
+  // Higher reputation booth attracts more customers
   const fanChance = Math.min(0.25, mg.playerInfoDisclosure * 0.3);
   const roll = Math.random();
   let target, targetX, targetY, initSat = 0, initBubble = null;
@@ -81,23 +175,33 @@ function spawnCustomer(mg) {
     target = 'player_fan';
     targetX = mg.boothX + 20 + Math.random() * (mg.boothW - 40);
     targetY = mg.boothY - 40 + Math.random() * 20;
-    initSat = 40 + Math.random() * 15; // near the 60 buy threshold
+    initSat = 40 + Math.random() * 15;
     initBubble = '❤️';
-  } else if (roll < fanChance + 0.30) {
-    // General passerby near player area
-    target = 'player';
-    targetX = 80 + Math.random() * 320;
-    targetY = 100 + Math.random() * 80;
-  } else if (roll < fanChance + 0.30 + (1 - fanChance - 0.30) / 2) {
-    // Heads to left neighbor booth
-    target = 'left';
-    targetX = 15 + Math.random() * 55;
-    targetY = 130 + Math.random() * 50;
   } else {
-    // Heads to right neighbor booth
-    target = 'right';
-    targetX = 395 + Math.random() * 55;
-    targetY = 130 + Math.random() * 50;
+    // Remaining customers split by reputation weight among 3 booths
+    const pRep = Math.max(0.3, mg.playerReputation);
+    const lRep = mg.neighborLeft.reputation;
+    const rRep = mg.neighborRight.reputation;
+    const total = pRep + lRep + rRep;
+    const pShare = pRep / total;
+    const lShare = lRep / total;
+    // rShare = 1 - pShare - lShare
+
+    const destRoll = Math.random();
+    if (destRoll < pShare) {
+      // General passerby near player area
+      target = 'player';
+      targetX = 80 + Math.random() * 320;
+      targetY = 100 + Math.random() * 80;
+    } else if (destRoll < pShare + lShare) {
+      target = 'left';
+      targetX = 15 + Math.random() * 55;
+      targetY = 170 + Math.random() * 30;
+    } else {
+      target = 'right';
+      targetX = 395 + Math.random() * 55;
+      targetY = 170 + Math.random() * 30;
+    }
   }
 
   mg.customers.push({
@@ -108,7 +212,7 @@ function spawnCustomer(mg) {
     state: 'walking',
     // walking | browsing | interested | buying | browsing_neighbor | buying_neighbor | leaving
     preference, target,
-    patience: 4000 + Math.random() * 4000,
+    patience: 2500 + Math.random() * 3000, // 2.5-5.5s — faster turnover
     satisfaction: initSat,
     emoji: CUSTOMER_EMOJIS[Math.floor(Math.random() * CUSTOMER_EMOJIS.length)],
     thoughtBubble: initBubble,
@@ -138,13 +242,14 @@ function updateCustomers(mg, dt) {
         // --- Heading to a NEIGHBOR booth ---
         const nbCX = c.target === 'left' ? NB_LEFT_CX : NB_RIGHT_CX;
         const nbCY = c.target === 'left' ? NB_LEFT_CY : NB_RIGHT_CY;
-        const nearNB = Math.abs(c.x - nbCX) < 40 && Math.abs(c.y - nbCY) < 50 && c.y > 100;
+        const nearNB = Math.abs(c.x - nbCX) < 50 && Math.abs(c.y - nbCY) < 60 && c.y > 80;
         if (nearNB) {
           c.state = 'browsing_neighbor';
-          c.patience = 2000 + Math.random() * 3000;
+          c.patience = 1500 + Math.random() * 2500;
           c.thoughtBubble = PREF_MAP[c.preference];
         }
-        if (c.y > 250 && c.state === 'walking') {
+        // Fallback: if walking too long or past the booths, leave
+        if (c.state === 'walking' && (c.y > 230 || c.patience <= 0)) {
           c.state = 'leaving'; c.targetY = 340;
         }
       } else {
@@ -184,6 +289,14 @@ function updateCustomers(mg, dt) {
         if (Math.random() < 0.55) {
           c.state = 'buying_neighbor';
           c.stateTimer = 800;
+        } else if (Math.random() < 0.25) {
+          // Didn't buy at neighbor, wanders to player booth to look
+          c.state = 'walking';
+          c.target = 'player';
+          c.targetX = mg.boothX + 20 + Math.random() * (mg.boothW - 40);
+          c.targetY = mg.boothY - 30 + Math.random() * 20;
+          c.thoughtBubble = null;
+          c.patience = 2000 + Math.random() * 2000;
         } else {
           c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = null;
         }
@@ -195,7 +308,17 @@ function updateCustomers(mg, dt) {
       if (c.stateTimer <= 0) {
         const nbCX = c.target === 'left' ? NB_LEFT_CX : NB_RIGHT_CX;
         mg.particles.push({ x: nbCX, y: c.y - 5, text: '💰', life: 800, vy: -0.06 });
-        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😊';
+        // Some customers wander to player booth after buying at neighbor
+        if (Math.random() < 0.3) {
+          c.state = 'walking';
+          c.target = 'player';
+          c.targetX = mg.boothX + 20 + Math.random() * (mg.boothW - 40);
+          c.targetY = mg.boothY - 30 + Math.random() * 20;
+          c.thoughtBubble = null;
+          c.patience = 2000 + Math.random() * 2000; // fresh patience for browsing
+        } else {
+          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😊';
+        }
       }
 
     } else if (c.state === 'browsing') {
@@ -210,7 +333,7 @@ function updateCustomers(mg, dt) {
       }
 
     } else if (c.state === 'interested') {
-      c.patience -= dt * 0.5;
+      c.patience -= dt * 0.7; // interested are more patient, but still leave eventually
       c.x += (boothCX - c.x) * 0.01;
       if (c.satisfaction >= 60) {
         c.state = 'buying'; c.stateTimer = 800;
@@ -227,8 +350,8 @@ function updateCustomers(mg, dt) {
       }
 
     } else if (c.state === 'leaving') {
-      c.y += 0.06 * dt;
-      c.x += (c.targetX > boothCX ? 0.02 : -0.02) * dt;
+      c.y += 0.07 * dt;
+      c.x += (c.targetX > boothCX ? 0.025 : -0.025) * dt;
       if (c.y > 320) {
         mg.customers.splice(i, 1);
       }
@@ -420,6 +543,9 @@ export function startMinigame(mainState, event, onComplete) {
         mg.cooldowns[k] = Math.max(0, mg.cooldowns[k] - dt);
       }
 
+      // Passive energy regen: ~2 per second (slow but steady)
+      mg.energy = Math.min(100, mg.energy + dt * 0.002);
+
       // Spawn customers
       mg.nextSpawnTime -= dt;
       if (mg.nextSpawnTime <= 0 && mg.totalSpawned < mg.maxCustomers) {
@@ -436,6 +562,21 @@ export function startMinigame(mainState, event, onComplete) {
 
       // Update all customers
       updateCustomers(mg, dt);
+
+      // Random events (max 3 per game, not in last 10s)
+      mg.randomEventTimer -= dt;
+      if (mg.randomEventTimer <= 0 && mg.randomEventsFired < 3 && mg.timeRemaining > 10000) {
+        const evt = rollRandomEvent(mg);
+        evt.apply(mg);
+        mg.activeToast = { text: evt.text, emoji: evt.emoji, life: 2500 };
+        mg.randomEventsFired++;
+        mg.randomEventTimer = 15000 + Math.random() * 10000; // next in 15-25s
+      }
+      // Tick toast
+      if (mg.activeToast) {
+        mg.activeToast.life -= dt;
+        if (mg.activeToast.life <= 0) mg.activeToast = null;
+      }
 
       // Time's up
       if (mg.timeRemaining <= 0) {

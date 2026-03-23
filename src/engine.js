@@ -78,18 +78,34 @@ export const PARTNER_TYPES = {
   toxic:      { id: 'toxic',      name: '有毒搭档', emoji: '😈', desc: '经常制造矛盾，但就是甩不掉...', salesBonus: 1.1, passionPerTurn: -6, dramaChance: 0.35, feeRange: [800, 1200] },
 };
 
-function rollPartnerType() {
+function rollPartnerType(social = 0) {
   const r = Math.random();
-  if (r < 0.50) return 'supportive';
-  if (r < 0.75) return 'demanding';
-  if (r < 0.92) return 'unreliable';
+  // social charm shifts probability toward supportive, away from toxic
+  const supportiveThresh = 0.50 + social * 0.05;
+  const toxicThresh = Math.max(0.95, 0.92 + social * 0.02);
+  if (r < supportiveThresh) return 'supportive';
+  if (r < 0.75 + social * 0.02) return 'demanding';
+  if (r < toxicThresh) return 'unreliable';
   return 'toxic';
 }
 
 // === Initial State ===
-export function createInitialState(communityPreset = 'mid') {
+// === Endowment definitions ===
+export const ENDOWMENTS = {
+  talent:     { name: '创作天赋', emoji: '🎨', desc: '作品质量与声誉积累速度', effects: ['声誉积累+15%/级', '印刷成本-5%/级'] },
+  stamina:    { name: '体力精力', emoji: '💪', desc: '热情恢复力与创作消耗', effects: ['休息恢复+3/级', 'HVP月耗-1/级'] },
+  social:     { name: '社交魅力', emoji: '🤝', desc: '搭档质量与展会表现', effects: ['找搭档+8%/级', '毒搭档率-2%/级'] },
+  marketing:  { name: '营销直觉', emoji: '📢', desc: '宣发效果与信息衰减', effects: ['宣发效果+12%/级', '信息衰减-1%/级'] },
+  resilience: { name: '心理韧性', emoji: '🛡️', desc: '抵抗现实消耗与负面事件', effects: ['现实消耗-0.5/级', '负债焦虑阈+200/级'] },
+};
+export const ENDOWMENT_TOTAL_POINTS = 7;
+export const ENDOWMENT_MAX_PER_TRAIT = 3;
+
+export function createInitialState(communityPreset = 'mid', endowments = null) {
+  const e = endowments || { talent: 1, stamina: 1, social: 2, marketing: 1, resilience: 2 };
   return {
     turn: 0, phase: 'action',
+    endowments: e,
     passion: 90, reputation: 0.3, time: 9, money: 2000,
     infoDisclosure: 0.2,
     hasPartner: false, partnerType: null, partnerTurns: 0,
@@ -120,6 +136,10 @@ export function createInitialState(communityPreset = 'mid') {
     scheduledFired: {},
     // Cumulative
     totalHVP: 0, totalLVP: 0, totalRevenue: 0, totalSales: 0, maxReputation: 0.3,
+    recentEventTurns: [],  // turns when events were attended (for fatigue tracking)
+    // History for dashboard
+    history: [],       // [{ turn, money, reputation, passion, revenue, sales, action }]
+    eventLog: [],      // [{ turn, name, city, revenue, sold }]
     lastResult: null, lastEvent: null,
     achievements: [], gameOverReason: '',
   };
@@ -446,7 +466,7 @@ const SCHEDULED_EVENTS = [
       desc: '大学社团招新季！你加入了创作相关社团，认识了很多同好。',
       effect: '声誉+0.2 热情+5', effectClass: 'positive',
       apply: (s) => { s.reputation += 0.2; s.passion = Math.min(100, s.passion + 5); },
-      tip: '社群网络扩展降低了协作搜寻成本。在Producer模型中，p_collab(θ)随社交网络规模递增——认识的人越多，越容易找到搭档。',
+      tip: '社群网络扩展降低了协作搜寻成本。认识的人越多，越容易找到搭档。',
     },
   },
   // 期末考试: every December and June during university
@@ -468,7 +488,7 @@ const SCHEDULED_EVENTS = [
       desc: '四年大学生活结束了。从此以后，同人创作变成了"业余爱好"。工作会给你收入，但空闲时间将大幅减少...',
       effect: '热情-5 开始工作生涯', effectClass: 'neutral',
       apply: (s) => { s.passion -= 5; },
-      tip: '进入工作后，时间禀赋T永久性下降。Q23显示51.2%的创作者因"现实太忙"退坑。工作后的同人创作者是真正的幸存者。',
+      tip: '进入工作后，时间禀赋永久性下降。工作后的同人创作者是真正的幸存者。',
     },
   },
 ];
@@ -505,7 +525,7 @@ const RANDOM_EVENTS = [
     desc: '圈内爆发争吵，有创作者被挂，社群气氛紧张...',
     effect: '热情-15 声誉-20%', effectClass: 'negative',
     apply: (s) => { s.passion -= 15; s.reputation *= 0.8; },
-    tip: '声誉是风险资产：积累越多，塌方损失的绝对值越大。20.7%的创作者因"圈内风气差"退坑。',
+    tip: '声誉是风险资产：积累越多，塌方损失的绝对值越大。',
     weight: 8, when: () => true, maxTotal: Infinity,
   },
   // --- 家人生病：整个游戏最多1-2次 ---
@@ -514,7 +534,7 @@ const RANDOM_EVENTS = [
     desc: '家里突然有人生病需要照顾，接下来几个月你的空闲时间会大幅减少...',
     effect: '时间-3h（持续3回合）', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'family', reason: '照顾家人', turnsLeft: 3, delta: -3 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
-    tip: '外生冲击可以让时间降到0。51.2%的创作者退出是因为"现实太忙"——时间约束独立于热情预算，是最硬的硬约束。',
+    tip: '外生冲击可以让时间降到0。一半创作者退出是因为"现实太忙"——时间约束独立于热情预算，是最硬的硬约束。',
     weight: 4, when: () => true, maxTotal: 2,
   },
   // --- 加班/赶DDL ---
@@ -523,7 +543,7 @@ const RANDOM_EVENTS = [
     desc: '这段时间完全被工作或学业占满，几乎没有私人时间...',
     effect: '时间-4h（持续2回合）', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'overtime', reason: '加班/赶DDL', turnsLeft: 2, delta: -4 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
-    tip: '当时间T降到0时，什么创作也做不了，只能选择休息等待忙碌过去。这就是Producer模型中的"外生退出"压力。',
+    tip: '当时间降到0时，什么创作也做不了，只能选择休息等待忙碌过去。',
     weight: 7, when: () => true, maxTotal: Infinity,
   },
   // --- 假期 ---
@@ -532,7 +552,7 @@ const RANDOM_EVENTS = [
     desc: '难得的闲暇，可以专心创作。',
     effect: '时间+2h(2回合) 热情+8', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'holiday', reason: '悠闲时光', turnsLeft: 2, delta: 2 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
-    tip: 'HVP创作需要"成块的连续时间"。17.6%的创作者表示"有连续充裕的空闲时间就会做"。',
+    tip: '同人本创作需要"成块的连续时间"。',
     weight: 10, when: () => true, maxTotal: Infinity,
   },
   // --- 同人展 ---
@@ -541,7 +561,7 @@ const RANDOM_EVENTS = [
     desc: '本地同人展即将举办！面对面贩售，信息披露自动拉满。',
     effect: '声誉+0.2 资金+200 信息↑', effectClass: 'positive',
     apply: (s) => { s.reputation += 0.2; s.money += 200; s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); },
-    tip: '同人展是信息密集的面对面交易——消费者直接翻阅实物(I→1)。Stigler理论中"搜寻成本→0"的场景，声誉的代理作用被削弱。',
+    tip: '同人展是信息密集的面对面交易——消费者直接翻阅实物',
     weight: 8, when: () => true, maxTotal: Infinity,
   },
   // --- 经济下行：长期影响2-3年，整个游戏最多1-2次 ---
@@ -553,7 +573,7 @@ const RANDOM_EVENTS = [
       const duration = 24 + Math.floor(Math.random() * 12); // 24-36个月
       s.recessionTurnsLeft = duration;
     },
-    tip: '经济下行不是一次性冲击。A类制品是弱奢侈品(收入弹性≈1.06)，超量消费被持续压缩。承诺消费γ提供底线保护，但上限被大幅削减。持续衰退可能使管道可达性条件翻转。',
+    tip: '经济下行不是一次性冲击。同人本是弱奢侈品(收入弹性≈1.06)，超量消费被持续压缩。承诺消费提供底线保护，但上限被大幅削减。',
     weight: 3,
     when: (s) => s.recessionTurnsLeft <= 0 && s.turn > 12 && activeCrisisCount(s) < 2,
     maxTotal: 2,
@@ -573,7 +593,7 @@ const RANDOM_EVENTS = [
     desc: '一位读者写了很长的感想，详细描述了你的作品给TA带来的感动...',
     effect: '热情+15', effectClass: 'positive',
     apply: (s) => { s.passion = Math.min(100, s.passion + 15); },
-    tip: '社群反馈B是热情预算W的重要补充来源。一封走心的长评可以抵消很多现实消耗。70.7%的创作者对数据低迷有高韧性——内在动机是核心驱动力。',
+    tip: '社群反馈是热情预算的重要补充来源。一封走心的长评可以抵消很多现实消耗。',
     weight: 10, when: (s) => s.reputation > 1, maxTotal: Infinity,
   },
   // --- 印刷成本上涨 ---
@@ -582,7 +602,7 @@ const RANDOM_EVENTS = [
     desc: '原材料涨价，印刷和制作成本提高了...',
     effect: '资金-400', effectClass: 'negative',
     apply: (s) => { s.money -= 400; },
-    tip: '通胀从两个方向夹击多样性：降低LVP声誉稳态θ*，同时抬高HVP准入门槛。',
+    tip: '通胀从两个方向夹击多样性：降低同人谷声誉稳态，同时抬高同人本准入门槛。',
     weight: 5, when: () => true, maxTotal: Infinity,
   },
   // --- 感情变动：大学期间最多2次 ---
@@ -591,7 +611,7 @@ const RANDOM_EVENTS = [
     desc: '一段感情的开始或结束占据了你大量的心理能量...',
     effect: '热情-12', effectClass: 'negative',
     apply: (s) => { s.passion -= 12; },
-    tip: '热情预算W不仅被创作消耗，还被生活中的情绪事件消耗。这是Producer模型中精力消耗E(k,t)的外生部分。',
+    tip: '热情预算不仅被创作消耗，还被生活中的情绪事件消耗。',
     weight: 4, when: (s) => getLifeStage(s.turn) === 'university', maxTotal: 2,
   },
   // --- 工作：升职加薪 ---
@@ -600,7 +620,7 @@ const RANDOM_EVENTS = [
     desc: '工作表现不错，获得了加薪。但责任更重，时间更少...',
     effect: '资金+1000 时间-1h（永久）', effectClass: 'neutral',
     apply: (s) => { s.money += 1000; s.timeDebuffs.push({ id: 'promotion', reason: '升职加责', turnsLeft: 999, delta: -1 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
-    tip: '高收入者的时间机会成本更高。Stigler理论：收入越高→搜寻机会成本越高→更依赖声誉做决策。',
+    tip: '高收入者的时间机会成本更高。',
     weight: 4, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: 3,
   },
   // --- 工作：996 ---
@@ -609,8 +629,73 @@ const RANDOM_EVENTS = [
     desc: '项目紧急，公司要求全员加班。几乎没有私人时间...',
     effect: '时间-4h(3回合) 资金+500', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: '996', reason: '996加班', turnsLeft: 3, delta: -4 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.money += 500; },
-    tip: '滞胀特征：需要更多工作时间维持生活→T减少。直接打击HVP准入条件中的时间约束。',
+    tip: '滞胀特征：需要更多工作时间维持生活',
     weight: 7, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: Infinity,
+  },
+  // === Endowment-gated events ===
+  {
+    id: 'inspiration_burst', emoji: '✨', title: '灵感爆发！',
+    desc: '你的创作天赋在某个瞬间被点燃，脑海中涌现出绝妙的创意！',
+    effect: '热情+8 声誉+0.2', effectClass: 'positive',
+    apply: (s) => { s.passion = Math.min(100, s.passion + 8); s.reputation += 0.2; },
+    tip: '创作天赋高的创作者更容易进入"心流"状态。这种突发灵感是内在动机的体现',
+    weight: 4, when: (s) => (s.endowments.talent || 0) >= 2, maxTotal: Infinity,
+  },
+  {
+    id: 'creative_block', emoji: '🧱', title: '创作瓶颈',
+    desc: '怎么画都不满意，反复推翻重来...感觉自己江郎才尽了。',
+    effect: '热情-6', effectClass: 'negative',
+    apply: (s) => { s.passion = Math.max(0, s.passion - 6); },
+    tip: '创作天赋低的创作者更容易遭遇瓶颈。',
+    weight: 5, when: (s) => (s.endowments.talent || 0) <= 1 && s.totalHVP > 0, maxTotal: Infinity,
+  },
+  {
+    id: 'health_issue', emoji: '🤒', title: '身体不适',
+    desc: '最近免疫力下降，生了一场病，需要好好休息...',
+    effect: '热情-5 时间-2h(2回合)', effectClass: 'negative',
+    apply: (s) => { s.passion = Math.max(0, s.passion - 5); s.timeDebuffs.push({ id: 'sick', reason: '身体不适', turnsLeft: 2, delta: -2 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
+    tip: '体力精力低的创作者更容易生病。身体是革命的本钱。',
+    weight: 4, when: (s) => (s.endowments.stamina || 0) <= 1, maxTotal: 3,
+  },
+  {
+    id: 'energy_surge', emoji: '🔥', title: '精力充沛！',
+    desc: '最近状态特别好，精力旺盛，感觉什么都能做！',
+    effect: '热情+6', effectClass: 'positive',
+    apply: (s) => { s.passion = Math.min(100, s.passion + 6); },
+    tip: '体力禀赋高的人恢复速度快、消耗低。同样的创作行为，不同人的精力消耗截然不同。',
+    weight: 3, when: (s) => (s.endowments.stamina || 0) >= 2, maxTotal: Infinity,
+  },
+  {
+    id: 'friend_intro', emoji: '💬', title: '朋友介绍了靠谱搭档',
+    desc: '你的社交圈帮你找到了一位口碑很好的创作者，TA愿意合作！',
+    effect: '自动获得优质搭档(3个月·免稿费)', effectClass: 'positive',
+    apply: (s) => { if (!s.hasPartner) { s.hasPartner = true; s.partnerType = 'supportive'; s.partnerTurns = 3; s.partnerFee = 0; } },
+    tip: '社交魅力高→搜寻成本低。协作可得性随社交网络递增。',
+    weight: 3, when: (s) => (s.endowments.social || 0) >= 2 && !s.hasPartner, maxTotal: 2,
+  },
+  {
+    id: 'viral_post', emoji: '📱', title: '帖子意外火了！',
+    desc: '你随手发的一条动态获得了大量转发，信息扩散到了意想不到的范围！',
+    effect: '信息+30% 声誉+0.15', effectClass: 'positive',
+    apply: (s) => { s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); s.reputation += 0.15; },
+    tip: '营销直觉高的创作者更善于制造传播点。信息披露是比声誉更直接的转化驱动力。',
+    weight: 3, when: (s) => (s.endowments.marketing || 0) >= 2, maxTotal: Infinity,
+  },
+  {
+    id: 'promo_fail', emoji: '🙈', title: '宣传翻车...',
+    desc: '发了一条宣传但措辞不当，引发了一些争议...',
+    effect: '声誉-0.1 信息+10%(黑红也是红)', effectClass: 'negative',
+    apply: (s) => { s.reputation = Math.max(0, s.reputation - 0.1); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1); },
+    tip: '营销直觉低的人更容易踩雷。信息披露是双刃剑——不当宣传会带来负面注意力，但"黑红也是红"确实会提升曝光度。',
+    weight: 4, when: (s) => (s.endowments.marketing || 0) <= 1 && s.infoDisclosure > 0.3, maxTotal: Infinity,
+  },
+  {
+    id: 'harsh_review', emoji: '😤', title: '遭遇恶评',
+    desc: '有人公开发了一篇针对你的尖锐批评，言辞很伤人...',
+    effect: '热情-10', effectClass: 'negative',
+    apply: (s) => { s.passion = Math.max(0, s.passion - (10 - (s.endowments.resilience || 0) * 2)); },
+    tip: '心理韧性低的人对负面反馈更敏感。',
+    weight: 5, when: (s) => s.reputation > 0.5, maxTotal: Infinity,
   },
 ];
 
@@ -663,7 +748,7 @@ export function executeTurn(state, actionId) {
   if (action.type === 'rest') {
     // Rest effectiveness decays with years in the hobby
     const yearsIn = state.turn / 12;
-    const basRestore = 15 + Math.floor(Math.random() * 10); // 15~25
+    const basRestore = 15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3; // stamina bonus
     const fatigueMult = Math.max(0.3, 1 - yearsIn * 0.1);   // Y0=100%, Y2=80%, Y5=50%, Y7+=30%
     const restore = Math.max(3, Math.round(basRestore * fatigueMult));
     state.passion = Math.min(100, state.passion + restore);
@@ -686,7 +771,8 @@ export function executeTurn(state, actionId) {
       : 0.12 + Math.random() * 0.08;  // light: 12%~20% base
     // Signal inflation (Spence): diminishes gain but never below a floor
     const sigCost = state.advanced ? getSignalCost(state.advanced) : 1.0;
-    const scaledGain = rawGain / sigCost;
+    const mktBonus = 1 + (state.endowments.marketing || 0) * 0.12; // marketing endowment
+    const scaledGain = rawGain * mktBonus / sigCost;
     // Guaranteed minimum: even in max signal inflation, you always get SOME visibility
     const minGain = intensity === 'heavy' ? 0.08 : 0.03;
     const gain = Math.max(minGain, scaledGain);
@@ -699,9 +785,9 @@ export function executeTurn(state, actionId) {
   } else if (action.type === 'social') {
     state.passion -= 3;
     result.deltas.push({ icon: '❤️', label: '精力消耗', value: '-3', positive: false });
-    const prob = Math.min(0.8, state.reputation / (state.reputation + 3));
+    const prob = Math.min(0.9, state.reputation / (state.reputation + 3) + (state.endowments.social || 0) * 0.08);
     if (Math.random() < prob) {
-      const pType = rollPartnerType();
+      const pType = rollPartnerType(state.endowments.social || 0);
       const pt = PARTNER_TYPES[pType];
       state.hasPartner = true;
       state.partnerType = pType;
@@ -755,29 +841,60 @@ export function executeTurn(state, actionId) {
     // === ATTEND DOUJIN EVENT — now sells directly from inventory ===
     const evt = state.attendingEvent || (state.availableEvents && state.availableEvents[0]);
     if (evt) {
+
+      // --- Event cancelled (流展) ---
+      if (evt.condition === 'cancelled') {
+        state.money -= evt.travelCost;
+        state.passion = Math.max(0, state.passion - 5);
+        result.deltas.push({ icon: '😱', label: `${evt.name}@${evt.city} 流展！`, value: '白跑一趟', positive: false });
+        result.deltas.push({ icon: '💰', label: '路费（沉没成本）', value: `-¥${evt.travelCost}`, positive: false });
+        result.deltas.push({ icon: '❤️', label: '白忙一场的沮丧', value: '-5', positive: false });
+        state.attendingEvent = null;
+        result.tip = { label: '流展风险', text: '展会因故取消是同人创作者面临的真实风险。路费变成沉没成本，无法追回。经济学告诉我们：不要因为已经花了路费就做出非理性决策——关键是接下来怎么安排。' };
+        // Skip all selling logic below
+      } else {
+
+      // Track event attendance for fatigue (连续参展边际递减)
+      state.recentEventTurns.push(state.turn);
+      // Count events in last 6 months
+      const recentCount = state.recentEventTurns.filter(t => state.turn - t < 6).length;
+      // Fatigue: 1st-2nd event=100%, 3rd=80%, 4th=60%, 5th+=40%
+      const eventFatigue = recentCount <= 2 ? 1.0 : Math.max(0.4, 1.0 - (recentCount - 2) * 0.2);
+
       const mg = state._minigameResult; // from mini-game, or null if skipped
 
       if (mg) {
         state.passion -= 5;
         state.money -= evt.travelCost + mg.moneySpent;
-        state.passion = Math.min(100, state.passion + mg.passionDelta);
+        const fatiguePassion = Math.round(mg.passionDelta * eventFatigue);
+        state.passion = Math.min(100, state.passion + fatiguePassion);
         state.reputation += mg.reputationDelta;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = { ...evt, salesBoost: mg.salesMultiplier };
 
         result.deltas.push({ icon: '🎪', label: `${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
         result.deltas.push({ icon: '💰', label: '路费' + (mg.moneySpent > 0 ? '+无料费' : ''), value: `-¥${evt.travelCost + mg.moneySpent}`, positive: false });
-        result.deltas.push({ icon: '❤️', label: '展会热情', value: `${mg.passionDelta > 0 ? '+' : ''}${mg.passionDelta}`, positive: mg.passionDelta > 0 });
+        result.deltas.push({ icon: '❤️', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
+        if (eventFatigue < 1) {
+          result.deltas.push({ icon: '😮‍💨', label: `连续参展疲劳(近6月第${recentCount}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
+        }
+        if (evt.condition === 'popular') {
+          result.deltas.push({ icon: '🔥', label: '人气爆棚！人流超出预期', value: '', positive: true });
+        }
         state._minigameResult = null;
       } else {
         state.passion -= 5;
         state.money -= evt.travelCost;
-        state.passion = Math.min(100, state.passion + evt.passionBoost);
+        const fatigueBoost = Math.round(evt.passionBoost * eventFatigue);
+        state.passion = Math.min(100, state.passion + fatigueBoost);
         state.reputation += evt.reputationBoost;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = evt;
         result.deltas.push({ icon: '🎪', label: `参加${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
         result.deltas.push({ icon: '💰', label: '路费', value: `-¥${evt.travelCost}`, positive: false });
+        if (eventFatigue < 1) {
+          result.deltas.push({ icon: '😮‍💨', label: `连续参展疲劳(近6月第${recentCount}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
+        }
       }
 
       // === SELL FROM INVENTORY AT EVENT ===
@@ -850,6 +967,8 @@ export function executeTurn(state, actionId) {
         const profit = eventRevenue - travelCost;
         result.deltas.push({ icon: '💰', label: '展会利润', value: profit >= 0 ? `+¥${profit}` : `-¥${Math.abs(profit)}`, positive: profit >= 0 });
       }
+      // Log event for dashboard
+      state.eventLog.push({ turn: state.turn, name: evt.name, city: evt.city, revenue: eventRevenue, sold: totalEventSold, condition: evt.condition || 'normal' });
 
       // Event emotional amplification
       if (totalEventSold >= 15) {
@@ -873,6 +992,10 @@ export function executeTurn(state, actionId) {
       // Clear event (selling happens immediately at the event)
       state.attendingEvent = null;
       result.tip = TIPS.doujinEvent;
+
+      // Clean up old event turn records (keep last 12 months)
+      state.recentEventTurns = state.recentEventTurns.filter(t => state.turn - t < 12);
+      } // end non-cancelled branch
     }
 
   } else if (action.type === 'jobSearch') {
@@ -898,7 +1021,7 @@ export function executeTurn(state, actionId) {
 
   } else if (action.type === 'hvp') {
     // === MULTI-TURN HVP PROJECT ===
-    state.passion -= 15; // monthly passion cost for working on book
+    state.passion -= Math.max(8, 15 - (state.endowments.stamina || 0)); // stamina reduces HVP cost
     result.deltas.push({ icon: '❤️', label: '本月创作消耗', value: '-15', positive: false });
 
     if (!state.hvpProject) {
@@ -923,7 +1046,8 @@ export function executeTurn(state, actionId) {
         state.hvpProject = null;
 
         const costMult = (state.recessionTurnsLeft > 0 ? 1.2 : 1.0) * getAdvancedCostMod(state.advanced);
-        const printCost = Math.round(savedProject.printCost * costMult);
+        const talentDiscount = 1 - (state.endowments.talent || 0) * 0.05; // talent reduces cost
+        const printCost = Math.round(savedProject.printCost * costMult * talentDiscount);
         const partnerCost = state.hasPartner ? state.partnerFee : 0;
         const totalCost = printCost + partnerCost;
         state.money -= totalCost;
@@ -939,7 +1063,7 @@ export function executeTurn(state, actionId) {
         result.deltas.push({ icon: '📦', label: `印刷${batchQty}本入库`, value: `库存${state.inventory.hvpStock}本 定价¥${state.inventory.hvpPrice}`, positive: true });
 
         // Small reputation gain for completing a new work
-        const repGain = 0.15 * state.infoDisclosure;
+        const repGain = 0.15 * state.infoDisclosure * (1 + (state.endowments.talent || 0) * 0.15);
         state.reputation += repGain;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         result.deltas.push({ icon: '⭐', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: true });
@@ -979,7 +1103,7 @@ export function executeTurn(state, actionId) {
     state.recentLVP = 1;
 
     // Small reputation gain for new product
-    const repGain = 0.04 * state.infoDisclosure;
+    const repGain = 0.04 * state.infoDisclosure * (1 + (state.endowments.talent || 0) * 0.15);
     state.reputation += repGain;
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
     result.deltas.push({ icon: '⭐', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: true });
@@ -1065,12 +1189,13 @@ export function executeTurn(state, actionId) {
 
   // --- Track creative activity (resets inactivity counter) ---
   // Creating, attending events, finding partners, heavy promotion all count as "active in the scene"
-  const isActive = ['hvp', 'lvp', 'promote_heavy', 'attendEvent', 'buyGoods'].includes(actionId)
+  const isActive = ['hvp', 'lvp', 'promote_heavy', 'attendEvent', 'buyGoods', 'reprint'].includes(actionId)
     || (actionId === 'findPartner' && state.hasPartner); // only if actually found one
   if (isActive) state.lastCreativeTurn = state.turn;
 
   // --- Reality drain ---
-  const drain = getRealityDrain(state.turn);
+  const rawDrain = getRealityDrain(state.turn);
+  const drain = Math.max(0, rawDrain - (state.endowments.resilience || 0) * 0.5); // resilience reduces drain
   if (drain > 0) {
     state.passion = Math.max(0, state.passion - drain);
     result.deltas.push({ icon: '🌍', label: '现实消耗', value: `热情-${drain.toFixed(1)}`, positive: false });
@@ -1085,8 +1210,9 @@ export function executeTurn(state, actionId) {
   }
 
   // --- Debt anxiety: negative money → passion drain (worry, not fun anymore) ---
-  if (state.money < 0) {
-    const debtLevel = Math.abs(state.money);
+  const debtThreshold = (state.endowments.resilience || 0) * 200; // resilience delays anxiety
+  if (state.money < -debtThreshold) {
+    const debtLevel = Math.abs(state.money) - debtThreshold;
     // Every ¥500 in debt → 2 extra passion drain
     const debtDrain = Math.min(10, Math.floor(debtLevel / 500) * 2);
     if (debtDrain > 0) {
@@ -1128,7 +1254,8 @@ export function executeTurn(state, actionId) {
   }
 
   // --- Info disclosure: fast decay ---
-  state.infoDisclosure = Math.max(0.08, state.infoDisclosure - 0.10);
+  const infoDecay = 0.10 - (state.endowments.marketing || 0) * 0.01; // marketing slows decay
+  state.infoDisclosure = Math.max(0.08, state.infoDisclosure - infoDecay);
 
   // --- Passive online sales (trickle from inventory each turn) ---
   if ((state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) && action.type !== 'attendEvent') {
@@ -1205,6 +1332,18 @@ export function executeTurn(state, actionId) {
   // --- Reset player price choices ---
   state.playerPrice = { hvp: null, lvp: null };
   // attendingEvent is cleared in the attendEvent handler itself
+
+  // --- Record history snapshot ---
+  const prevRev = state.history.length > 0 ? state.history[state.history.length - 1].cumRevenue : 0;
+  state.history.push({
+    turn: state.turn, money: state.money,
+    reputation: Math.round(state.reputation * 100) / 100,
+    passion: Math.round(state.passion),
+    turnRevenue: state.totalRevenue - prevRev,
+    cumRevenue: state.totalRevenue,
+    action: actionId,
+    hvpStock: state.inventory.hvpStock, lvpStock: state.inventory.lvpStock,
+  });
 
   // --- Advance turn ---
   state.turn++;
@@ -1294,20 +1433,20 @@ export function getAchievementInfo(id) {
 
 // === Tips ===
 const TIPS = {
-  hvpStart: { label: '长期项目', text: '同人本是多月项目——独自需要3个月，有搭档可缩短到2个月。印刷成本¥800-1000在完成时支付。搭档有稿费成本，但可以加速进度。这就是HVP的"资本准入壁垒"(Q29: 23.5%认为成本太高)。' },
-  hvpContinue: { label: '坚持创作', text: '同人本创作需要持续投入。每个月都在消耗热情，但完成后的声誉积累远高于谷子(γ_H=0.35 vs γ_L=0.04)。中途放弃意味着前期投入全部沉没。' },
+  hvpStart: { label: '长期项目', text: '同人本是多月项目——独自需要3个月，有搭档可缩短到2个月。印刷成本¥800-1000在完成时支付。搭档有稿费成本，但可以加速进度。' },
+  hvpContinue: { label: '坚持创作', text: '同人本创作需要持续投入。每个月都在消耗热情，但完成后的声誉积累远高于谷子。中途放弃意味着前期投入全部沉没。' },
   hvpComplete: { label: '🎉 作品完成·入库', text: '同人本完成并入库！现在去参加同人展售卖，或等待网上零售慢慢出货。同时携带同人本和谷子参展会触发联动加成。记得关注库存——卖光了要追加印刷！' },
   lvp: { label: '谷子入库', text: 'LVP一个月就能完成并入库，低门槛低风险。去同人展售卖可以一次卖出大量库存。网上也会有少量零售。注意库存管理——制作太多会积压资金，太少则展会上供不应求。' },
-  rest: { label: '热情预算理论', text: '休息恢复热情的效率随入坑年限递减——第1年恢复100%，第5年只剩50%。长期疲惫是不可逆的。同时注意：停滞创作超过3个月后，热情会加速衰减——"不用就会生锈"。' },
-  doujinEvent: { label: '同人展经济学 (Stigler)', text: '同人展是"搜寻成本→0"的极端场景：消费者直接翻阅实物(I→1)，面对面交易消除信息不对称。声誉的"下位替代"属性在展会上最弱——产品质量直接说话。路费是参展的机会成本，大社群有更多展会选择（规模经济）。' },
-  promoteLight: { label: '轻度宣发', text: '低成本维持曝光。信号通胀越严重效果越差，但始终有保底(+3%)。适合资源紧张时维持存在感。信息透明度每月-10%快速衰减，注意节奏。' },
-  promoteHeavy: { label: '全力宣发 (Stigler)', text: '大规模宣发：发试阅、打样返图、详细介绍。82.7%的消费者选择"信息充分的新人"而非"信息不足的名家"。即使信号通胀严重也保底+8%。宣发后立刻制作售卖，抓住窗口！' },
+  rest: { label: '热情预算理论', text: '休息恢复热情的效率随入坑年限递减。长期疲惫是不可逆的。同时注意：停滞创作超过3个月后，热情会加速衰减——"不用就会生锈"。' },
+  doujinEvent: { label: '同人展经济学 (Stigler)', text: '同人展是"搜寻成本→0"的极端场景：消费者直接翻阅实物，面对面交易消除信息不对称。路费是参展的机会成本，大社群有更多展会选择（规模经济）。' },
+  promoteLight: { label: '轻度宣发', text: '低成本维持曝光。信号通胀越严重效果越差。适合资源紧张时维持存在感。信息透明度每月快速衰减，注意节奏。' },
+  promoteHeavy: { label: '全力宣发 (Stigler)', text: '大规模宣发：发试阅、打样返图、详细介绍。宣发后立刻制作售卖，抓住窗口！' },
   partnerFound: { label: '协作约束', text: '47.1%的创作者表示"找到合拍搭档就会做HVP"——协作可得性是HVP创作的第一大触发条件。默契搭档在热情和销量上都有正面加成。' },
   partnerFail: { label: '声誉与协作', text: '协作概率随声誉递增。声誉越高越容易找到搭档——这是声誉的隐性收益。' },
-  partnerRisk: { label: '⚠️ 搭档风险', text: '搭档类型是随机的。严格搭档虽然出品好但压力大，不靠谱搭档可能临时消失。协作引入了额外的不确定性。' },
-  partnerToxic: { label: '⚠️ 有毒协作', text: '有毒搭档持续消耗热情，甚至公开引发争端损害声誉。对应Producer模型中的"塌方事件"S(t)。一旦卷入，只能等合作期结束...' },
-  burnout: { label: '⚠️ 倦怠风险 (F1)', text: '每日投入3小时以上的创作者中，31.9%因热情耗竭退坑。创作行为本身消耗热情预算W——这是"用爱发电"的真实成本。' },
-  jobSearching: { label: '失业与外生退出', text: '失业期间无法创作，只能"找工作"或"休息"。经济下行让求职更难，失业时间越长焦虑越重——这就是Producer模型中最残酷的外生退出压力。51.2%的退出因"现实太忙"。' },
+  partnerRisk: { label: '搭档风险', text: '搭档类型是随机的。严格搭档虽然出品好但压力大，不靠谱搭档可能临时消失。协作引入了额外的不确定性。' },
+  partnerToxic: { label: '有毒协作', text: '有毒搭档持续消耗热情，甚至公开引发争端损害声誉。一旦卷入，只能等合作期结束...' },
+  burnout: { label: '倦怠风险 ', text: '创作行为本身消耗热情预算，这是"用爱发电"的真实成本。' },
+  jobSearching: { label: '失业与外生退出', text: '失业期间无法创作，只能"找工作"或"休息"。经济下行让求职更难，失业时间越长焦虑越重' },
   jobFound: { label: '重返岗位', text: '找到工作了！收入恢复，但失业期间流失的热情和声誉需要时间重建。如果经济仍在下行，要警惕再次失业的风险。' },
   partTimeJob: { label: '时间-金钱权衡', text: '打工赚的钱稳定但不多(¥300~500)，且占用了本可以创作的时间。这就是经济学中的机会成本——打工的每一小时，都是放弃创作的一小时。' },
   freelanceLow: { label: '接稿与声誉', text: '声誉低时接稿收入有限。但接稿本身也是一种技能锻炼。注意：接稿消耗的热情比普通打工更大——因为你在用创作能力换钱，精神消耗更高。' },

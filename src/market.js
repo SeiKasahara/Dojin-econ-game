@@ -55,7 +55,7 @@ export function tickMarket(market, playerState) {
     market.nLVP -= upgrades;
     market.nHVP += upgrades;
     market.cumHVPProduced += upgrades;
-    events.push(`📖 ${upgrades}位LVP创作者进阶为HVP！`);
+    events.push(`📖 ${upgrades}位同人谷创作者转化为同人本创作者！`);
   }
 
   // --- 3. HVP exits ---
@@ -64,7 +64,7 @@ export function tickMarket(market, playerState) {
   if (hvpExits > 0) {
     market.nHVP = Math.max(0, market.nHVP - hvpExits);
     market.cumHVPExited += hvpExits;
-    events.push(`😢 ${hvpExits}位HVP创作者退出了市场`);
+    events.push(`😢 ${hvpExits}位同人本创作者退出了市场`);
   }
 
   // --- 4. LVP exits ---
@@ -77,7 +77,7 @@ export function tickMarket(market, playerState) {
     market.hvpZeroStreak++;
     market.consumerAlpha *= ALPHA_DECAY;
     if (market.hvpZeroStreak === 3) {
-      events.push('⚠️ 市场已3个月没有HVP创作者，消费者对同人本的期待正在衰退...');
+      events.push('⚠️ 市场已3个月没有同人本创作者，消费者对同人本的期待正在衰退...');
     }
     if (market.hvpZeroStreak === 8) {
       events.push('🕳️ 多样性陷阱形成中！没有人制作同人本，消费者偏好正在被遗忘...');
@@ -86,7 +86,7 @@ export function tickMarket(market, playerState) {
     if (market.hvpZeroStreak > 5 && Math.random() < 0.04) {
       market.nHVP = 1;
       market.nLVP = Math.max(0, market.nLVP - 1);
-      events.push('🌟 一位勇敢的创作者独占真空利润，重新进入HVP市场！');
+      events.push('🌟 一位勇敢的创作者独占真空利润，重新进入同人本市场！');
     }
   } else {
     market.hvpZeroStreak = 0;
@@ -160,9 +160,9 @@ export function getPriceTiers(basePrice, productType) {
 // === Market Narratives for UI ===
 export function getMarketNarratives(market) {
   const phrases = [];
-  if (market.nHVP >= 12) phrases.push('HVP创作者很多，同人本市场竞争激烈。');
-  else if (market.nHVP <= 3 && market.nHVP > 0) phrases.push('HVP创作者寥寥无几，你的同人本几乎没有竞争对手。');
-  else if (market.nHVP === 0) phrases.push('⚠️ 市场上已经没有HVP创作者了！这是你独占市场的机会——但消费者的期待也在衰退。');
+  if (market.nHVP >= 12) phrases.push('同人本创作者很多，市场竞争激烈。');
+  else if (market.nHVP <= 3 && market.nHVP > 0) phrases.push('同人本创作者寥寥无几，你的同人本几乎没有竞争对手。');
+  else if (market.nHVP === 0) phrases.push('⚠️ 市场上已经没有同人本创作者了！这是你独占市场的机会——但消费者的期待也在衰退。');
 
   if (market.diversityHealth < 0.3) phrases.push('🕳️ 市场多样性极低。也许你可以做那个打破僵局的人？');
   if (market.consumerAlpha < 0.5) phrases.push('消费者对同人本的兴趣已经大幅衰退(α=' + market.consumerAlpha.toFixed(2) + ')...');
