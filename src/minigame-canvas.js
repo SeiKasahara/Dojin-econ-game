@@ -47,7 +47,10 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
   container.innerHTML = `
     <div style="padding:8px 16px 4px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-weight:700;font-size:0.9rem">🎪 ${mg.event.name}@${mg.event.city}</span>
-      <button class="btn btn-secondary mg-skip" style="padding:4px 12px;font-size:0.75rem;min-height:32px">跳过</button>
+      <span style="display:flex;gap:4px">
+        <button class="btn btn-secondary mg-pause" style="padding:4px 10px;font-size:0.75rem;min-height:32px">⏸</button>
+        <button class="btn btn-secondary mg-skip" style="padding:4px 10px;font-size:0.75rem;min-height:32px">跳过</button>
+      </span>
     </div>
     <div style="padding:0 16px" id="mg-canvas-wrap"></div>
     <div style="padding:4px 16px;display:flex;gap:6px;justify-content:space-between;font-size:0.72rem;color:var(--text-light)">
@@ -81,6 +84,42 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
 
   // Skip button
   container.querySelector('.mg-skip').addEventListener('click', onSkip);
+
+  // Pause button
+  container.querySelector('.mg-pause').addEventListener('click', () => {
+    if (mg.phase === 'playing') {
+      mg.phase = 'paused';
+      container.querySelector('.mg-pause').textContent = '▶';
+      // Show pause overlay on canvas
+      const pDiv = document.createElement('div');
+      pDiv.id = 'mg-pause-overlay';
+      pDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:12px;z-index:10';
+      pDiv.innerHTML = `
+        <div style="color:#fff;font-size:1.2rem;font-weight:700">⏸ 暂停中</div>
+        <button class="btn btn-primary" id="mg-resume" style="padding:8px 24px">继续</button>
+        <button class="btn btn-secondary" id="mg-restart" style="padding:6px 20px;font-size:0.8rem">重新开始</button>
+      `;
+      const wrap = container.querySelector('#mg-canvas-wrap');
+      wrap.style.position = 'relative';
+      wrap.appendChild(pDiv);
+      pDiv.querySelector('#mg-resume').addEventListener('click', () => {
+        mg.phase = 'playing';
+        mg.lastTimestamp = performance.now();
+        container.querySelector('.mg-pause').textContent = '⏸';
+        pDiv.remove();
+      });
+      pDiv.querySelector('#mg-restart').addEventListener('click', () => {
+        pDiv.remove();
+        cleanup();
+        onSkip(); // restart = exit current, main.js will re-trigger
+      });
+    } else if (mg.phase === 'paused') {
+      mg.phase = 'playing';
+      mg.lastTimestamp = performance.now();
+      container.querySelector('.mg-pause').textContent = '⏸';
+      document.getElementById('mg-pause-overlay')?.remove();
+    }
+  });
 
   // Neighbor chat
   container.querySelector('.mg-chat-btn')?.addEventListener('click', () => {

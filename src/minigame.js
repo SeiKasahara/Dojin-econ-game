@@ -532,6 +532,14 @@ export function startMinigame(mainState, event, onComplete) {
       mg.lastTimestamp = timestamp;
     }
 
+    // Paused: keep rendering but don't advance time
+    if (mg.phase === 'paused') {
+      mg.lastTimestamp = timestamp;
+      renderFrame(ctx, mg, canvas);
+      mg.animFrameId = requestAnimationFrame(gameLoop);
+      return;
+    }
+
     const dt = Math.min(50, timestamp - mg.lastTimestamp);
     mg.lastTimestamp = timestamp;
 

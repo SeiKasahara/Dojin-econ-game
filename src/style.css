@@ -52,6 +52,8 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   animation: fadeIn 0.3s ease;
 }
 
@@ -387,7 +389,9 @@ html, body {
   justify-content: center;
   z-index: 100;
   animation: fadeIn 0.2s ease;
-  padding: 24px;
+  padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .event-card {
@@ -396,6 +400,9 @@ html, body {
   padding: 28px 24px;
   max-width: 340px;
   width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   text-align: center;
   box-shadow: var(--shadow-lg);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);

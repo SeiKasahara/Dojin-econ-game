@@ -4,7 +4,7 @@
  */
 
 import './style.css';
-import { createInitialState, executeTurn, rollEvent, applyEvent } from './engine.js';
+import { createInitialState, executeTurn, rollEvent, applyEvent, ACTIONS } from './engine.js';
 import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector } from './ui.js';
 
 let state = null;
@@ -33,9 +33,10 @@ function handleAction(actionId) {
   // === Attend Event: event selection → mode → mini-game/consign → proceed ===
   if (actionId === 'attendEvent') {
     const processEvent = (chosenEvent) => {
-      // Roll event condition: cancelled / normal / popular
+      // Roll event condition: cancelled / normal / popular (recession increases cancel chance)
+      const cancelChance = state.recessionTurnsLeft > 0 ? 0.15 : 0.05;
       const condRoll = Math.random();
-      if (condRoll < 0.05) {
+      if (condRoll < cancelChance) {
         chosenEvent.condition = 'cancelled';
         state.attendingEvent = chosenEvent;
         state._minigameResult = null;
@@ -128,7 +129,21 @@ function handleAction(actionId) {
     return;
   }
 
-  proceedWithTurn(actionId);
+  // Generic confirmation for all other actions
+  const act = ACTIONS[actionId];
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:320px">
+      <div style="font-size:1.5rem">${act?.emoji || '❓'}</div>
+      <div style="font-weight:700;margin:6px 0">${act?.name || actionId}</div>
+      <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">${act?.costLabel || ''}</div>
+      <button class="btn btn-primary btn-block" id="btn-gen-go" style="margin-bottom:6px">确认</button>
+      <button class="btn btn-block" id="btn-gen-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-gen-go').addEventListener('click', () => { overlay.remove(); proceedWithTurn(actionId); });
+  overlay.querySelector('#btn-gen-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
 }
 
 function proceedWithTurn(actionId) {
