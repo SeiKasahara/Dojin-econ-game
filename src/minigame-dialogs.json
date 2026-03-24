@@ -1,0 +1,210 @@
+{
+  "greet": [
+    {
+      "customer": "你好！这里是卖什么的呀？",
+      "choices": [
+        { "text": "我们有同人本和谷子，来看看吧！", "positive": true, "reply": "哇，听起来不错！我看看！" },
+        { "text": "...（紧张到说不出话）", "positive": false, "reply": "呃...那我先逛逛别的吧。" }
+      ]
+    },
+    {
+      "customer": "路过看到你的摊位，好像挺热闹的？",
+      "choices": [
+        { "text": "欢迎！今天有新刊首发哦！", "positive": true, "reply": "新刊！那我一定要看看！" },
+        { "text": "是吗...其实没什么人啦...", "positive": false, "reply": "哦...那我随便看看吧。" }
+      ]
+    },
+    {
+      "customer": "请问你们摊位号是多少呀？我朋友让我来找的。",
+      "choices": [
+        { "text": "就是这里！你朋友眼光真好～", "positive": true, "reply": "太好了找到了！让我看看有什么好东西！" },
+        { "text": "你确定是找我们吗？", "positive": false, "reply": "嗯...可能搞错了，我再找找。" }
+      ]
+    },
+    {
+      "customer": "哇，你的摊位布置好好看！",
+      "choices": [
+        { "text": "谢谢！花了很多心思布置的，来坐坐吧～", "positive": true, "reply": "好温馨！那我好好逛逛你的作品！" },
+        { "text": "啊...还好吧，凑合看...", "positive": false, "reply": "太谦虚了吧...那我随便看看。" }
+      ]
+    },
+    {
+      "customer": "我第一次来展会，有点不知道怎么逛...",
+      "choices": [
+        { "text": "别紧张！先看看封面，感兴趣就翻翻，喜欢就带走～", "positive": true, "reply": "原来这样！你好温柔，那我慢慢看！" },
+        { "text": "那你自己慢慢看吧。", "positive": false, "reply": "好的...（小声走开）" }
+      ]
+    }
+  ],
+  "explain": [
+    {
+      "customer": "这本讲的是什么故事呀？",
+      "choices": [
+        { "text": "是关于两个人在夏日祭相遇的故事，甜甜的！", "positive": true, "reply": "天哪听起来好心动！我要买！" },
+        { "text": "就...普通的同人本吧。", "positive": false, "reply": "这样啊...我再看看别家的。" }
+      ]
+    },
+    {
+      "customer": "这个谷子是什么材质的？",
+      "choices": [
+        { "text": "亚克力的！双面印刷，拿在手里很有质感～", "positive": true, "reply": "手感真的好好！给我来一个！" },
+        { "text": "就...普通亚克力吧。", "positive": false, "reply": "嗯...好像和别家的差不多。" }
+      ]
+    },
+    {
+      "customer": "你画了多久才完成这本的？",
+      "choices": [
+        { "text": "画了三个月！每一页都倾注了心血～", "positive": true, "reply": "能感受到用心！支持你！" },
+        { "text": "记不清了...反正画了挺久的。", "positive": false, "reply": "哦...那挺辛苦的。" }
+      ]
+    },
+    {
+      "customer": "我很喜欢这个角色，你也是这个角色的粉丝吗？",
+      "choices": [
+        { "text": "是啊！超爱的！你看这页我画了最喜欢的场景！", "positive": true, "reply": "啊啊啊同好！这页画得太好了，买了买了！" },
+        { "text": "还行吧，就随便画画。", "positive": false, "reply": "...感觉不是真爱粉啊。" }
+      ]
+    },
+    {
+      "customer": "这本和你之前出的那本有关联吗？",
+      "choices": [
+        { "text": "是续篇！但不看前作也能独立理解的～", "positive": true, "reply": "太贴心了！那两本我都要！" },
+        { "text": "呃...你看过我之前的本子？", "positive": false, "reply": "对啊...不过算了，我先看看。" }
+      ]
+    }
+  ],
+  "freebie": [
+    {
+      "customer": "这个无料好可爱！是你画的吗？",
+      "choices": [
+        { "text": "是的！特意为今天的展会画的，送你一张！", "positive": true, "reply": "好开心！那我也看看你的正式作品吧！" },
+        { "text": "嗯...随手画的。", "positive": false, "reply": "谢谢...（拿了无料就走了）" }
+      ]
+    },
+    {
+      "customer": "哇免费的吗？真的可以拿吗？",
+      "choices": [
+        { "text": "当然！拿去吧，希望你喜欢我们的作品风格～", "positive": true, "reply": "你人太好了！让我看看还有什么！" },
+        { "text": "嗯就拿吧。", "positive": false, "reply": "谢谢...那我走了。" }
+      ]
+    },
+    {
+      "customer": "这个无料的设计好精致，做正式品也不为过吧！",
+      "choices": [
+        { "text": "哈哈你眼光真好！正式版的质量更高哦，要看看吗？", "positive": true, "reply": "当然要看！感觉你的作品都很用心！" },
+        { "text": "是吗...其实正式版也就那样。", "positive": false, "reply": "...那就不看了吧。" }
+      ]
+    },
+    {
+      "customer": "我收集了好多无料了，你们的是今天最好看的！",
+      "choices": [
+        { "text": "真的吗！太荣幸了！要不要看看我们的新刊？", "positive": true, "reply": "必须看！冲着无料的质量我就信任你的正式作品！" },
+        { "text": "哦谢谢...（尴尬地笑）", "positive": false, "reply": "嗯...那我继续收集别家的了。" }
+      ]
+    },
+    {
+      "customer": "可以多拿几张吗？我想给朋友也带一份！",
+      "choices": [
+        { "text": "没问题！帮我们宣传一下就好～", "positive": true, "reply": "放心！我会安利给所有朋友的！" },
+        { "text": "一人一张啊...", "positive": false, "reply": "好吧...那就一张吧。" }
+      ]
+    }
+  ],
+  "exchange": [
+    {
+      "customer": "你的名片设计好特别！是自己设计的吗？",
+      "choices": [
+        { "text": "是的！上面有我的社交账号，欢迎关注！", "positive": true, "reply": "回去就关注！期待你的新作品！" },
+        { "text": "嗯...随便做的。", "positive": false, "reply": "哦好的...放口袋里了。" }
+      ]
+    },
+    {
+      "customer": "我也是创作者！可以互相交换名片吗？",
+      "choices": [
+        { "text": "当然！很高兴认识同行！以后多交流～", "positive": true, "reply": "太好了！说不定以后可以合作！" },
+        { "text": "好吧...给你一张。", "positive": false, "reply": "嗯...谢谢（草草收起来了）" }
+      ]
+    },
+    {
+      "customer": "你还在其他平台发布作品吗？",
+      "choices": [
+        { "text": "有的！名片上都有链接，还有通贩入口～", "positive": true, "reply": "太方便了！我回去慢慢看你的所有作品！" },
+        { "text": "偶尔发吧...不太确定。", "positive": false, "reply": "那...有空再找找吧。" }
+      ]
+    },
+    {
+      "customer": "我经常来展会，以后还能在这里遇到你吗？",
+      "choices": [
+        { "text": "会的！下次还来，关注我就能看到预告～", "positive": true, "reply": "一定关注！下次直奔你的摊位！" },
+        { "text": "不确定...看情况吧，最近有点忙。", "positive": false, "reply": "哦...那希望能再遇到。" }
+      ]
+    },
+    {
+      "customer": "你有在接稿吗？我看你画风很合适我想要的感觉！",
+      "choices": [
+        { "text": "有接稿的！可以加我名片上的联系方式详聊～", "positive": true, "reply": "太棒了！回去就联系你！" },
+        { "text": "最近比较忙...不太接。", "positive": false, "reply": "好可惜...那我再找找别人吧。" }
+      ]
+    }
+  ],
+  "troll": [
+    {
+      "customer": "就这？这也好意思拿出来卖？",
+      "choices": [
+        { "text": "每个人审美不同嘛，谢谢关注～", "negative": true, "reply": "切，就这水平还摆摊呢。（大声离开）" },
+        { "text": "...你可以去看看别家的。", "negative": true, "reply": "别家也不咋地。你们同人圈真够无聊的。" }
+      ]
+    },
+    {
+      "customer": "这定价也太贵了吧？成本才多少钱啊？",
+      "choices": [
+        { "text": "这是我几个月的心血，定价包含了创作成本...", "negative": true, "reply": "心血？网上免费的比你画得好。（甩脸走了）" },
+        { "text": "不好意思，价格就是这样的。", "negative": true, "reply": "哼，难怪卖不出去。（摔下东西走了）" }
+      ]
+    },
+    {
+      "customer": "你这画的是什么啊？完全看不出来是谁。",
+      "choices": [
+        { "text": "这是我的个人风格...每个创作者的表达方式不同", "negative": true, "reply": "风格？我看是画不好的借口吧。" },
+        { "text": "如果不喜欢可以不看的...", "negative": true, "reply": "公共场合摆出来还不让人说了？真是的。" }
+      ]
+    },
+    {
+      "customer": "我朋友画得比你好多了，也没你这么贵。",
+      "choices": [
+        { "text": "那你可以去支持你朋友呀～", "negative": true, "reply": "我就看看你能卖出几本。（站在旁边围观）" },
+        { "text": "每个人的作品都有不同的价值...", "negative": true, "reply": "行行行，随便你怎么说吧。（阴阳怪气地走了）" }
+      ]
+    }
+  ],
+  "fan": [
+    {
+      "customer": "啊啊啊终于找到你的摊位了！我是你的老粉！",
+      "choices": [
+        { "text": "谢谢一直支持！今天有新刊哦～", "positive": true, "reply": "新刊！给我来一本！不，两本！一本收藏一本看！" },
+        { "text": "真的吗？太开心了...", "positive": true, "reply": "真的！你每一本我都买了！这次也全要！" }
+      ]
+    },
+    {
+      "customer": "上次买的那本太好了！我安利给了好多朋友！",
+      "choices": [
+        { "text": "感动！这次的新作也请多多支持～", "positive": true, "reply": "必须买！而且朋友们也让我帮她们带！来三本！" },
+        { "text": "谢谢你帮我宣传...", "positive": true, "reply": "应该的！好作品值得被更多人看到！这次的全包了！" }
+      ]
+    },
+    {
+      "customer": "大大！我从你第一本开始就一直追了！能签个名吗？",
+      "choices": [
+        { "text": "当然可以！谢谢你一直以来的陪伴！", "positive": true, "reply": "好开心！新的也给我来一份！签名版我要珍藏！" },
+        { "text": "签名有点害羞...但好吧！", "positive": true, "reply": "太可爱了吧大大！买买买！谷子也全要！" }
+      ]
+    },
+    {
+      "customer": "我特意从外地赶来就为了买你的新刊！",
+      "choices": [
+        { "text": "天哪从外地来的！太感动了！送你一套特典！", "positive": true, "reply": "呜呜呜你人太好了！新刊旧刊我全都要！" },
+        { "text": "辛苦你了...路上还顺利吗？", "positive": true, "reply": "值得的！见到本人了好激动！东西全包了！" }
+      ]
+    }
+  ]
+}

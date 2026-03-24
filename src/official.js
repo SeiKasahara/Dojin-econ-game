@@ -4,6 +4,8 @@
  * durable goods, secondhand pricing, resale value
  */
 
+import { ic } from './icons.js';
+
 // === IP Heat System (hsls.md: dK/dt = I_official + θ·N_D - λ·K) ===
 export function createOfficialState(ipType = 'normal') {
   return {
@@ -42,7 +44,7 @@ export function tickOfficial(official, market, playerState) {
       officialInput = 30;
       official.dormancyTurns = 0;
       official.lastReleaseType = 'major';
-      events.push({ type: 'official_release', emoji: '🎬', title: '官方出新作了！',
+      events.push({ type: 'official_release', emoji: 'film-strip', title: '官方出新作了！',
         desc: 'IP官方发布了重大新内容！整个圈子沸腾了，社群人数激增，创作热情高涨。',
         effect: 'IP热度大幅↑ 社群+20% 热情+10', effectClass: 'positive',
         tip: '官方新作是IP热度的资本注入。官方出新作时搭顺风车创作，声誉收益最大。',
@@ -57,7 +59,7 @@ export function tickOfficial(official, market, playerState) {
       officialInput = 10;
       official.dormancyTurns = Math.max(0, official.dormancyTurns - 4);
       official.lastReleaseType = 'minor';
-      events.push({ type: 'official_minor', emoji: '📰', title: '官方小更新',
+      events.push({ type: 'official_minor', emoji: 'newspaper', title: '官方小更新',
         desc: '官方发布了一些新情报/活动/联动，圈子热度小幅回升。',
         effect: 'IP热度+10 社群+5%', effectClass: 'positive',
         tip: '官方的持续运营维持IP热度不跌破死亡阈值。即使是小更新也能重置信息半衰期，延长IP的社交货币寿命。',
@@ -70,7 +72,7 @@ export function tickOfficial(official, market, playerState) {
 
     // Official crackdown (rare) — shadow price goes positive
     if (Math.random() < 0.02) {
-      events.push({ type: 'official_crackdown', emoji: '⚖️', title: '官方版权收紧',
+      events.push({ type: 'official_crackdown', emoji: 'scales', title: '官方版权收紧',
         desc: '官方发布了更严格的二创指引，部分创作者被警告。创作成本和心理压力上升...',
         effect: '官方对同人的管制上升 NPC创作者减少 热情-8', effectClass: 'negative',
         tip: '创作者是高敏人群，哪怕小幅限制也会导致大批人退出。跨边外部性会放大效应：创作者减少→消费者也跟着流失。',
@@ -85,7 +87,7 @@ export function tickOfficial(official, market, playerState) {
 
     // Official subsidy (rare) — shadow price goes negative
     if (official.shadowPrice <= 0 && Math.random() < 0.03) {
-      events.push({ type: 'official_subsidy', emoji: '🎁', title: '官方发布素材包/征稿',
+      events.push({ type: 'official_subsidy', emoji: 'gift', title: '官方发布素材包/征稿',
         desc: '官方公开了创作素材库，并发起同人征集活动。相当于对创作者的隐性补贴！',
         effect: '制作成本↓ 新创作者涌入 声誉+0.2', effectClass: 'positive',
         tip: '官方对同人的影子价格变为补贴。官方主业赚钱时，补贴同人是理性的——每多一个创作者都能转化新的付费粉丝。',
@@ -164,16 +166,16 @@ export function getResaleValue(work, currentTurn) {
 // === IP Heat narratives ===
 export function getOfficialNarratives(official) {
   const phrases = [];
-  if (official.ipHeat > 80) phrases.push('🔥 IP热度很高，创作正当时！');
+  if (official.ipHeat > 80) phrases.push(`${ic('fire')} IP热度很高，创作正当时！`);
   else if (official.ipHeat > 50) phrases.push('IP热度尚可，官方和同人共同维持着话题度。');
-  else if (official.ipHeat > 20) phrases.push('⚠️ IP热度在下降。官方断更太久，只靠同人在续命...');
-  else phrases.push('🧊 IP几乎被遗忘了。只有最核心的同人创作者还在坚持。社群正在萎缩...');
+  else if (official.ipHeat > 20) phrases.push(`${ic('warning')} IP热度在下降。官方断更太久，只靠同人在续命...`);
+  else phrases.push(`${ic('snowflake')} IP几乎被遗忘了。只有最核心的同人创作者还在坚持。社群正在萎缩...`);
 
   if (official.dormancyTurns > 12) phrases.push('官方已经' + official.dormancyTurns + '个月没有任何动静了...');
 
   const shp = official.secondHandPressure;
-  if (shp && shp.lvp > 0.3) phrases.push('📦 二手谷子大量涌入，新品谷子销量被严重挤压。');
-  if (shp && shp.hvp > 0.1) phrases.push('📚 二手同人本市场活跃，对新品有一定冲击。');
+  if (shp && shp.lvp > 0.3) phrases.push(`${ic('package')} 二手谷子大量涌入，新品谷子销量被严重挤压。`);
+  if (shp && shp.hvp > 0.1) phrases.push(`${ic('books')} 二手同人本市场活跃，对新品有一定冲击。`);
 
   return phrases;
 }

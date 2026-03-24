@@ -3,17 +3,22 @@
  * Market ecosystem panel, pricing UI, diversity indicators
  */
 
-import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground, HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES } from './engine.js';
+import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getLifeStageLabel, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground, HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES } from './engine.js';
 import { createChartCanvas, drawSupplyDemand } from './chart.js';
 import { getMarketNarratives, getPriceTiers, calculatePricedSales, getMarketAvgPrice, IP_TYPES } from './market.js';
 import { getOfficialNarratives } from './official.js';
 import { getAdvancedNarratives } from './advanced.js';
+import { toggleMute, isMuted } from './bgm.js';
+import { ic } from './icons.js';
+import { hasSave, getSaveSummary } from './save.js';
 
 const $ = (sel) => document.querySelector(sel);
 const app = () => $('#app');
 
 // === Title Screen ===
-export function renderTitle(onStart) {
+export function renderTitle(onStart, onContinue) {
+  const save = hasSave() ? getSaveSummary() : null;
+
   app().innerHTML = `
     <div class="screen title-screen">
       <h1>同人社团物语</h1>
@@ -23,23 +28,37 @@ export function renderTitle(onStart) {
         从高考后的暑假开始，经历大学、工作<br/>
         你的同人创作之路能走多远？
       </p>
+      ${save ? `
+      <button class="btn btn-primary" id="btn-continue" style="margin-bottom:12px;width:100%;max-width:340px;padding:14px 16px;line-height:1.6">
+        <div style="font-size:1rem">${ic('play')} 继续游戏</div>
+        <div style="font-size:0.7rem;font-weight:400;margin-top:4px;opacity:0.75;letter-spacing:0.3px">
+          第${save.turn + 1}回合 · ${save.age}岁${save.stage} · ¥${save.money?.toLocaleString()} · ${ic('heart')} ${save.passion}
+        </div>
+      </button>` : ''}
       <div style="margin-bottom:20px;width:100%;max-width:340px">
         <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px;text-align:center">你喜欢什么样的作品？</div>
         <div class="price-selector">
           <div class="price-btn selected" data-fandom="niche">
-            <div class="price-label">💎 冷门佳作</div>
+            <div class="price-label">${ic('diamond')} 冷门佳作</div>
             <div class="price-desc">小众但有味道的作品<br/>圈子小，不知道能不能火</div>
           </div>
           <div class="price-btn" data-fandom="popular">
-            <div class="price-label">🔥 热门大作</div>
+            <div class="price-label">${ic('fire')} 热门大作</div>
             <div class="price-desc">当下最火的作品<br/>圈子大，但热度能持续多久？</div>
           </div>
         </div>
       </div>
-      <button class="btn btn-primary" id="btn-start">开始创作之旅</button>
+      <button class="btn ${save ? 'btn-secondary' : 'btn-primary'}" id="btn-start" style="width:100%;max-width:340px">${save ? '开始新游戏' : '开始创作之旅'}</button>
       <p class="tagline mt-16" style="font-size:0.7rem">
         玩法：每回合选择行动，管理热情·声誉·资金<br/>
         热情归零 = 游戏结束 · 现实会越来越忙
+      </p>
+      <button id="btn-mute" style="margin-top:10px;background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button>
+      <p class="tagline" style="font-size:0.65rem;margin-top:8px">
+        作者博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a><br/>
+        音乐：<a href="https://amachamusic.chagasi.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">甘茶音乐工坊</a><br/>
+        像素素材：<a href="https://www.avatarsinpixels.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Pixels © MostlyPixels</a><br/>
+        桌面画师：乌贼贼污 · 桌面人物：Jill Stingray
       </p>
     </div>
   `;
@@ -50,6 +69,13 @@ export function renderTitle(onStart) {
       btn.classList.add('selected');
       selectedFandom = btn.dataset.fandom;
     });
+  });
+  $('#btn-mute').addEventListener('click', () => {
+    const m = toggleMute();
+    $('#btn-mute').innerHTML = m ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启';
+  });
+  document.getElementById('btn-continue')?.addEventListener('click', () => {
+    if (onContinue) onContinue();
   });
   $('#btn-start').addEventListener('click', () => {
     // Roll actual IP type and community size behind the scenes
@@ -118,13 +144,13 @@ export function renderEndowments(onConfirm) {
             <div style="font-size:0.65rem;color:var(--text-muted)">天赋点数</div>
           </div>
           <div style="text-align:center;flex:1">
-            <div style="font-size:1.8rem">${BACKGROUNDS[bgId].emoji}</div>
+            <div style="font-size:1.8rem">${ic(BACKGROUNDS[bgId].emoji)}</div>
             <div style="font-size:0.75rem;font-weight:600">${BACKGROUNDS[bgId].name}</div>
             <div style="font-size:0.65rem;color:var(--text-muted)">¥${BACKGROUNDS[bgId].money}起步</div>
           </div>
         </div>
         <div style="text-align:center;margin-bottom:8px">
-          ${!rolled ? `<button class="btn btn-secondary" id="btn-reroll" style="padding:4px 20px;font-size:0.82rem">🎲 重新抽取（仅1次）</button>` : `<div style="font-size:0.7rem;color:var(--text-muted)">已用完重抽机会</div>`}
+          ${!rolled ? `<button class="btn btn-secondary" id="btn-reroll" style="padding:4px 20px;font-size:0.82rem">${ic('dice-five')} 重新抽取（仅1次）</button>` : `<div style="font-size:0.7rem;color:var(--text-muted)">已用完重抽机会</div>`}
         </div>
         <div style="text-align:center;margin-bottom:8px">
           <span style="font-size:0.9rem;font-weight:700;color:${rem > 0 ? 'var(--primary)' : 'var(--success)'}">剩余: ${rem}</span>
@@ -135,7 +161,7 @@ export function renderEndowments(onConfirm) {
             const v = pts[k];
             return `
             <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
-              <span style="font-size:1.3rem;width:28px;text-align:center">${e.emoji}</span>
+              <span style="font-size:1.3rem;width:28px;text-align:center">${ic(e.emoji)}</span>
               <div style="flex:1;min-width:0">
                 <div style="font-weight:700;font-size:0.85rem">${e.name}</div>
                 <div style="font-size:0.7rem;color:var(--text-light)">${e.desc}</div>
@@ -194,69 +220,63 @@ export function renderGame(state, onAction, onRetire) {
   const partnerInfo = state.hasPartner && state.partnerType
     ? (() => {
         const pt = PARTNER_TYPES[state.partnerType];
-        return `<span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:${state.partnerType === 'toxic' ? '#FDE8E8' : state.partnerType === 'supportive' ? '#E8F8F0' : '#FFF8E8'}">${pt.emoji} ${pt.name} (${state.partnerTurns}月)</span>`;
+        return `<span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:${state.partnerType === 'toxic' ? '#FDE8E8' : state.partnerType === 'supportive' ? '#E8F8F0' : '#FFF8E8'}">${ic(pt.emoji)} ${pt.name} (${state.partnerTurns}月)</span>`;
       })()
     : '';
 
   // Time debuff display
   const debuffInfo = state.timeDebuffs.length > 0
     ? state.timeDebuffs.filter(d => d.turnsLeft < 900).map(d =>
-        `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger)">⏳ ${d.reason} ${d.turnsLeft}月</span>`
+        `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger)">${ic('hourglass')} ${d.reason} ${d.turnsLeft}月</span>`
       ).join(' ')
     : '';
 
   const recessionInfo = state.recessionTurnsLeft > 0
-    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger)">📉 经济下行 ${state.recessionTurnsLeft}月</span>`
+    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger)">${ic('trend-down')} 经济下行 ${state.recessionTurnsLeft}月</span>`
     : '';
 
   const hvpInfo = state.hvpProject
-    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#E8F0FF;color:#2C3E50">📖 同人本 ${state.hvpProject.progress}/${state.hvpProject.needed}</span>`
+    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#E8F0FF;color:#2C3E50">${ic('book-open-text')} 同人本 ${state.hvpProject.progress}/${state.hvpProject.needed}</span>`
     : '';
 
   const unemployedInfo = state.unemployed
-    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger);font-weight:700">🚨 失业中</span>`
+    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger);font-weight:700">${ic('warning-circle')} 失业中</span>`
     : '';
 
   app().innerHTML = `
-    <div class="screen">
+    <div class="screen screen-game">
       <div class="game-header">
         <span class="turn-badge">第 ${state.turn + 1} 回合</span>
         <span style="display:flex;align-items:center;gap:6px">
-          <button class="btn btn-secondary" id="btn-dashboard" style="padding:2px 10px;font-size:0.75rem;min-height:28px">📊</button>
-          <button class="btn btn-secondary" id="btn-retire" style="padding:2px 10px;font-size:0.75rem;min-height:28px;color:var(--text-muted)">😮‍💨</button>
+          <button class="btn btn-secondary" id="btn-mute-game" style="padding:2px 8px;font-size:0.75rem;min-height:28px">${isMuted() ? ic('speaker-slash') : ic('speaker-high')}</button>
+          <button class="btn btn-secondary" id="btn-retire" style="padding:2px 10px;font-size:0.75rem;min-height:28px;color:var(--text-muted)">${ic('smiley-sad')}</button>
           <span class="money-badge" ${state.money < 0 ? 'style="color:var(--danger)"' : ''}>¥${state.money.toLocaleString()}</span>
         </span>
       </div>
 
-      <div style="padding:0 16px 4px;font-size:0.8rem;color:var(--text-light)">
-        ${getTimeLabel(state.turn)}
-        ${unemployedInfo} ${hvpInfo} ${partnerInfo} ${debuffInfo} ${recessionInfo}
-      </div>
-
-      ${renderStats(state)}
+      ${renderPhoneStatus(state, partnerInfo, debuffInfo, recessionInfo, hvpInfo, unemployedInfo)}
 
       <div class="game-content">
-        ${state.market ? renderMarketPanel(state.market, state.official) : ''}
-        ${state.market?.socialFeed?.length ? renderSocialFeed(state.market.socialFeed) : ''}
+        ${(() => { const s = buildNarrativeSections(state); return renderAlertBanner(s.alerts) + renderSpotlightCard(s.spotlight) + renderPersonalNarrative(getNarrativeTitle(state), s.personal); })()}
 
-        <div class="narrative">
-          <div class="turn-title">${getNarrativeTitle(state)}</div>
-          ${getNarrativeText(state)}
-        </div>
-
-        <div class="action-grid">
-          ${Object.values(ACTIONS).map(a => renderActionCard(a, state)).join('')}
-        </div>
+        ${renderAppDesktop(state)}
       </div>
     </div>
   `;
 
-  // Bind actions
-  document.querySelectorAll('.action-card:not(.disabled)').forEach(el => {
-    el.addEventListener('click', () => onAction(el.dataset.action));
+  // App icon clicks
+  document.querySelectorAll('.app-icon:not(.disabled)').forEach(el => {
+    el.addEventListener('click', () => onAction('app:' + el.dataset.app));
   });
-  // Dashboard button
-  document.getElementById('btn-dashboard')?.addEventListener('click', () => renderDashboard(state));
+  // Mute button
+  document.getElementById('btn-mute-game')?.addEventListener('click', () => {
+    const m = toggleMute();
+    document.getElementById('btn-mute-game').innerHTML = m ? ic('speaker-slash') : ic('speaker-high');
+  });
+  // Stats panel toggle
+  document.getElementById('phone-stats-toggle')?.addEventListener('click', () => {
+    document.getElementById('phone-stats-panel')?.classList.toggle('collapsed');
+  });
   // Retire button — voluntary exit
   document.getElementById('btn-retire')?.addEventListener('click', () => {
     const overlay = document.createElement('div');
@@ -265,7 +285,7 @@ export function renderGame(state, onAction, onRetire) {
     const hasWorks = state.totalHVP > 0 || state.totalLVP > 0;
     overlay.innerHTML = `
       <div class="event-card" style="max-width:340px">
-        <div style="font-size:2rem;margin-bottom:8px">😮‍💨</div>
+        <div style="font-size:2rem;margin-bottom:8px">${ic('smiley-sad')}</div>
         <div style="font-weight:700;font-size:1rem;margin-bottom:8px">放下画笔</div>
         <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:16px;line-height:1.5">
           ${months < 6 ? '才刚开始就想放弃了吗...也许同人创作不适合每个人。'
@@ -289,20 +309,86 @@ export function renderGame(state, onAction, onRetire) {
       if (onRetire) onRetire();
     });
   });
-  // Market panel toggle
-  const toggle = document.getElementById('market-toggle');
-  if (toggle) {
-    toggle.addEventListener('click', () => {
-      toggle.closest('.market-panel').classList.toggle('collapsed');
-    });
+}
+
+// === Tutorial Overlay ===
+const TUTORIAL_STEPS = [
+  { target: '.phone-clock', title: '时间显示', body: '这是你的年龄和当前人生阶段。游戏从18岁高考后暑假开始，经历大学和工作。<b>每回合 = 一个月</b>。' },
+  { target: '.phone-stats-panel', title: '属性面板', body: `下拉查看四大核心属性：<br/><b>${ic('heart')} 热情</b> 生命值，归零=Game Over<br/><b>${ic('star')} 声誉</b> 决定市场份额和销量<br/><b>${ic('timer')} 闲暇</b> 每月可用时间<br/><b>${ic('megaphone')} 信息</b> 买家认知度，每月衰减`, expand: '#phone-stats-panel' },
+  { target: '.money-badge', title: '同人资金', body: '这是你用于<b>同人创作和消费</b>的资金，不是总储蓄。印刷、参展路费、购买谷子等都从这里扣。打工、接稿、售卖收入会增加。<b>变为负数时焦虑会消耗热情</b>。' },
+  { target: '.app-icon[data-app="enzao"]', title: '嗯造', body: '创作同人本（多月项目）、制作谷子（单月完成）、追加印刷。<b>创作是你的核心活动</b>，完成后作品入库等待售卖。' },
+  { target: '.app-icon[data-app="xuanfa"]', title: '次元宣发机', body: '提高信息透明度，让更多潜在买家看到你的作品。<b>宣发后要尽快制作和售卖</b>，因为信息每月都在衰减！' },
+  { target: '.app-icon[data-app="manzhan"]', title: '漫展通', body: '参加同人展是<b>销售的黄金机会</b>，面对面交易能大幅提升销量。也可以在这里购买或出售谷子。' },
+  { target: '.app-icon[data-app="nyaner"]', title: 'Nyaner', body: '查看圈内创作者动态和世界动态（市场竞争、IP热度、宏观经济等），掌握市场环境变化。' },
+  { target: '.app-icon[data-app="market"]', title: '同人市场观察', body: '查看详细的<b>市场数据</b>（社群人数、多样性、IP热度）和你的<b>创作者数据面板</b>（收入、销量、趋势图）。' },
+  { target: null, title: '开始你的创作之旅', body: `<div style="text-align:left;line-height:1.8">· 先<b>创作</b>积累库存，再<b>宣发</b>让人知道你<br/>· 参加<b>同人展</b>卖出去<br/>· 关注<b>资金</b>，印刷和生活都要花钱<br/>· 上班后闲暇骤降，要<b>取舍</b><br/>· 热情低于30要及时<b>休息</b>！</div>` },
+];
+
+export function renderTutorial(onDone) {
+  let step = 0;
+  let prevHighlight = null;
+  let prevExpand = null;
+
+  function cleanup() {
+    if (prevHighlight) { prevHighlight.classList.remove('tut-highlight'); prevHighlight = null; }
+    if (prevExpand) { prevExpand.classList.add('collapsed'); prevExpand = null; }
+    document.getElementById('tut-overlay')?.remove();
+    document.getElementById('tut-bubble')?.remove();
   }
-  // Social feed toggle
-  const feedToggle = document.getElementById('feed-toggle');
-  if (feedToggle) {
-    feedToggle.addEventListener('click', () => {
-      feedToggle.closest('.market-panel').classList.toggle('collapsed');
-    });
+
+  function render() {
+    cleanup();
+    const s = TUTORIAL_STEPS[step];
+    const isLast = step === TUTORIAL_STEPS.length - 1;
+    const total = TUTORIAL_STEPS.length;
+
+    // Expand panel if needed
+    if (s.expand) {
+      const panel = document.querySelector(s.expand);
+      if (panel) { panel.classList.remove('collapsed'); prevExpand = panel; }
+    }
+
+    // Highlight target
+    const targetEl = s.target ? document.querySelector(s.target) : null;
+    if (targetEl) { targetEl.classList.add('tut-highlight'); prevHighlight = targetEl; }
+
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'tut-overlay';
+    overlay.className = 'tut-overlay';
+
+    // Calculate bubble position class
+    let bubbleClass = 'tut-bubble-center';
+    if (targetEl) {
+      const rect = targetEl.getBoundingClientRect();
+      bubbleClass = rect.top < window.innerHeight * 0.4 ? 'tut-bubble-below' : 'tut-bubble-above';
+    }
+
+    document.body.appendChild(overlay);
+
+    const bubble = document.createElement('div');
+    bubble.id = 'tut-bubble';
+    bubble.className = `tut-bubble ${bubbleClass}`;
+    bubble.innerHTML = `
+        <div class="tut-bubble-title">${s.title}</div>
+        <div class="tut-bubble-text">${s.body}</div>
+        <div class="tut-bubble-nav">
+          <span style="font-size:0.7rem;color:var(--text-muted)">${step + 1} / ${total}</span>
+          <span style="display:flex;gap:6px">
+            ${step > 0 ? '<button class="btn btn-secondary" id="tut-prev" style="padding:4px 12px;min-height:32px;font-size:0.78rem">上一步</button>' : ''}
+            <button class="btn btn-primary" id="tut-next" style="padding:4px 14px;min-height:32px;font-size:0.78rem">${isLast ? '开始游戏！' : '下一步'}</button>
+          </span>
+        </div>
+        ${isLast ? '' : '<div style="text-align:center;margin-top:6px"><span id="tut-skip" style="font-size:0.65rem;color:var(--text-muted);cursor:pointer;text-decoration:underline">跳过教程</span></div>'}`;
+    document.body.appendChild(bubble);
+
+    const done = () => { cleanup(); onDone(); };
+    document.getElementById('tut-next').addEventListener('click', () => { if (isLast) done(); else { step++; render(); } });
+    document.getElementById('tut-prev')?.addEventListener('click', () => { step--; render(); });
+    document.getElementById('tut-skip')?.addEventListener('click', done);
   }
+
+  render();
 }
 
 // === Dashboard Overlay ===
@@ -360,14 +446,14 @@ function renderDashboard(state) {
   const endowHtml = Object.entries(ENDOWMENTS).map(([k, def]) => {
     const v = e[k] || 0;
     const dots = Array.from({length: 3}, (_, i) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${i < v ? 'var(--primary)' : '#E0E0E0'};margin:0 1px"></span>`).join('');
-    return `<div style="display:flex;align-items:center;gap:6px;font-size:0.75rem"><span>${def.emoji}</span><span style="width:48px">${def.name}</span>${dots}</div>`;
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:0.75rem"><span>${ic(def.emoji)}</span><span style="width:48px">${def.name}</span>${dots}</div>`;
   }).join('');
 
   // --- Event log (last 5) ---
   const recentEvents = el.slice(-5).reverse();
   const eventRows = recentEvents.length > 0
     ? recentEvents.map(ev => `<div style="display:flex;justify-content:space-between;font-size:0.72rem;padding:2px 0">
-        <span>${ev.condition === 'popular' ? '🔥' : '🎪'} 第${ev.turn + 1}月 ${ev.name}@${ev.city}</span>
+        <span>${ev.condition === 'popular' ? ic('fire') : ic('tent')} 第${ev.turn + 1}月 ${ev.name}@${ev.city}</span>
         <span style="color:${ev.revenue > 0 ? 'var(--success)' : 'var(--text-muted)'}">+¥${ev.revenue} (${ev.sold}件)</span>
       </div>`).join('')
     : '<div style="font-size:0.72rem;color:var(--text-muted)">还没有参展记录</div>';
@@ -377,7 +463,7 @@ function renderDashboard(state) {
   overlay.innerHTML = `
     <div class="event-card" style="max-width:400px;max-height:85vh;overflow-y:auto;text-align:left">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-weight:700;font-size:1rem">📊 创作者数据面板</div>
+        <div style="font-weight:700;font-size:1rem">${ic('chart-bar')} 创作者数据面板</div>
         <button class="btn btn-secondary" id="btn-close-dash" style="padding:2px 12px;font-size:0.8rem;min-height:28px">关闭</button>
       </div>
 
@@ -408,20 +494,20 @@ function renderDashboard(state) {
       </div>
 
       <div style="margin-bottom:12px">
-        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">📦 库存</div>
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('package')} 库存</div>
         <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem;margin-bottom:4px">
-          <span style="width:36px">📖×${state.inventory.hvpStock}</span>
+          <span style="width:36px">${ic('book-open-text')}×${state.inventory.hvpStock}</span>
           <div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${hvpPct}%;background:var(--primary);border-radius:5px"></div></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem">
-          <span style="width:36px">🔑×${state.inventory.lvpStock}</span>
+          <span style="width:36px">${ic('key')}×${state.inventory.lvpStock}</span>
           <div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${lvpPct}%;background:var(--secondary);border-radius:5px"></div></div>
         </div>
       </div>
 
       ${recent.length > 1 ? `<div style="margin-bottom:12px">
-        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">💰 近${recent.length}月收入</div>
-        <div style="display:flex;gap:12px;font-size:0.65rem;color:var(--text-muted);margin-bottom:2px"><span>🔵 月收入</span><span>🟠 累计收入</span><span>● 展会月</span></div>
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('coins')} 近${recent.length}月收入</div>
+        <div style="display:flex;gap:12px;font-size:0.65rem;color:var(--text-muted);margin-bottom:2px"><span style="color:var(--primary)">● 月收入</span><span style="color:#F39C12">● 累计收入</span><span>● 展会月</span></div>
         <svg viewBox="-10 -8 220 68" style="width:100%;height:65px">
           <polyline points="${cumLine}" fill="none" stroke="#F39C12" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
           <polyline points="${revPolyline}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>
@@ -435,7 +521,7 @@ function renderDashboard(state) {
       </div>` : ''}
 
       ${repRecent.length > 1 ? `<div style="margin-bottom:12px">
-        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">⭐ 声誉趋势 <span style="font-weight:400;color:var(--text-muted)">(当前 ${state.reputation.toFixed(1)})</span></div>
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('star')} 声誉趋势 <span style="font-weight:400;color:var(--text-muted)">(当前 ${state.reputation.toFixed(1)})</span></div>
         <svg viewBox="-5 -5 210 50" style="width:100%;height:50px">
           <polyline points="${repPoints}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>
           ${repRecent.map((r, i) => {
@@ -447,7 +533,7 @@ function renderDashboard(state) {
       </div>` : ''}
 
       ${passRecent.length > 1 ? `<div style="margin-bottom:12px">
-        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">❤️ 热情趋势 <span style="font-weight:400;color:var(--text-muted)">(当前 ${Math.round(state.passion)})</span></div>
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('heart')} 热情趋势 <span style="font-weight:400;color:var(--text-muted)">(当前 ${Math.round(state.passion)})</span></div>
         <svg viewBox="-5 -5 210 50" style="width:100%;height:50px">
           <polyline points="${passPoints}" fill="none" stroke="#E74C3C" stroke-width="2" stroke-linejoin="round"/>
           ${passRecent.map((r, i) => {
@@ -459,12 +545,12 @@ function renderDashboard(state) {
       </div>` : ''}
 
       <div style="margin-bottom:12px">
-        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">🎪 参展记录 ${totalEvents > 0 ? `<span style="font-weight:400;color:var(--text-muted)">场均¥${avgEventRev}</span>` : ''}</div>
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('tent')} 参展记录 ${totalEvents > 0 ? `<span style="font-weight:400;color:var(--text-muted)">场均¥${avgEventRev}</span>` : ''}</div>
         ${eventRows}
       </div>
 
       <div>
-        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">🎨 禀赋</div>
+        <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('palette')} 禀赋</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">${endowHtml}</div>
       </div>
     </div>
@@ -473,6 +559,54 @@ function renderDashboard(state) {
   overlay.querySelector('#btn-close-dash').addEventListener('click', () => overlay.remove());
   // Click outside to close
   overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+}
+
+function renderPhoneStatus(state, partnerInfo, debuffInfo, recessionInfo, hvpInfo, unemployedInfo) {
+  const age = getAge(state.turn);
+  const stageLabel = getLifeStageLabel(state.turn);
+  const month = ((state.turn + 6) % 12) + 1;
+  const seasonIcon = month >= 3 && month <= 5 ? 'flower-lotus' : month >= 6 && month <= 8 ? 'sun' : month >= 9 && month <= 11 ? 'leaf' : 'snowflake';
+
+  const passionPct = Math.max(0, state.passion);
+  const repPct = Math.min(100, state.reputation * 10);
+  const timePct = Math.min(100, state.time * 10);
+  const infoPct = state.infoDisclosure * 100;
+
+  const badges = [unemployedInfo, hvpInfo, partnerInfo, debuffInfo, recessionInfo].filter(Boolean).join(' ');
+
+  const sk = (state.totalHVP + state.totalLVP > 0) ? getCreativeSkill(state) : null;
+  const invLine = (state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0)
+    ? `${ic('package')} 本×${state.inventory.hvpStock} 谷×${state.inventory.lvpStock}` : '';
+  const skillLine = sk !== null ? `${ic('target')} Lv${sk.toFixed(1)} ${getSkillLabel(sk)}` : '';
+
+  return `
+    <div class="phone-clock">
+      <div class="phone-clock-time">${age}<span class="phone-clock-unit">岁</span></div>
+      <div class="phone-clock-sub">${ic(seasonIcon)} ${stageLabel} · ${month}月</div>
+    </div>
+    <div class="phone-stats-panel collapsed" id="phone-stats-panel">
+      <div class="phone-stats-handle" id="phone-stats-toggle"><div class="phone-stats-bar"></div></div>
+      <div class="phone-stats-grid">
+        <div class="phone-stat-card">
+          <div class="phone-stat-header"><span>${ic('heart')} 热情</span><span class="phone-stat-val ${passionPct < 25 ? 'danger' : ''}">${Math.round(state.passion)}</span></div>
+          <div class="phone-stat-bar-bg"><div class="stat-bar passion ${passionPct < 25 ? 'danger' : ''}" style="width:${passionPct}%"></div></div>
+        </div>
+        <div class="phone-stat-card">
+          <div class="phone-stat-header"><span>${ic('star')} 声誉</span><span class="phone-stat-val">${state.reputation.toFixed(1)}</span></div>
+          <div class="phone-stat-bar-bg"><div class="stat-bar reputation" style="width:${repPct}%"></div></div>
+        </div>
+        <div class="phone-stat-card">
+          <div class="phone-stat-header"><span>${ic('timer')} 闲暇</span><span class="phone-stat-val ${state.time <= 1 ? 'danger' : ''}">${state.time}/10</span></div>
+          <div class="phone-stat-bar-bg"><div class="stat-bar time ${state.time <= 1 ? 'danger' : ''}" style="width:${timePct}%"></div></div>
+        </div>
+        <div class="phone-stat-card">
+          <div class="phone-stat-header"><span>${ic('megaphone')} 信息</span><span class="phone-stat-val">${Math.round(infoPct)}%</span></div>
+          <div class="phone-stat-bar-bg"><div class="stat-bar" style="width:${infoPct}%;background:linear-gradient(90deg,#E6A817,#F5D76E)"></div></div>
+        </div>
+      </div>
+      ${badges ? `<div class="phone-badges">${badges}</div>` : ''}
+      ${invLine || skillLine ? `<div class="phone-inv">${invLine}${invLine && skillLine ? ' · ' : ''}${skillLine}</div>` : ''}
+    </div>`;
 }
 
 function renderStats(state) {
@@ -484,7 +618,7 @@ function renderStats(state) {
   return `
     <div class="stats-panel">
       <div class="stat-row">
-        <span class="stat-icon">❤️</span>
+        <span class="stat-icon">${ic('heart')}</span>
         <span class="stat-label">热情</span>
         <div class="stat-bar-wrap">
           <div class="stat-bar passion ${passionPct < 25 ? 'danger' : ''}" style="width:${passionPct}%"></div>
@@ -492,7 +626,7 @@ function renderStats(state) {
         <span class="stat-value">${Math.round(state.passion)}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-icon">⭐</span>
+        <span class="stat-icon">${ic('star')}</span>
         <span class="stat-label">声誉</span>
         <div class="stat-bar-wrap">
           <div class="stat-bar reputation" style="width:${repPct}%"></div>
@@ -500,7 +634,7 @@ function renderStats(state) {
         <span class="stat-value">${state.reputation.toFixed(1)}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-icon">⏰</span>
+        <span class="stat-icon">${ic('timer')}</span>
         <span class="stat-label">时间</span>
         <div class="stat-bar-wrap">
           <div class="stat-bar time ${state.time <= 1 ? 'danger' : ''}" style="width:${timePct}%"></div>
@@ -508,7 +642,7 @@ function renderStats(state) {
         <span class="stat-value">${state.time}/10</span>
       </div>
       <div class="stat-row">
-        <span class="stat-icon">📢</span>
+        <span class="stat-icon">${ic('megaphone')}</span>
         <span class="stat-label">信息</span>
         <div class="stat-bar-wrap">
           <div class="stat-bar" style="width:${infoPct}%;background:linear-gradient(90deg,#E6A817,#F5D76E)"></div>
@@ -518,10 +652,10 @@ function renderStats(state) {
       ${infoPct > 15 ? `<div style="font-size:0.65rem;color:var(--text-muted);text-align:right;padding-right:4px;margin-top:-4px">每月-7% · ${Math.ceil((infoPct - 8) / 7)}月后回到底线</div>` : ''}
       ${(state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) || (state.totalHVP + state.totalLVP > 0) ? `
       <div style="display:flex;justify-content:center;gap:12px;padding:6px 0;margin-top:4px;border-top:1px dashed var(--border);font-size:0.78rem;flex-wrap:wrap">
-        ${(state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) ? `<span>📦 本×${state.inventory.hvpStock} 谷×${state.inventory.lvpStock}</span>` : ''}
+        ${(state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) ? `<span>${ic('package')} 本×${state.inventory.hvpStock} 谷×${state.inventory.lvpStock}</span>` : ''}
         ${(state.totalHVP + state.totalLVP > 0) ? (() => {
           const sk = getCreativeSkill(state);
-          return `<span style="color:var(--secondary)">🎯 技艺Lv${sk.toFixed(1)} ${getSkillLabel(sk)}</span>`;
+          return `<span style="color:var(--secondary)">${ic('target')} 技艺Lv${sk.toFixed(1)} ${getSkillLabel(sk)}</span>`;
         })() : ''}
       </div>` : ''}
     </div>
@@ -543,9 +677,9 @@ function renderMarketPanel(market, official) {
   return `
     <div class="market-panel collapsed">
       <div class="market-header" id="market-toggle">
-        <span>🏪 市场生态 ${IP_TYPES[market.ipType]?.emoji || ''}</span>
+        <span>${ic('storefront')} 市场生态 ${IP_TYPES[market.ipType]?.emoji ? ic(IP_TYPES[market.ipType].emoji) : ''}</span>
         <span style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:0.72rem">👥${market.communitySize} HVP:${market.nHVP} LVP:${market.nLVP}</span>
+          <span style="font-size:0.72rem">${ic('users')}${market.communitySize} 同人本创作者:${market.nHVP} 同人谷创作者:${market.nLVP}</span>
           <span style="font-size:0.72rem;color:${divColor}">${divLabel}</span>
           <span class="market-arrow">▼</span>
         </span>
@@ -557,7 +691,7 @@ function renderMarketPanel(market, official) {
           <div><div style="font-weight:700;font-size:1.1rem">${market.nLVP}</div><div style="color:var(--text-muted)">同人谷创作者</div></div>
         </div>
         <div class="stat-row" style="margin-top:4px">
-          <span class="stat-icon">🌈</span>
+          <span class="stat-icon">${ic('rainbow')}</span>
           <span class="stat-label">多样</span>
           <div class="stat-bar-wrap">
             <div class="stat-bar" style="width:${divPct}%;background:linear-gradient(90deg,${divColor},${divColor}88)"></div>
@@ -565,7 +699,7 @@ function renderMarketPanel(market, official) {
           <span class="stat-value" style="color:${divColor}">${divPct}%</span>
         </div>
         <div class="stat-row">
-          <span class="stat-icon">📊</span>
+          <span class="stat-icon">${ic('chart-bar')}</span>
           <span class="stat-label">信心</span>
           <div class="stat-bar-wrap">
             <div class="stat-bar" style="width:${confPct}%;background:linear-gradient(90deg,#3498DB,#81D4FA)"></div>
@@ -573,17 +707,17 @@ function renderMarketPanel(market, official) {
           <span class="stat-value">${confPct}%</span>
         </div>
         <div class="stat-row">
-          <span class="stat-icon">🎬</span>
+          <span class="stat-icon">${ic('film-strip')}</span>
           <span class="stat-label">IP热</span>
           <div class="stat-bar-wrap">
             <div class="stat-bar" style="width:${ipHeat}%;background:linear-gradient(90deg,${ipColor},${ipColor}88)"></div>
           </div>
           <span class="stat-value">${ipHeat}</span>
         </div>
-        ${market.currentTrend ? `<div style="font-size:0.75rem;padding:4px 0;color:var(--primary);font-weight:600">🔥 热门话题: ${market.currentTrend.tag} (${market.currentTrend.turnsLeft}月)</div>` : ''}
-        ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.72rem;color:var(--danger);padding:4px 0">⚠ 消费者同人本偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
-        ${official && official.secondHandPressure.lvp > 0.05 ? `<div style="font-size:0.72rem;color:${official.secondHandPressure.lvp > 0.3 ? 'var(--danger)' : 'var(--warning)'};padding:2px 0">📦 二手谷子压力: ${Math.round(official.secondHandPressure.lvp * 100)}%${official.secondHandPressure.lvp > 0.3 ? ' ⚠' : ''}</div>` : ''}
-        ${official && official.secondHandPressure.hvp > 0.05 ? `<div style="font-size:0.72rem;color:${official.secondHandPressure.hvp > 0.2 ? 'var(--danger)' : 'var(--warning)'};padding:2px 0">📦 二手同人本压力: ${Math.round(official.secondHandPressure.hvp * 100)}%${official.secondHandPressure.hvp > 0.2 ? ' ⚠' : ''}</div>` : ''}
+        ${market.currentTrend ? `<div style="font-size:0.75rem;padding:4px 0;color:var(--primary);font-weight:600">${ic('fire')} 热门话题: ${market.currentTrend.tag} (${market.currentTrend.turnsLeft}月)</div>` : ''}
+        ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.72rem;color:var(--danger);padding:4px 0">${ic('warning')} 消费者同人本偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
+        ${official && official.secondHandPressure.lvp > 0.05 ? `<div style="font-size:0.72rem;color:${official.secondHandPressure.lvp > 0.3 ? 'var(--danger)' : 'var(--warning)'};padding:2px 0">${ic('package')} 二手谷子压力: ${Math.round(official.secondHandPressure.lvp * 100)}%${official.secondHandPressure.lvp > 0.3 ? ' ' + ic('warning') : ''}</div>` : ''}
+        ${official && official.secondHandPressure.hvp > 0.05 ? `<div style="font-size:0.72rem;color:${official.secondHandPressure.hvp > 0.2 ? 'var(--danger)' : 'var(--warning)'};padding:2px 0">${ic('package')} 二手同人本压力: ${Math.round(official.secondHandPressure.hvp * 100)}%${official.secondHandPressure.hvp > 0.2 ? ' ' + ic('warning') : ''}</div>` : ''}
         <div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
           ${npcFeed}
         </div>
@@ -592,19 +726,149 @@ function renderMarketPanel(market, official) {
   `;
 }
 
+export function openMarketApp(state) {
+  const market = state.market;
+  const official = state.official;
+
+  // === Tab 1: 市场数据 ===
+  let marketHtml = '';
+  if (market) {
+    const ipHeat = official ? Math.round(official.ipHeat) : 80;
+    const ipColor = ipHeat > 60 ? '#E74C3C' : ipHeat > 30 ? 'var(--warning)' : '#888';
+    const divPct = Math.round(market.diversityHealth * 100);
+    const confPct = Math.round(market.marketConfidence * 100);
+    const divColor = divPct > 60 ? 'var(--success)' : divPct > 30 ? 'var(--warning)' : 'var(--danger)';
+    const divLabel = divPct > 60 ? '健康' : divPct > 30 ? '脆弱' : '危险';
+    const npcFeed = market.npcEvents.length > 0
+      ? market.npcEvents.map(e => `<div style="font-size:0.75rem;color:var(--text-light);padding:3px 0">${e}</div>`).join('')
+      : '<div style="font-size:0.75rem;color:var(--text-muted)">市场平稳运行中...</div>';
+
+    marketHtml = `
+      <div style="display:flex;justify-content:space-around;padding:12px 0;font-size:0.78rem;text-align:center">
+        <div><div style="font-weight:700;font-size:1.2rem">${market.communitySize.toLocaleString()}</div><div style="color:var(--text-muted)">社群人数</div></div>
+        <div><div style="font-weight:700;font-size:1.2rem;color:var(--primary)">${market.nHVP}</div><div style="color:var(--text-muted)">同人本创作者</div></div>
+        <div><div style="font-weight:700;font-size:1.2rem">${market.nLVP}</div><div style="color:var(--text-muted)">同人谷创作者</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:0 4px 12px">
+        <div class="stat-row"><span class="stat-icon">${ic('users')}</span><span class="stat-label">多样</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${divPct}%;background:linear-gradient(90deg,${divColor},${divColor}88)"></div></div><span class="stat-value" style="color:${divColor}">${divPct}% ${divLabel}</span></div>
+        <div class="stat-row"><span class="stat-icon">${ic('chart-bar')}</span><span class="stat-label">信心</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${confPct}%;background:linear-gradient(90deg,#3498DB,#81D4FA)"></div></div><span class="stat-value">${confPct}%</span></div>
+        <div class="stat-row"><span class="stat-icon">${ic('film-strip')}</span><span class="stat-label">IP热</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${ipHeat}%;background:linear-gradient(90deg,${ipColor},${ipColor}88)"></div></div><span class="stat-value">${ipHeat}</span></div>
+      </div>
+      ${market.currentTrend ? `<div style="font-size:0.78rem;padding:8px 4px;color:var(--primary);font-weight:600;border-top:1px solid var(--border)">${ic('fire')} 热门话题: ${market.currentTrend.tag} (剩${market.currentTrend.turnsLeft}月)</div>` : ''}
+      ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.75rem;color:var(--danger);padding:4px">${ic('warning')} 消费者偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
+      ${official && official.secondHandPressure.lvp > 0.05 ? `<div style="font-size:0.75rem;color:${official.secondHandPressure.lvp > 0.3 ? 'var(--danger)' : 'var(--warning)'};padding:4px">${ic('package')} 二手谷子压力: ${Math.round(official.secondHandPressure.lvp * 100)}%</div>` : ''}
+      ${official && official.secondHandPressure.hvp > 0.05 ? `<div style="font-size:0.75rem;color:${official.secondHandPressure.hvp > 0.2 ? 'var(--danger)' : 'var(--warning)'};padding:4px">${ic('package')} 二手同人本压力: ${Math.round(official.secondHandPressure.hvp * 100)}%</div>` : ''}
+      <div style="margin-top:8px;border-top:1px solid var(--border);padding:8px 4px">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--secondary);margin-bottom:4px">${ic('storefront')} 市场动态</div>
+        ${npcFeed}
+      </div>`;
+  } else {
+    marketHtml = '<div style="text-align:center;padding:24px;color:var(--text-muted)">暂无市场数据</div>';
+  }
+
+  // === Tab 2: 创作者数据 (from renderDashboard) ===
+  const h = state.history || [];
+  const el = state.eventLog || [];
+  const e = state.endowments || {};
+  const totalEvents = el.length;
+  const totalEventRev = el.reduce((s, x) => s + x.revenue, 0);
+  const avgEventRev = totalEvents > 0 ? Math.round(totalEventRev / totalEvents) : 0;
+  const recent = h.slice(-12);
+  const maxRev = Math.max(1, ...recent.map(r => r.turnRevenue));
+  const revLine = recent.map((r, i) => {
+    const x = Math.round(i / Math.max(1, recent.length - 1) * 200);
+    const y = Math.round((1 - r.turnRevenue / maxRev) * 50);
+    return { x, y, isEvent: r.action === 'attendEvent', rev: r.turnRevenue, turn: r.turn };
+  });
+  const revPolyline = revLine.map(p => `${p.x},${p.y}`).join(' ');
+  const cumMax = Math.max(1, ...recent.map(r => r.cumRevenue));
+  const cumLine = recent.map((r, i) => `${Math.round(i / Math.max(1, recent.length - 1) * 200)},${Math.round((1 - r.cumRevenue / cumMax) * 50)}`).join(' ');
+  const repRecent = h.slice(-12);
+  const repMax = Math.max(1, ...repRecent.map(r => r.reputation));
+  const repPoints = repRecent.map((r, i) => `${Math.round(i / Math.max(1, repRecent.length - 1) * 200)},${Math.round((1 - r.reputation / repMax) * 40)}`).join(' ');
+  const passRecent = h.slice(-12);
+  const passPoints = passRecent.map((r, i) => `${Math.round(i / Math.max(1, passRecent.length - 1) * 200)},${Math.round((1 - r.passion / 100) * 40)}`).join(' ');
+  const invMax = Math.max(1, state.inventory.hvpStock, state.inventory.lvpStock, 50);
+  const hvpPct = Math.round(state.inventory.hvpStock / invMax * 100);
+  const lvpPct = Math.round(state.inventory.lvpStock / invMax * 100);
+  const endowHtml = Object.entries(ENDOWMENTS).map(([k, def]) => {
+    const v = e[k] || 0;
+    const dots = Array.from({length: 3}, (_, i) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${i < v ? 'var(--primary)' : '#E0E0E0'};margin:0 1px"></span>`).join('');
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:0.75rem"><span>${ic(def.emoji)}</span><span style="width:48px">${def.name}</span>${dots}</div>`;
+  }).join('');
+  const recentEvents = el.slice(-5).reverse();
+  const eventRows = recentEvents.length > 0
+    ? recentEvents.map(ev => `<div style="display:flex;justify-content:space-between;font-size:0.72rem;padding:2px 0"><span>${ev.condition === 'popular' ? ic('fire') : ic('tent')} 第${ev.turn + 1}月 ${ev.name}@${ev.city}</span><span style="color:${ev.revenue > 0 ? 'var(--success)' : 'var(--text-muted)'}">+¥${ev.revenue} (${ev.sold}件)</span></div>`).join('')
+    : '<div style="font-size:0.72rem;color:var(--text-muted)">还没有参展记录</div>';
+
+  const dashHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px"><div style="font-size:1.1rem;font-weight:700;color:var(--primary)">¥${state.totalRevenue.toLocaleString()}</div><div style="font-size:0.65rem;color:var(--text-muted)">累计收入</div></div>
+      <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px"><div style="font-size:1.1rem;font-weight:700">${state.totalSales}</div><div style="font-size:0.65rem;color:var(--text-muted)">总销量</div></div>
+      <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px"><div style="font-size:1.1rem;font-weight:700">${totalEvents}</div><div style="font-size:0.65rem;color:var(--text-muted)">参展</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px"><div style="font-size:1rem;font-weight:700">${state.totalHVP}</div><div style="font-size:0.65rem;color:var(--text-muted)">同人志</div></div>
+      <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px"><div style="font-size:1rem;font-weight:700">${state.totalLVP}</div><div style="font-size:0.65rem;color:var(--text-muted)">谷子批次</div></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('package')} 库存</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem;margin-bottom:4px"><span style="width:36px">${ic('book-open-text')}×${state.inventory.hvpStock}</span><div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${hvpPct}%;background:var(--primary);border-radius:5px"></div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem"><span style="width:36px">${ic('key')}×${state.inventory.lvpStock}</span><div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${lvpPct}%;background:var(--secondary);border-radius:5px"></div></div></div>
+    </div>
+    ${recent.length > 1 ? `<div style="margin-bottom:12px"><div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('coins')} 近${recent.length}月收入</div><div style="display:flex;gap:12px;font-size:0.65rem;color:var(--text-muted);margin-bottom:2px"><span style="color:var(--primary)">● 月收入</span><span style="color:#F39C12">● 累计</span></div><svg viewBox="-10 -8 220 68" style="width:100%;height:65px"><polyline points="${cumLine}" fill="none" stroke="#F39C12" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/><polyline points="${revPolyline}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>${revLine.map(p => p.isEvent ? `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--primary)" stroke="#fff" stroke-width="1"/>` : `<circle cx="${p.x}" cy="${p.y}" r="2" fill="#81D4FA"/>`).join('')}</svg></div>` : ''}
+    ${repRecent.length > 1 ? `<div style="margin-bottom:12px"><div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('star')} 声誉趋势 <span style="font-weight:400;color:var(--text-muted)">(${state.reputation.toFixed(1)})</span></div><svg viewBox="-5 -5 210 50" style="width:100%;height:50px"><polyline points="${repPoints}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/></svg></div>` : ''}
+    ${passRecent.length > 1 ? `<div style="margin-bottom:12px"><div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('heart')} 热情趋势 <span style="font-weight:400;color:var(--text-muted)">(${Math.round(state.passion)})</span></div><svg viewBox="-5 -5 210 50" style="width:100%;height:50px"><polyline points="${passPoints}" fill="none" stroke="#E74C3C" stroke-width="2" stroke-linejoin="round"/></svg></div>` : ''}
+    <div style="margin-bottom:12px"><div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('tent')} 参展记录 ${totalEvents > 0 ? `<span style="font-weight:400;color:var(--text-muted)">场均¥${avgEventRev}</span>` : ''}</div>${eventRows}</div>
+    <div><div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('palette')} 禀赋</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">${endowHtml}</div></div>`;
+
+  // === Build overlay with tabs ===
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="app-page" style="max-height:85vh">
+      <div class="app-titlebar" style="border-bottom:none;padding-bottom:0">
+        <button class="app-back" id="market-back">${ic('arrow-left')} 返回</button>
+        <span class="app-title">${ic('chart-bar')} 同人市场观察</span>
+        <span style="width:60px"></span>
+      </div>
+      <div class="sns-header" style="padding-top:0">
+        <div class="sns-tabs">
+          <div class="sns-tab active" data-tab="market">${ic('storefront')} 市场数据</div>
+          <div class="sns-tab" data-tab="creator">${ic('user')} 创作者数据</div>
+        </div>
+      </div>
+      <div class="app-page-body">
+        <div id="mkt-tab-market">${marketHtml}</div>
+        <div id="mkt-tab-creator" style="display:none">${dashHtml}</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#market-back').addEventListener('click', () => overlay.remove());
+  overlay.querySelectorAll('.sns-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      overlay.querySelectorAll('.sns-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      overlay.querySelector('#mkt-tab-market').style.display = tab.dataset.tab === 'market' ? '' : 'none';
+      overlay.querySelector('#mkt-tab-creator').style.display = tab.dataset.tab === 'creator' ? '' : 'none';
+    });
+  });
+}
+
 function renderSocialFeed(feedItems) {
   if (!feedItems || feedItems.length === 0) return '';
-  const typeEmoji = { npc: '✨', trend: '📊', fan: '❤️', market: '📦', flavor: '💭', drama: '⚡' };
+  const typeEmoji = { npc: 'sparkle', trend: 'chart-bar', fan: 'heart', market: 'package', flavor: 'chat-circle-dots', drama: 'lightning' };
   const items = feedItems.map(f => `
     <div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:0.73rem;color:var(--text-light);border-bottom:1px dashed var(--border)">
-      <span style="flex-shrink:0">${typeEmoji[f.type] || '💬'}</span>
+      <span style="flex-shrink:0">${ic(typeEmoji[f.type] || 'chat-circle')}</span>
       <span>${f.text}</span>
     </div>
   `).join('');
   return `
     <div class="market-panel collapsed" style="margin-top:6px">
       <div class="market-header" id="feed-toggle">
-        <span>💬 圈内动态</span>
+        <span>${ic('chat-circle')} 圈内动态</span>
         <span class="market-arrow">▼</span>
       </div>
       <div class="market-body" style="padding:4px 0">
@@ -612,6 +876,266 @@ function renderSocialFeed(feedItems) {
       </div>
     </div>
   `;
+}
+
+// === SNS Panel ===
+function renderSNSButton(state) {
+  const feedCount = state.market?.socialFeed?.length || 0;
+  const sections = buildNarrativeSections(state);
+  const worldCount = sections.world.market.length + sections.world.official.length + sections.world.advanced.length;
+  const total = feedCount + worldCount;
+  return `<button class="sns-fab" id="sns-fab">${ic('chat-circle-dots', '1.3rem')}${total > 0 ? `<span class="sns-badge">${total}</span>` : ''}</button>`;
+}
+
+export function openSNSPanel(state) {
+  const typeIcon = { npc: 'sparkle', trend: 'chart-bar', fan: 'heart', market: 'package', flavor: 'chat-circle-dots', drama: 'lightning' };
+  const typeHandle = { npc: '创作者', trend: '趋势话题', fan: '粉丝', market: '市场观察', flavor: '闲聊', drama: '热搜' };
+  const avatarColor = { npc: '#2C3E50', trend: '#E6A817', fan: '#C73E3A', market: '#3498DB', flavor: '#8B7355', drama: '#E74C3C' };
+  const timeLabels = ['刚刚', '3分钟前', '8分钟前', '15分钟前', '28分钟前', '1小时前', '2小时前', '3小时前'];
+
+  // Build feed HTML
+  const feedItems = state.market?.socialFeed || [];
+  const feedHtml = feedItems.length === 0
+    ? `<div style="text-align:center;padding:40px 20px;color:var(--text-muted);font-size:0.82rem">${ic('chat-circle-dots', '2rem')}<br><br>暂时没有新动态</div>`
+    : feedItems.map((f, i) => {
+      const authorName = f.author || '匿名';
+      const authorInitial = authorName.charAt(0);
+      const color = avatarColor[f.type] || '#2C3E50';
+      const time = timeLabels[Math.min(i, timeLabels.length - 1)];
+      const handle = typeHandle[f.type] || '动态';
+      const hotTag = f.hot ? `<span class="sns-hot-tag">${ic('fire', '0.6rem')} 热门</span>` : '';
+
+      return `
+      <div class="sns-feed-item">
+        <div class="sns-feed-avatar" style="background:${color}">${authorInitial}</div>
+        <div class="sns-feed-body">
+          <div class="sns-feed-meta">
+            <span class="sns-feed-author">${authorName}</span>
+            <span class="sns-feed-handle">@${handle}</span>
+            <span class="sns-feed-dot">·</span>
+            <span class="sns-feed-time">${time}</span>
+            ${hotTag}
+          </div>
+          <div class="sns-feed-text">${f.text}</div>
+          ${f.commentTexts?.length ? `<div class="sns-feed-comments">${f.commentTexts.map(c => `<div class="sns-comment">${c}</div>`).join('')}</div>` : ''}
+          <div class="sns-feed-stats">
+            <span>${ic('chat-circle', '0.75rem')} ${f.comments || 0}</span>
+            <span>${ic('arrows-clockwise', '0.75rem')} ${f.retweets || 0}</span>
+            <span>${ic('heart', '0.75rem')} ${f.likes || 0}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+  // Build world HTML
+  const sections = buildNarrativeSections(state);
+  const w = sections.world;
+  const worldGroups = [];
+  if (w.market.length) worldGroups.push({ icon: 'storefront', label: '市场动态', items: w.market });
+  if (w.official.length) worldGroups.push({ icon: 'film-strip', label: 'IP动态', items: w.official });
+  if (w.advanced.length) worldGroups.push({ icon: 'globe-simple', label: '宏观环境', items: w.advanced });
+
+  const worldHtml = worldGroups.length === 0
+    ? '<div style="text-align:center;padding:40px 20px;color:var(--text-muted);font-size:0.82rem">暂无动态</div>'
+    : worldGroups.map(g => `
+      <div class="sns-world-group">
+        <div class="sns-world-label">${ic(g.icon)} ${g.label}</div>
+        ${g.items.map(t => `<div class="sns-world-item">${t}</div>`).join('')}
+      </div>`).join('');
+
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'sns-overlay';
+  overlay.innerHTML = `
+    <div class="sns-backdrop" id="sns-backdrop"></div>
+    <div class="sns-panel">
+      <div class="sns-drag-bar"></div>
+      <div class="sns-topbar">
+        <div class="sns-topbar-avatar">${ic('user', '0.9rem')}</div>
+        <span class="sns-topbar-title">Nyaner</span>
+        <button class="sns-close" id="sns-close">${ic('x-circle', '1.2rem')}</button>
+      </div>
+      <div class="sns-header">
+        <div class="sns-tabs">
+          <div class="sns-tab active" data-tab="feed">圈内动态</div>
+          <div class="sns-tab" data-tab="world">世界动态</div>
+        </div>
+      </div>
+      <div class="sns-content">
+        <div class="sns-tab-content" id="sns-tab-feed">${feedHtml}</div>
+        <div class="sns-tab-content" id="sns-tab-world" style="display:none">${worldHtml}</div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  // Bind events
+  const close = () => { overlay.remove(); };
+  overlay.querySelector('#sns-backdrop').addEventListener('click', close);
+  overlay.querySelector('#sns-close').addEventListener('click', close);
+  overlay.querySelectorAll('.sns-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      overlay.querySelectorAll('.sns-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      overlay.querySelector('#sns-tab-feed').style.display = tab.dataset.tab === 'feed' ? '' : 'none';
+      overlay.querySelector('#sns-tab-world').style.display = tab.dataset.tab === 'world' ? '' : 'none';
+    });
+  });
+}
+
+// === App Desktop ===
+export const APP_DEFS = [
+  { id: 'enzao', name: '嗯造', icon: 'palette', color: '#E8605C', actions: ['hvp', 'lvp', 'reprint'], logo: 'app logos/嗯造.avif' },
+  { id: 'xuanfa', name: '次元宣发机', icon: 'megaphone', color: '#E6A817', actions: ['promote_light', 'promote_heavy'], logo: 'app logos/次元宣发机.jpg' },
+  { id: 'miaohuashi', name: '喵画师', icon: 'paint-brush', color: '#9B59B6', actions: ['freelance'], logo: 'app logos/喵画师.avif' },
+  { id: 'miaosi', name: '喵丝职聘', icon: 'briefcase', color: '#5B7DB1', actions: ['partTimeJob', 'jobSearch'], logo: 'app logos/喵丝职聘.avif' },
+  { id: 'manzhan', name: '漫展通', icon: 'tent', color: '#E84393', actions: ['attendEvent', 'buyGoods', 'sellGoods'], logo: 'app logos/漫展通.avif' },
+  { id: 'ciyuanbi', name: '打破次元墙', icon: 'handshake', color: '#27AE60', actions: ['findPartner', 'hireAssistant', 'sponsorCommunity'], logo: 'app logos/打破次元壁.jpg' },
+  { id: 'rest', name: '休息', icon: 'coffee', color: '#8B6914', actions: ['rest'], special: true, logo: 'app logos/休息.avif' },
+  { id: 'memu', name: 'Memu', icon: 'desktop', color: '#3498DB', actions: ['upgradeEquipment'], special: true, logo: 'app logos/Memu.avif' },
+  { id: 'market', name: '同人市场观察', icon: 'chart-bar', color: '#34495E', actions: [], special: 'market', logo: 'app logos/同人市场观察.jpg' },
+  { id: 'nyaner', name: 'Nyaner', icon: 'chat-circle-dots', color: '#1DA1F2', actions: [], special: 'sns', logo: 'app logos/Nyaner.avif' },
+  { id: 'message', name: '短信', icon: 'envelope', color: '#2ECC71', actions: ['goCommercial'], special: 'message', logo: 'app logos/短信.png' },
+];
+
+function renderAppDesktop(state) {
+  const feedCount = (state.market?.socialFeed?.length || 0) + (state.market ? 3 : 0); // approx world items
+
+  const apps = APP_DEFS.map(app => {
+    // Disabled logic
+    let disabled = false;
+    if (app.special === 'sns' || app.special === 'market') {
+      disabled = false; // always available
+    } else if (app.special === 'message') {
+      disabled = !state.commercialOfferReceived;
+    } else {
+      disabled = !app.actions.some(a => canPerformAction(state, a));
+    }
+
+    // Badge logic
+    let badge = '';
+    if (app.id === 'enzao' && state.hvpProject) badge = `<span class="app-badge">${state.hvpProject.progress}/${state.hvpProject.needed}</span>`;
+    if (app.id === 'manzhan' && state.availableEvents?.length) badge = `<span class="app-badge">${state.availableEvents.length}</span>`;
+    if (app.id === 'ciyuanbi' && state.hasPartner) badge = `<span class="app-badge">${ic('check', '0.6rem')}</span>`;
+    if (app.id === 'nyaner' && feedCount > 0) badge = `<span class="app-badge">${feedCount}</span>`;
+    if (app.id === 'message' && state.commercialOfferReceived) badge = `<span class="app-badge">1</span>`;
+
+    const iconContent = app.logo
+      ? `<div class="app-icon-bg app-icon-logo"><img src="${app.logo}" alt="${app.name}"></div>`
+      : `<div class="app-icon-bg" style="background:${app.color}">${ic(app.icon, '1.5rem')}</div>`;
+
+    return `
+      <div class="app-icon ${disabled ? 'disabled' : ''}" data-app="${app.id}">
+        ${iconContent}
+        <div class="app-icon-name">${app.name}</div>
+        ${badge}
+      </div>`;
+  }).join('');
+
+  return `<div class="app-desktop">${apps}</div>`;
+}
+
+export function renderAppPage(appId, state, onAction, onBack) {
+  const app = APP_DEFS.find(a => a.id === appId);
+  if (!app) return;
+
+  // Build action cards for this app
+  const cards = app.actions.map(actionId => {
+    const action = ACTIONS[actionId];
+    if (!action) return '';
+    const display = getActionDisplay(actionId, state) || action;
+    const disabled = !canPerformAction(state, actionId);
+    let disableReason = '';
+    if (disabled) {
+      const r = action.requires;
+      if (r.time && state.time < r.time) {
+        disableReason = actionId === 'hvp' ? `需闲暇≥${r.time}（有搭档≥2）` : `需闲暇≥${r.time}`;
+      } else if (r.passion && state.passion < r.passion) disableReason = '热情不足';
+    }
+    return `
+      <div class="app-action-card ${disabled ? 'disabled' : ''}" data-action="${actionId}">
+        <div class="app-action-icon" style="color:${app.color}">${ic(display.emoji, '1.3rem')}</div>
+        <div class="app-action-body">
+          <div class="app-action-name">${display.name}</div>
+          <div class="app-action-cost">${disabled && disableReason ? disableReason : display.costLabel}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="app-page">
+      <div class="app-titlebar" style="border-bottom-color:${app.color}">
+        <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
+        <span class="app-title">${ic(app.icon)} ${app.name}</span>
+        <span style="width:60px"></span>
+      </div>
+      <div class="app-page-body">${cards}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  // Bind
+  overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
+  overlay.querySelectorAll('.app-action-card:not(.disabled)').forEach(el => {
+    el.addEventListener('click', () => { overlay.remove(); onAction(el.dataset.action); });
+  });
+}
+
+export function renderMessageApp(state, onAction, onBack) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+
+  if (!state.commercialOfferReceived) {
+    overlay.innerHTML = `
+      <div class="app-page">
+        <div class="app-titlebar" style="border-bottom-color:#2ECC71">
+          <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
+          <span class="app-title">${ic('envelope')} 短信</span>
+          <span style="width:60px"></span>
+        </div>
+        <div class="app-page-body" style="text-align:center;padding:40px 20px;color:var(--text-muted)">
+          ${ic('envelope', '2rem')}<br><br>暂无新消息
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
+    return;
+  }
+
+  overlay.innerHTML = `
+    <div class="app-page">
+      <div class="app-titlebar" style="border-bottom-color:#2ECC71">
+        <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
+        <span class="app-title">${ic('envelope')} 短信</span>
+        <span style="width:60px"></span>
+      </div>
+      <div class="app-page-body">
+        <div style="padding:16px">
+          <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:16px">
+            <div style="width:40px;height:40px;border-radius:50%;background:#2ECC71;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">
+              ${ic('building-office', '1.1rem')}
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:0.85rem;margin-bottom:2px">某出版社编辑</div>
+              <div style="font-size:0.7rem;color:var(--text-muted)">刚刚</div>
+            </div>
+          </div>
+          <div style="background:#F0FAF0;border-radius:var(--radius);padding:14px;font-size:0.82rem;line-height:1.6;color:var(--text);margin-bottom:16px">
+            你好！我是XX出版社的编辑。在上次展会后一直在关注你的作品——我们很看好你的创作实力。<br><br>
+            不知道你有没有兴趣聊聊商业出版？从同人到商业是许多优秀创作者的自然进化路径。
+          </div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5;padding:0 4px">
+            ${ic('lightbulb')} 接受后将告别同人创作，开启商业出道结局。这是游戏的正面结局之一。
+          </div>
+          <button class="btn btn-primary btn-block" id="msg-accept" style="margin-bottom:8px">${ic('star')} 接受邀约，商业出道</button>
+          <button class="btn btn-block" id="msg-decline" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">暂时不考虑</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
+  overlay.querySelector('#msg-decline').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
+  overlay.querySelector('#msg-accept').addEventListener('click', () => { overlay.remove(); onAction('goCommercial'); });
 }
 
 function renderActionCard(action, state) {
@@ -629,7 +1153,7 @@ function renderActionCard(action, state) {
 
   return `
     <div class="action-card ${disabled ? 'disabled' : ''}" data-action="${action.id}" style="${highlight}">
-      <span class="action-emoji">${display.emoji}</span>
+      <span class="action-emoji">${ic(display.emoji)}</span>
       <span class="action-name">${display.name}</span>
       <span class="action-cost">${disabled && disableReason ? disableReason : display.costLabel}</span>
     </div>
@@ -641,10 +1165,10 @@ function renderActionCard(action, state) {
 function renderGroupedDeltas(deltas) {
   // Categorize deltas by icon/label keywords
   const groups = { passion: [], money: [], reputation: [], inventory: [], other: [] };
-  const passionIcons = ['❤️', '😰', '😮‍💨', '🌍', '🕸️', '💸', '🔥', '😞', '💬', '🎉'];
-  const moneyIcons = ['💰', '🖨️', '🤝', '💼', '🏠', '🌐'];
-  const repIcons = ['⭐', '📢', '📈'];
-  const invIcons = ['📦', '🔑', '📖'];
+  const passionIcons = ['heart', 'smiley-nervous', 'smiley-sad', 'globe', 'hourglass', 'money', 'fire', 'smiley-meh', 'chat-circle', 'confetti'];
+  const moneyIcons = ['coins', 'printer', 'handshake', 'briefcase', 'house', 'globe-simple'];
+  const repIcons = ['star', 'megaphone', 'trend-up'];
+  const invIcons = ['package', 'key', 'book-open-text'];
 
   for (const d of deltas) {
     if (passionIcons.includes(d.icon)) groups.passion.push(d);
@@ -657,18 +1181,18 @@ function renderGroupedDeltas(deltas) {
   const renderItems = (items) => items.map(d => {
     const critical = !d.positive && (d.label.includes('热情') || d.label.includes('焦虑'));
     return `<div class="delta-item" ${critical ? 'style="background:#FFF0F0;border-radius:4px;padding:1px 4px;margin:-1px -4px"' : ''}>
-      <span class="delta-icon">${d.icon}</span>
+      <span class="delta-icon">${ic(d.icon)}</span>
       <span style="flex:1">${d.label}</span>
       <span class="${d.positive ? 'delta-positive' : 'delta-negative'}">${d.value}</span>
     </div>`;
   }).join('');
 
   const sections = [
-    { key: 'passion', label: '❤️ 热情', items: groups.passion },
-    { key: 'money', label: '💰 收支', items: groups.money },
-    { key: 'reputation', label: '⭐ 声誉', items: groups.reputation },
-    { key: 'inventory', label: '📦 库存', items: groups.inventory },
-    { key: 'other', label: '📋 其他', items: groups.other },
+    { key: 'passion', label: ic('heart') + ' 热情', items: groups.passion },
+    { key: 'money', label: ic('coins') + ' 收支', items: groups.money },
+    { key: 'reputation', label: ic('star') + ' 声誉', items: groups.reputation },
+    { key: 'inventory', label: ic('package') + ' 库存', items: groups.inventory },
+    { key: 'other', label: ic('note-pencil') + ' 其他', items: groups.other },
   ].filter(s => s.items.length > 0);
 
   // If total deltas ≤ 6, show flat (no grouping needed)
@@ -698,7 +1222,7 @@ export function renderResult(state, result, onContinue) {
   const achieveHtml = newAchievements.map(id => {
     const a = getAchievementInfo(id);
     return `<div style="text-align:center;padding:8px;background:#FFF8E8;border-radius:8px;margin-bottom:8px;animation:slideUp 0.4s ease">
-      <span style="font-size:1.5rem">${a.emoji}</span>
+      <span style="font-size:1.5rem">${ic(a.emoji)}</span>
       <div style="font-weight:700;font-size:0.85rem;margin-top:4px">${a.name}</div>
       <div style="font-size:0.75rem;color:var(--text-light)">${a.desc}</div>
     </div>`;
@@ -716,16 +1240,16 @@ export function renderResult(state, result, onContinue) {
 
       ${renderStats(state)}
 
-      <div class="game-content">
+      <div class="game-content game-content--frosted">
         <div class="result-box">
-          <h3>${result.actionEmoji} ${result.actionName}</h3>
+          <h3>${ic(result.actionEmoji)} ${result.actionName}</h3>
           ${renderGroupedDeltas(result.deltas)}
         </div>
 
         ${result.salesInfo ? renderSalesBreakdown(result.salesInfo) : ''}
 
         ${chartId ? `<div class="result-box" style="padding:12px">
-          <h3 style="font-size:0.85rem;margin-bottom:8px">📊 供需曲线</h3>
+          <h3 style="font-size:0.85rem;margin-bottom:8px">${ic('chart-bar')} 供需曲线</h3>
           <div id="${chartId}"></div>
           <p style="font-size:0.7rem;color:var(--text-muted);margin-top:8px;text-align:center">
             声誉↑需求曲线右移 · 信息透明度↑转化率提升 · 绿色=你的收入
@@ -764,23 +1288,23 @@ export function renderResult(state, result, onContinue) {
 function renderSalesBreakdown(s) {
   // Collapsible panel showing the full causal chain
   const modifiers = [];
-  if (s.partnerMult !== 100) modifiers.push({ label: '搭档加成', val: s.partnerMult, icon: '🤝' });
-  if (s.shModPct < 95) modifiers.push({ label: '二手冲击', val: s.shModPct, icon: '📦' });
-  if (s.advMod !== 100) modifiers.push({ label: '宏观/AI/niche', val: s.advMod, icon: '🌐' });
-  if (s.eventBoost > 100) modifiers.push({ label: '同人展加成', val: s.eventBoost, icon: '🎪' });
-  if (s.infoHighBonus > 100) modifiers.push({ label: '口碑效应(信息≥60%)', val: s.infoHighBonus, icon: '📢' });
+  if (s.partnerMult !== 100) modifiers.push({ label: '搭档加成', val: s.partnerMult, icon: 'handshake' });
+  if (s.shModPct < 95) modifiers.push({ label: '二手冲击', val: s.shModPct, icon: 'package' });
+  if (s.advMod !== 100) modifiers.push({ label: '宏观/AI/niche', val: s.advMod, icon: 'globe-simple' });
+  if (s.eventBoost > 100) modifiers.push({ label: '同人展加成', val: s.eventBoost, icon: 'tent' });
+  if (s.infoHighBonus > 100) modifiers.push({ label: '口碑效应(信息≥60%)', val: s.infoHighBonus, icon: 'megaphone' });
 
   const modHtml = modifiers.map(m => {
     const color = m.val >= 100 ? 'var(--success)' : 'var(--danger)';
     return `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.72rem">
-      <span>${m.icon} ${m.label}</span><span style="color:${color};font-weight:600">×${(m.val / 100).toFixed(2)}</span>
+      <span>${ic(m.icon)} ${m.label}</span><span style="color:${color};font-weight:600">×${(m.val / 100).toFixed(2)}</span>
     </div>`;
   }).join('');
 
   return `
     <div class="market-panel collapsed" style="margin-bottom:10px">
       <div class="market-header" id="breakdown-toggle">
-        <span>🔬 销售因果分析</span>
+        <span>${ic('magnifying-glass')} 销售因果分析</span>
         <span class="market-arrow">▼</span>
       </div>
       <div class="market-body" style="font-size:0.75rem">
@@ -838,7 +1362,7 @@ export function renderPriceSelector(state, productType, onSelect, onCancel) {
   // Production cost context (skill-adjusted)
   const rawUnitCost = isHVP ? 50 : 7;
   const unitCost = Math.round(rawUnitCost * (1 - Math.min(0.2, (state.totalHVP * 3 + state.totalLVP) * 0.005)));
-  const recLabel = state.recessionTurnsLeft > 0 ? ' 📉下行中' : '';
+  const recLabel = state.recessionTurnsLeft > 0 ? ' ' + ic('trend-down') + '下行中' : '';
   const refPrice = isHVP ? 50 : 15; // static reference for comparison
 
   // Demand & profit preview for each tier
@@ -855,7 +1379,7 @@ export function renderPriceSelector(state, productType, onSelect, onCancel) {
   overlay.innerHTML = `
     <div class="event-card" style="max-width:400px;max-height:85vh;overflow-y:auto;text-align:left">
       <div style="text-align:center;margin-bottom:8px">
-        <span style="font-size:1.5rem">${isHVP ? '📖' : '🔑'}</span>
+        <span style="font-size:1.5rem">${isHVP ? ic('book-open-text') : ic('key')}</span>
         <div style="font-weight:700;font-size:1rem;margin-top:2px">${label}定价</div>
       </div>
 
@@ -874,7 +1398,7 @@ export function renderPriceSelector(state, productType, onSelect, onCancel) {
         </div>
         <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
           <div style="color:var(--text-muted)">单位成本 / 市场均价</div>
-          <div style="font-weight:700">¥${unitCost} / ¥${basePrice} ${basePrice > refPrice ? '📈' : basePrice < refPrice ? '📉' : ''}</div>
+          <div style="font-weight:700">¥${unitCost} / ¥${basePrice} ${basePrice > refPrice ? ic('trend-up') : basePrice < refPrice ? ic('trend-down') : ''}</div>
         </div>
       </div>
 
@@ -953,19 +1477,19 @@ export function renderSubtypeSelector(state, productType, onSelect, onCancel) {
   overlay.innerHTML = `
     <div class="event-card" style="max-width:380px;text-align:left">
       <div style="text-align:center;margin-bottom:10px">
-        <span style="font-size:1.3rem">${isHVP ? '📖' : '🔑'}</span>
+        <span style="font-size:1.3rem">${isHVP ? ic('book-open-text') : ic('key')}</span>
         <div style="font-weight:700;font-size:1rem">选择${label}类型</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
         ${Object.values(subtypes).map(s => {
           const locked = isHVP && s.requiredRep > 0 && state.reputation < s.requiredRep;
-          const lockLabel = locked ? ` 🔒 声誉≥${s.requiredRep}` : '';
+          const lockLabel = locked ? ` ${ic('lock')} 声誉≥${s.requiredRep}` : '';
           const detail = isHVP
             ? `${s.monthsSolo}月(独)/${s.monthsPartner}月(搭) · ¥${s.costRange[0]}~${s.costRange[1]}`
             : `¥${s.cost} · ${s.batchSize}个/批`;
           return `
           <div class="price-btn subtype-btn" data-subtype="${s.id}" ${locked ? 'data-locked="1"' : ''} style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:${locked ? 'not-allowed' : 'pointer'};${locked ? 'opacity:0.5;' : ''}">
-            <span style="font-size:1.3rem">${s.emoji}</span>
+            <span style="font-size:1.3rem">${ic(s.emoji)}</span>
             <div style="flex:1">
               <div style="font-weight:700;font-size:0.85rem">${s.name}${lockLabel}</div>
               <div style="font-size:0.72rem;color:var(--text-light)">${s.desc}</div>
@@ -1015,7 +1539,7 @@ export function renderCreativeChoice(choiceData, onSelect, onCancel) {
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
         ${choiceData.options.map(o => `
           <div class="price-btn choice-btn" data-choice="${o.id}" style="display:flex;align-items:center;gap:10px;padding:12px;cursor:pointer">
-            <span style="font-size:1.5rem">${o.emoji}</span>
+            <span style="font-size:1.5rem">${ic(o.emoji)}</span>
             <div>
               <div style="font-weight:700;font-size:0.9rem">${o.name}</div>
               <div style="font-size:0.75rem;color:var(--text-light)">${o.desc}</div>
@@ -1058,23 +1582,23 @@ export function renderStrategySelector(state, onSelect) {
   overlay.className = 'event-overlay';
 
   const strategies = [
-    { id: 'normal', emoji: '📦', name: '普通发售', desc: '按正常流程印刷发售', detail: '不做特殊处理。二手市场自由流通。' },
-    { id: 'unlimited', emoji: '♾️', name: '不限量发售', desc: '承诺持续接受预订再版', detail: '投机客无法预估存量，泡沫项趋近于零。压制二手HVP炒价。' },
-    { id: 'signed', emoji: '✍️', name: 'To签/定制化', desc: '每本附赠买家专属签绘', detail: '大幅降低二手流通价值（个人签名难以转售）。粉丝好感↑声誉+0.1。' },
-    { id: 'digital', emoji: '📱', name: '同步发行电子版', desc: '实体+电子同步发售', detail: '用低成本满足内容消费需求，减少投机买家。额外获得约30%电子版收入。' },
+    { id: 'normal', emoji: 'package', name: '普通发售', desc: '按正常流程印刷发售', detail: '不做特殊处理。二手市场自由流通。' },
+    { id: 'unlimited', emoji: 'infinity', name: '不限量发售', desc: '承诺持续接受预订再版', detail: '投机客无法预估存量，泡沫项趋近于零。压制二手HVP炒价。' },
+    { id: 'signed', emoji: 'pencil', name: 'To签/定制化', desc: '每本附赠买家专属签绘', detail: '大幅降低二手流通价值（个人签名难以转售）。粉丝好感↑声誉+0.1。' },
+    { id: 'digital', emoji: 'phone', name: '同步发行电子版', desc: '实体+电子同步发售', detail: '用低成本满足内容消费需求，减少投机买家。额外获得约30%电子版收入。' },
   ];
 
   overlay.innerHTML = `
     <div class="event-card" style="max-width:380px;text-align:left">
       <div style="text-align:center;margin-bottom:8px">
-        <span style="font-size:1.3rem">🛡️</span>
+        <span style="font-size:1.3rem">${ic('shield')}</span>
         <div style="font-weight:700;font-size:1rem">发售策略</div>
         <div style="font-size:0.75rem;color:var(--text-light)">选择如何发售你的同人本（影响二手市场行为）</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
         ${strategies.map(s => `
           <div class="price-btn strat-btn" data-strat="${s.id}" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;cursor:pointer">
-            <span style="font-size:1.3rem">${s.emoji}</span>
+            <span style="font-size:1.3rem">${ic(s.emoji)}</span>
             <div>
               <div style="font-weight:700;font-size:0.85rem">${s.name}</div>
               <div style="font-size:0.72rem;color:var(--text-light)">${s.desc}</div>
@@ -1116,29 +1640,29 @@ export function renderStrategySelector(state, onSelect) {
 export function renderEventModeSelector(state, event, onSelect, onCancel) {
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
-  const condLabel = event.condition === 'popular' ? ' 🔥人气爆棚' : '';
+  const condLabel = event.condition === 'popular' ? ' ' + ic('fire') + '人气爆棚' : '';
 
   overlay.innerHTML = `
     <div class="event-card" style="max-width:360px;text-align:left">
       <div style="text-align:center;margin-bottom:10px">
-        <div style="font-size:1.3rem">🎪</div>
+        <div style="font-size:1.3rem">${ic('tent')}</div>
         <div style="font-weight:700">${event.name}@${event.city}${condLabel}</div>
-        <div style="font-size:0.75rem;color:var(--text-light)">路费¥${event.travelCost} · 📦本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}</div>
+        <div style="font-size:0.75rem;color:var(--text-light)">路费¥${event.travelCost} · ${ic('package')}本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
         <div class="price-btn mode-btn${state.time < 3 ? ' disabled' : ''}" data-mode="attend" style="padding:12px;cursor:${state.time < 3 ? 'not-allowed' : 'pointer'};${state.time < 3 ? 'opacity:0.5;' : ''}">
-          <div style="font-weight:700;font-size:0.9rem">🏪 亲自摆摊</div>
+          <div style="font-weight:700;font-size:0.9rem">${ic('storefront')} 亲自摆摊</div>
           <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">进入展会迷你游戏，亲手招揽客人售卖。销量取决于你的操作表现。</div>
           <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-5 · 闲暇≥3h · 路费+住宿餐饮+摊位≈¥${event.travelCost + Math.round(event.travelCost * 1.2 + 200)} · 连续参展有疲劳</div>
-          ${state.time < 3 ? `<div style="font-size:0.65rem;color:var(--danger);margin-top:2px">⚠ 闲暇不足（当前${state.time}h），无法亲参</div>` : ''}
+          ${state.time < 3 ? `<div style="font-size:0.65rem;color:var(--danger);margin-top:2px">${ic('warning')} 闲暇不足（当前${state.time}h），无法亲参</div>` : ''}
         </div>
         <div class="price-btn mode-btn" data-mode="consign" style="padding:12px;cursor:pointer">
-          <div style="font-weight:700;font-size:0.9rem">📦 寄售委托</div>
+          <div style="font-weight:700;font-size:0.9rem">${ic('package')} 寄售委托</div>
           <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">委托朋友或摊主代售，无需亲自到场。销量由市场供需模型决定。</div>
           <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-2 · 闲暇≥1h · 邮费¥${Math.round(event.travelCost * 0.3)} · 无参展疲劳</div>
         </div>
       </div>
-      <div style="font-size:0.68rem;color:var(--text-muted);text-align:center;margin-bottom:8px;line-height:1.4">💡 不想玩小游戏？选择寄售可跳过，直接按市场模型结算</div>
+      <div style="font-size:0.68rem;color:var(--text-muted);text-align:center;margin-bottom:8px;line-height:1.4">${ic('lightbulb')} 不想玩小游戏？选择寄售可跳过，直接按市场模型结算</div>
       <button class="btn btn-primary btn-block" id="btn-mode-confirm" disabled style="opacity:0.5">请选择参展方式</button>
       <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
@@ -1178,14 +1702,14 @@ export function renderEventSelector(state, onSelect, onCancel) {
   overlay.className = 'event-overlay';
   overlay.innerHTML = `
     <div class="event-card" style="max-width:360px">
-      <div class="event-emoji">🎪</div>
+      <div class="event-emoji">${ic('tent')}</div>
       <div class="event-title">选择同人展</div>
       <div class="event-desc" style="margin-bottom:8px">本月有${events.length}个同人展可以参加（一个月只能去一个）</div>
-      <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">📦 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
+      <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">${ic('package')} 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
       ${events.map((e, i) => `
         <div class="price-btn" data-idx="${i}" style="margin-bottom:8px;text-align:left;padding:12px">
-          <div style="font-weight:700">${e.size === 'mega' ? '🌟' : e.size === 'big' ? '🎪' : '📋'} ${e.name}</div>
-          <div style="font-size:0.8rem;color:var(--text-light)">📍${e.city} · 路费¥${e.travelCost} · 销量×${e.salesBoost} · 声誉+${e.reputationBoost}</div>
+          <div style="font-weight:700">${e.size === 'mega' ? ic('star-four') : e.size === 'big' ? ic('tent') : ic('note-pencil')} ${e.name}</div>
+          <div style="font-size:0.8rem;color:var(--text-light)">${ic('map-pin')}${e.city} · 路费¥${e.travelCost} · 销量×${e.salesBoost} · 声誉+${e.reputationBoost}</div>
         </div>
       `).join('')}
       <div class="tip-box" style="text-align:left;margin-bottom:0">
@@ -1217,18 +1741,18 @@ export function renderReprintSelector(state, onSelect, onCancel) {
 
   overlay.innerHTML = `
     <div class="event-card" style="max-width:360px">
-      <div class="event-emoji">🖨️</div>
+      <div class="event-emoji">${ic('printer')}</div>
       <div class="event-title">追加印刷</div>
       <div class="event-desc" style="margin-bottom:8px">选择要追印的类型</div>
-      <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">📦 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
+      <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">${ic('package')} 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
       <div class="price-selector">
         ${hasHVP ? `<div class="price-btn" data-type="hvp">
-          <div class="price-label">📖 同人本</div>
+          <div class="price-label">${ic('book-open-text')} 同人本</div>
           <div class="price-value">30本 ¥1,200</div>
           <div class="price-desc">¥40/本 定价¥${state.inventory.hvpPrice}</div>
         </div>` : ''}
         ${hasLVP ? `<div class="price-btn" data-type="lvp">
-          <div class="price-label">🔑 谷子</div>
+          <div class="price-label">${ic('key')} 谷子</div>
           <div class="price-value">20个 ¥120</div>
           <div class="price-desc">¥6/个 定价¥${state.inventory.lvpPrice}</div>
         </div>` : ''}
@@ -1258,7 +1782,7 @@ export function renderEvent(event, onDismiss) {
   overlay.className = 'event-overlay';
   overlay.innerHTML = `
     <div class="event-card">
-      <div class="event-emoji">${event.emoji}</div>
+      <div class="event-emoji">${ic(event.emoji)}</div>
       <div class="event-title">${event.title}</div>
       <div class="event-desc">${event.desc}</div>
       <div class="event-effect ${event.effectClass}">${event.effect}</div>
@@ -1283,7 +1807,7 @@ export function renderGameOver(state, onRestart) {
   const stage = getLifeStage(state.turn);
   const isCommercial = state.commercialTransition;
   const title = isCommercial ? '商业出道' : survived >= 48 ? '传奇落幕' : survived >= 24 ? '旅程结束' : survived >= 12 ? '一段经历' : '遗憾退场';
-  const emoji = isCommercial ? '🌟' : survived >= 48 ? '🏆' : survived >= 24 ? '📖' : survived >= 12 ? '🌟' : '😢';
+  const emoji = isCommercial ? 'star-four' : survived >= 48 ? 'trophy' : survived >= 24 ? 'book-open-text' : survived >= 12 ? 'star-four' : 'smiley-sad';
 
   const stageText = stage === 'work' ? '工作后' : stage === 'university' ? '大学期间' : '暑假';
 
@@ -1303,20 +1827,20 @@ export function renderGameOver(state, onRestart) {
     .filter(id => !id.endsWith('_encounter'))
     .map(id => {
       const a = getAchievementInfo(id);
-      return `<span style="display:inline-block;background:#FFF8E8;padding:4px 10px;border-radius:20px;font-size:0.8rem;margin:3px">${a.emoji} ${a.name}</span>`;
+      return `<span style="display:inline-block;background:#FFF8E8;padding:4px 10px;border-radius:20px;font-size:0.8rem;margin:3px">${ic(a.emoji)} ${a.name}</span>`;
     }).join('');
 
   app().innerHTML = `
     <div class="screen gameover-screen">
-      <div class="go-emoji">${emoji}</div>
+      <div class="go-emoji">${ic(emoji)}</div>
       <h2>${title}</h2>
       <p class="go-subtitle">${state.gameOverReason}</p>
 
       <div class="go-stats">
         <div class="go-stat-item"><span>起点</span><span class="go-stat-val">18岁 高考后暑假</span></div>
-        <div class="go-stat-item"><span>背景</span><span class="go-stat-val">${BACKGROUNDS[state.background]?.emoji || '🏠'} ${BACKGROUNDS[state.background]?.name || '普通家庭'}</span></div>
-        <div class="go-stat-item"><span>IP</span><span class="go-stat-val">${IP_TYPES[state.market?.ipType]?.emoji || '🌟'} ${IP_TYPES[state.market?.ipType]?.name || '潜力IP'}</span></div>
-        <div class="go-stat-item"><span>禀赋</span><span class="go-stat-val">${Object.entries(state.endowments || {}).map(([k, v]) => `${ENDOWMENTS[k]?.emoji || ''}${v}`).join(' ')}</span></div>
+        <div class="go-stat-item"><span>背景</span><span class="go-stat-val">${ic(BACKGROUNDS[state.background]?.emoji || 'house')} ${BACKGROUNDS[state.background]?.name || '普通家庭'}</span></div>
+        <div class="go-stat-item"><span>IP</span><span class="go-stat-val">${ic(IP_TYPES[state.market?.ipType]?.emoji || 'star-four')} ${IP_TYPES[state.market?.ipType]?.name || '潜力IP'}</span></div>
+        <div class="go-stat-item"><span>禀赋</span><span class="go-stat-val">${Object.entries(state.endowments || {}).map(([k, v]) => `${ENDOWMENTS[k]?.emoji ? ic(ENDOWMENTS[k].emoji) : ''}${v}`).join(' ')}</span></div>
         <div class="go-stat-item"><span>终点</span><span class="go-stat-val">${age}岁 · ${stageText}</span></div>
         <div class="go-stat-item"><span>坚持月数</span><span class="go-stat-val">${survived} 个月</span></div>
         <div class="go-stat-item"><span>最高声誉</span><span class="go-stat-val">${state.maxReputation.toFixed(1)}</span></div>
@@ -1336,8 +1860,7 @@ export function renderGameOver(state, onRestart) {
       <button class="btn btn-primary" id="btn-restart">再来一局</button>
 
       <p class="tagline mt-16" style="font-size:0.7rem">
-        理论基石：Stigler信息搜寻 · Translated CES · 热情预算方程<br/>
-        Producer模型 · 多样性条件 · 基于实证数据
+        理论基石请访问个人博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a>
       </p>
     </div>
   `;
@@ -1365,129 +1888,150 @@ function getNarrativeTitle(state) {
   return getTimeLabel(state.turn);
 }
 
-function getNarrativeText(state) {
+function buildNarrativeSections(state) {
   const stage = getLifeStage(state.turn);
-  const phrases = [];
+  const alerts = [];    // { icon, text, severity: 'danger'|'warning' }
+  const spotlight = [];  // { icon, text }
+  const personal = [];   // plain strings
+  const world = { market: [], official: [], advanced: [] };
 
-  // Life stage milestones
+  // === Turn 0 special case ===
   if (state.turn === 0) {
-    return `<p>高考终于结束了！这个暑假，你决定把一直以来的同人创作梦想付诸行动，成立了自己的社团。</p>
-    <p style="color:var(--text-muted);font-size:0.8rem;margin-top:8px">提示：暑假时间充裕(${state.time}h/天)，是起步的好时机。注意管理热情值——它会随着时间推移越来越难维持。</p>`;
-  }
-  if (state.turn === 2) {
-    phrases.push('大学开学了！新环境、新朋友，但课程也开始占用时间了。');
-  }
-  if (state.turn === 14) {
-    phrases.push('大二了，课程变多，你开始感受到平衡学业和创作的压力。');
-  }
-  if (state.turn === 26) {
-    phrases.push('大三了...身边的同学开始讨论考研还是找工作。你呢？');
-  }
-  if (state.turn === 38) {
-    phrases.push('大四上学期，秋招、考研，现实的压力越来越大。还能坚持创作吗？');
-  }
-  if (state.turn === 50) {
-    phrases.push('毕业了，正式踏入社会。工作占据了大部分时间，但每个月有了固定收入。同人创作从此成了"业余爱好"...');
+    personal.push('高考终于结束了！这个暑假，你决定把一直以来的同人创作梦想付诸行动，成立了自己的社团。');
+    personal.push(`<span style="color:var(--text-muted);font-size:0.8rem">提示：暑假时间充裕(${state.time}h/天)，是起步的好时机。注意管理热情值——它会随着时间推移越来越难维持。</span>`);
+    return { alerts, spotlight, personal, world };
   }
 
-  // Time pressure
+  // === ALERTS: urgent / negative status ===
+  if (state.passion < 20) {
+    alerts.push({ icon: 'heart', text: '身心俱疲，创作热情即将耗尽...赶紧休息！', severity: 'danger' });
+  } else if (state.passion < 40) {
+    alerts.push({ icon: 'heart', text: '疲惫感在累积，注意管理热情值。', severity: 'warning' });
+  }
+
+  if (state.money < -2000) {
+    alerts.push({ icon: 'money', text: '严重亏损！焦虑影响热情。去"打工"或"接稿"吧。', severity: 'danger' });
+  } else if (state.money < -500) {
+    alerts.push({ icon: 'money', text: '贴钱做同人的焦虑感在累积...试试打工或接稿。', severity: 'warning' });
+  } else if (state.money < 0) {
+    alerts.push({ icon: 'coins', text: '资金是负数了。亏损焦虑会消耗热情。', severity: 'warning' });
+  } else if (state.money < 300 && stage !== 'work') {
+    alerts.push({ icon: 'coins', text: '资金不多了，继续制作可能会亏损。', severity: 'warning' });
+  }
+
   if (state.time <= 1) {
-    phrases.push('你现在几乎没有任何空闲时间。只能选择休息，等待忙碌的日子过去...');
+    alerts.push({ icon: 'timer', text: '几乎没有空闲时间，只能休息等忙碌的日子过去。', severity: 'danger' });
   } else if (state.time <= 2) {
-    phrases.push('时间非常紧张，只够做一些轻量级的事情。');
+    alerts.push({ icon: 'timer', text: '时间非常紧张，只够做轻量级的事情。', severity: 'warning' });
   }
 
-  // Debuffs
+  if (state.unemployed) {
+    alerts.push({ icon: 'warning-circle', text: `失业中（已找工作${state.jobSearchTurns}个月）。可以找工作、休息或接稿。`, severity: 'danger' });
+    if (state.recessionTurnsLeft > 0) alerts.push({ icon: 'trend-down', text: '经济下行让求职更加困难。', severity: 'danger' });
+  }
+
+  if (state.recessionTurnsLeft > 0) {
+    const yrs = (state.recessionTurnsLeft / 12).toFixed(1);
+    alerts.push({ icon: 'trend-down', text: `经济下行持续中（约${yrs}年），销量-30%，成本+20%。`, severity: 'warning' });
+  }
+
   if (state.timeDebuffs.length > 0) {
     const reasons = state.timeDebuffs.map(d => d.reason).join('、');
-    phrases.push(`当前受到"${reasons}"影响，可用时间减少。`);
+    alerts.push({ icon: 'hourglass', text: `受"${reasons}"影响，可用时间减少。`, severity: 'warning' });
   }
 
-  // Passion warnings
-  if (state.passion < 20) {
-    phrases.push('你感到身心俱疲，创作热情即将耗尽...也许该休息一下了。');
-  } else if (state.passion < 40) {
-    phrases.push('疲惫感在累积，需要注意管理热情值。');
-  } else if (state.passion > 85) {
-    phrases.push('你充满干劲，灵感源源不断！');
-  }
-
-  // Unemployment
-  if (state.unemployed) {
-    phrases.push(`🚨 你现在失业了（已找工作${state.jobSearchTurns}个月）。可以"找工作"、"休息"或"接稿"维持收入，但同人创作暂时搁置...`);
-    if (state.recessionTurnsLeft > 0) phrases.push('经济下行让求职更加困难，成功率大幅降低。');
-  }
-
-  // Available doujin events
+  // === SPOTLIGHT: actionable opportunities ===
   if (state.availableEvents && state.availableEvents.length > 0) {
-    const evtList = state.availableEvents.map(e =>
-      `🎪 <b>${e.name}</b>@${e.city}（路费¥${e.travelCost} 销量×${e.salesBoost}）`
-    ).join('<br>');
-    phrases.push(`本月有同人展：<br>${evtList}`);
+    for (const e of state.availableEvents) {
+      spotlight.push({ icon: 'tent', text: `<b>${e.name}</b>@${e.city} <span class="spotlight-chip">路费¥${e.travelCost}</span> <span class="spotlight-chip">销量×${e.salesBoost}</span>` });
+    }
   }
   if (state.attendingEvent) {
-    phrases.push(`✨ 上次参展加成生效中：下次售卖销量×${state.attendingEvent.salesBoost}！赶紧制作/售卖。`);
+    spotlight.push({ icon: 'sparkle', text: `参展加成生效中：售卖销量×${state.attendingEvent.salesBoost}！` });
   }
-
-  // HVP project
   if (state.hvpProject) {
     const p = state.hvpProject;
-    phrases.push(`📖 同人本创作中(${p.progress}/${p.needed})。继续选择"创作同人本"推进进度，或做其他事情暂停（进度保留）。`);
+    spotlight.push({ icon: 'book-open-text', text: `同人本创作中 <span class="spotlight-chip">${p.progress}/${p.needed}</span> 选择"创作同人本"推进进度` });
   }
 
-  // Partner
+  // === PERSONAL: life story / status ===
+  if (state.turn === 2) personal.push('大学开学了！新环境、新朋友，但课程也开始占用时间了。');
+  if (state.turn === 14) personal.push('大二了，课程变多，你开始感受到平衡学业和创作的压力。');
+  if (state.turn === 26) personal.push('大三了...身边的同学开始讨论考研还是找工作。你呢？');
+  if (state.turn === 38) personal.push('大四上学期，秋招、考研，现实的压力越来越大。还能坚持创作吗？');
+  if (state.turn === 50) personal.push('毕业了，正式踏入社会。工作占据了大部分时间，但每个月有了固定收入。同人创作从此成了"业余爱好"...');
+
+  if (state.passion > 85) personal.push('你充满干劲，灵感源源不断！');
+
   if (state.hasPartner && state.partnerType) {
     const pt = PARTNER_TYPES[state.partnerType];
     if (state.partnerType === 'toxic') {
-      phrases.push(`${pt.emoji} 有毒搭档还会纠缠你${state.partnerTurns}个月...忍忍吧。`);
+      personal.push(`${ic(pt.emoji)} 有毒搭档还会纠缠你${state.partnerTurns}个月...忍忍吧。`);
     } else {
-      phrases.push(`${pt.emoji} ${pt.name}还会陪你${state.partnerTurns}个月。`);
+      personal.push(`${ic(pt.emoji)} ${pt.name}还会陪你${state.partnerTurns}个月。`);
     }
   }
 
-  // Reputation
-  if (state.reputation >= 8) phrases.push('你是圈内公认的大手，作品发布就有人翘首以盼。');
-  else if (state.reputation >= 5) phrases.push('越来越多人认识你了，社群里经常能看到对你作品的讨论。');
-  else if (state.reputation < 0.5) phrases.push('圈子里还没什么人知道你。试试宣发推广，让更多人看到你的作品？');
+  if (state.reputation >= 8) personal.push('你是圈内公认的大手，作品发布就有人翘首以盼。');
+  else if (state.reputation >= 5) personal.push('越来越多人认识你了，社群里经常能看到对你作品的讨论。');
+  else if (state.reputation < 0.5) personal.push('圈子里还没什么人知道你。试试宣发推广？');
 
-  // Info disclosure
   if (state.infoDisclosure < 0.15) {
-    phrases.push('💡 你的信息透明度很低——潜在买家看不到你的作品质量。先"宣发推广"，然后立刻制作售卖！信息衰减很快。');
-  }
-
-  // Market ecosystem
-  if (state.market) phrases.push(...getMarketNarratives(state.market));
-  // Official IP
-  if (state.official) phrases.push(...getOfficialNarratives(state.official));
-  // Advanced systems (Phase 4+5)
-  if (state.advanced) phrases.push(...getAdvancedNarratives(state.advanced));
-
-  // Recession
-  if (state.recessionTurnsLeft > 0) {
-    const yrs = (state.recessionTurnsLeft / 12).toFixed(1);
-    phrases.push(`📉 经济下行持续中（还有约${yrs}年），销量-30%，成本+20%。寒冬中更需要精打细算。`);
-  }
-
-  // Money / Debt
-  if (state.money < -2000) {
-    phrases.push('💸 严重亏损！焦虑感严重影响创作热情。考虑去"打工"或"接稿"赚点钱吧。');
-  } else if (state.money < -500) {
-    phrases.push('💸 贴钱做同人的焦虑感在累积...可以试试"普通打工"赚稳定收入，或用创作手艺"接稿赚钱"。');
-  } else if (state.money < 0) {
-    phrases.push('资金是负数了。虽然还能创作，但亏损焦虑会消耗热情。打工或接稿可以补充资金。');
-  } else if (state.money < 300 && stage !== 'work') {
-    phrases.push('资金不多了。继续制作可能会亏损——也可以先去打工攒点钱。');
+    personal.push(`${ic('lightbulb')} 信息透明度很低——先"宣发推广"，然后立刻制作售卖！`);
   }
 
   // Default
-  if (phrases.length === 0) {
-    const defaults = [
-      '新的一个月，这个月打算做什么呢？',
-      '每一步选择都在塑造你的同人生涯。',
-      '看看手头的状态，做出最适合的选择吧。',
-    ];
-    phrases.push(defaults[state.turn % defaults.length]);
+  if (personal.length === 0 && alerts.length === 0 && spotlight.length === 0) {
+    const defaults = ['新的一个月，这个月打算做什么呢？', '每一步选择都在塑造你的同人生涯。', '看看手头的状态，做出最适合的选择吧。'];
+    personal.push(defaults[state.turn % defaults.length]);
   }
 
-  return `<p>${phrases.join('</p><p>')}</p>`;
+  // === WORLD: market / IP / advanced ===
+  if (state.market) world.market = getMarketNarratives(state.market);
+  if (state.official) world.official = getOfficialNarratives(state.official);
+  if (state.advanced) world.advanced = getAdvancedNarratives(state.advanced);
+
+  return { alerts, spotlight, personal, world };
+}
+
+// --- Section renderers ---
+function renderAlertBanner(alerts) {
+  if (!alerts.length) return '';
+  const items = alerts.map(a =>
+    `<div class="alert-item ${a.severity}"><span class="alert-icon">${ic(a.icon)}</span>${a.text}</div>`
+  ).join('');
+  return `<div class="alert-strip">${items}</div>`;
+}
+
+function renderSpotlightCard(spotlight) {
+  if (!spotlight.length) return '';
+  const items = spotlight.map(s =>
+    `<div class="spotlight-item"><span class="spotlight-icon">${ic(s.icon)}</span><span>${s.text}</span></div>`
+  ).join('');
+  return `<div class="spotlight-card"><div class="spotlight-title">${ic('target')} 本月机会</div>${items}</div>`;
+}
+
+function renderPersonalNarrative(title, personal) {
+  if (!personal.length) return '';
+  return `<div class="narrative"><div class="turn-title">${title}</div><p>${personal.join('</p><p>')}</p></div>`;
+}
+
+function renderWorldTicker(world) {
+  const all = [...world.market, ...world.official, ...world.advanced];
+  if (!all.length) return '';
+
+  const chipCount = all.length;
+  const sections = [];
+  if (world.market.length) sections.push(`<div class="world-section"><div class="world-section-label">${ic('storefront')} 市场</div>${world.market.map(t => `<div class="world-section-item">${t}</div>`).join('')}</div>`);
+  if (world.official.length) sections.push(`<div class="world-section"><div class="world-section-label">${ic('film-strip')} IP动态</div>${world.official.map(t => `<div class="world-section-item">${t}</div>`).join('')}</div>`);
+  if (world.advanced.length) sections.push(`<div class="world-section"><div class="world-section-label">${ic('globe-simple')} 宏观</div>${world.advanced.map(t => `<div class="world-section-item">${t}</div>`).join('')}</div>`);
+
+  return `
+    <div class="world-ticker collapsed">
+      <div class="world-ticker-header" id="world-ticker-toggle">
+        <span>${ic('globe')} 世界动态 <span style="font-weight:400;color:var(--text-muted);font-size:0.7rem">${chipCount}条</span></span>
+        <span class="market-arrow">▼</span>
+      </div>
+      <div class="world-ticker-body">${sections.join('')}</div>
+    </div>`;
 }

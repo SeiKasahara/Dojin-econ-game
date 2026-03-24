@@ -4,28 +4,51 @@
  */
 
 import './style.css';
-import { createInitialState, executeTurn, rollEvent, applyEvent, ACTIONS, getLifeStage } from './engine.js';
-import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice } from './ui.js';
+import { createInitialState, executeTurn, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates } from './engine.js';
+import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp } from './ui.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice } from './engine.js';
+import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
+import { ic } from './icons.js';
+import { saveGame, loadGame, deleteSave } from './save.js';
 
 let state = null;
 
 let selectedPreset = 'mid';
 let selectedIpType = 'normal';
 
+// Sync BGM with current game state
+function syncBGM(screen) {
+  if (state) state._lifeStage = getLifeStage(state.turn);
+  updateBGM(screen, state);
+}
+
 function startGame(communityPreset, ipType) {
   selectedPreset = communityPreset || 'mid';
   selectedIpType = ipType || 'normal';
   // Show endowment allocation screen before game starts
+  syncBGM('endowment');
   renderEndowments((endowments, backgroundId) => {
     state = createInitialState(selectedPreset, endowments, backgroundId, selectedIpType);
     state._prevAchievementCount = 0;
     renderGame(state, handleAction, handleRetire);
+    syncBGM('game');
+    // Show tutorial on first game start
+    renderTutorial(() => {});
   });
 }
 
+function continueGame() {
+  const saved = loadGame();
+  if (!saved) return;
+  state = saved;
+  syncBGM('game');
+  renderGame(state, handleAction, handleRetire);
+}
+
 function handleRetire() {
-  renderGameOver(state, () => renderTitle(startGame));
+  deleteSave();
+  syncBGM('gameover');
+  renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); });
 }
 
 function needsPricing(actionId) {
@@ -36,6 +59,26 @@ function needsPricing(actionId) {
 
 function handleAction(actionId) {
   const cancelBack = () => renderGame(state, handleAction, handleRetire);
+
+  // === APP routing: open app page overlay ===
+  if (actionId.startsWith('app:')) {
+    const appId = actionId.slice(4);
+    if (appId === 'message') {
+      renderMessageApp(state, handleAction, cancelBack);
+    } else if (appId === 'nyaner') {
+      openSNSPanel(state);
+    } else if (appId === 'market') {
+      openMarketApp(state);
+    } else if (appId === 'rest') {
+      // Single-action app: go directly to action
+      handleAction('rest');
+    } else if (appId === 'memu') {
+      handleAction('upgradeEquipment');
+    } else {
+      renderAppPage(appId, state, handleAction, cancelBack);
+    }
+    return;
+  }
 
   // === Attend Event: event selection → mode → mini-game/consign → proceed ===
   if (actionId === 'attendEvent') {
@@ -49,7 +92,7 @@ function handleAction(actionId) {
         state._minigameResult = null;
         state._eventMode = 'attend';
         renderEvent({
-          emoji: '😱', title: '展会流展了！',
+          emoji: 'smiley-x-eyes', title: '展会流展了！',
           desc: `${chosenEvent.name}@${chosenEvent.city}因故取消，到了现场才知道消息……路费白花了。`,
           effect: `路费-¥${chosenEvent.travelCost} 热情-5`, effectClass: 'negative',
           tip: '流展是同人展会的现实风险之一。路费变成沉没成本，只能认栽。',
@@ -80,6 +123,7 @@ function handleAction(actionId) {
         state._eventMode = mode;
         if (mode === 'attend') {
           // 亲参 → play minigame
+          syncBGM('minigame');
           import('./minigame.js').then(({ startMinigame }) => {
             startMinigame(state, chosenEvent, (mgResult) => {
               state._minigameResult = mgResult || null;
@@ -147,7 +191,7 @@ function handleAction(actionId) {
         overlay.className = 'event-overlay';
         overlay.innerHTML = `
           <div class="event-card" style="max-width:340px">
-            <div style="font-size:1.3rem">${sub.emoji}</div>
+            <div style="font-size:1.3rem">${ic(sub.emoji, '1.3rem')}</div>
             <div style="font-weight:700;margin:4px 0">继续创作${sub.name}</div>
             <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">进度 ${p.progress}/${p.needed}</div>
             <button class="btn btn-primary btn-block" id="btn-hvp-go" style="margin-bottom:6px">继续创作</button>
@@ -195,13 +239,59 @@ function handleAction(actionId) {
     return;
   }
 
+  // === Find Partner: candidate selection flow ===
+  if (actionId === 'findPartner') {
+    const candidates = generatePartnerCandidates(state);
+    if (!candidates) {
+      // No candidates available — show failure overlay then proceed
+      state._partnerSearchFailed = true;
+      proceedWithTurn(actionId);
+      return;
+    }
+    // Show candidate selection
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    overlay.innerHTML = `
+      <div class="app-page" style="max-height:75vh">
+        <div class="app-titlebar" style="border-bottom-color:#27AE60">
+          <button class="app-back" id="partner-back">${ic('arrow-left')} 返回</button>
+          <span class="app-title">${ic('handshake')} 寻找搭档</span>
+          <span style="width:60px"></span>
+        </div>
+        <div class="app-page-body">
+          <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px;text-align:center">有${candidates.length}位创作者愿意合作，选一个试试？</div>
+          ${candidates.map((c, i) => `
+            <div class="app-action-card" data-idx="${i}" style="cursor:pointer">
+              <div style="width:36px;height:36px;border-radius:50%;background:#27AE60;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;font-size:0.85rem">
+                ${ic('user')}
+              </div>
+              <div class="app-action-body">
+                <div class="app-action-name">${c.name}</div>
+                <div class="app-action-cost">${c.bio}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#partner-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+    overlay.querySelectorAll('.app-action-card').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx);
+        state._selectedPartnerCandidate = candidates[idx];
+        overlay.remove();
+        proceedWithTurn(actionId);
+      });
+    });
+    return;
+  }
+
   // Generic confirmation for all other actions
   const act = ACTIONS[actionId];
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
   overlay.innerHTML = `
     <div class="event-card" style="max-width:320px">
-      <div style="font-size:1.5rem">${act?.emoji || '❓'}</div>
+      <div style="font-size:1.5rem">${act?.emoji ? ic(act.emoji, '1.5rem') : '?'}</div>
       <div style="font-weight:700;margin:6px 0">${act?.name || actionId}</div>
       <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">${act?.costLabel || ''}</div>
       <button class="btn btn-primary btn-block" id="btn-gen-go" style="margin-bottom:6px">确认</button>
@@ -216,7 +306,9 @@ function proceedWithTurn(actionId) {
   const result = executeTurn(state, actionId);
 
   if (state.phase === 'gameover') {
-    renderGameOver(state, () => renderTitle(startGame));
+    deleteSave();
+    syncBGM('gameover');
+    renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); });
     return;
   }
 
@@ -230,12 +322,16 @@ function proceedWithTurn(actionId) {
         state.lastEvent = displayEvent;
         renderEvent(displayEvent, () => {
           applyEvent(state, event);
-          if (state.phase === 'gameover') { renderGameOver(state, () => renderTitle(startGame)); return; }
+          if (state.phase === 'gameover') { deleteSave(); syncBGM('gameover'); renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
           state.phase = 'action';
+          syncBGM('game');
+          saveGame(state);
           renderGame(state, handleAction, handleRetire);
         });
       } else {
         state.phase = 'action';
+        syncBGM('game');
+        saveGame(state);
         renderGame(state, handleAction, handleRetire);
       }
     });
@@ -247,9 +343,12 @@ function showEventChain(events, done) {
   const evt = events.shift();
   if (evt.apply) evt.apply(state);
   renderEvent(evt, () => {
-    if (state.phase === 'gameover') { renderGameOver(state, () => renderTitle(startGame)); return; }
+    if (state.phase === 'gameover') { deleteSave(); syncBGM('gameover'); renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
     showEventChain(events, done);
   });
 }
 
-renderTitle(startGame);
+preloadBGM();
+initAudioUnlock();
+syncBGM('title');
+renderTitle(startGame, continueGame);

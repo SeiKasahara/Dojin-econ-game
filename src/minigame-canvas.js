@@ -1,12 +1,14 @@
 /**
  * Doujin Event Mini-Game — Canvas Rendering
- * Emoji-based booth scene with customers, HUD, and action buttons
+ * Pixel sprite booth scene with customers, HUD, and action buttons
  */
+
+import { ic } from './icons.js';
 
 const DPR = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
 const CW = 480, CH = 300;
 
-// Emoji cache for performance
+// Emoji cache for performance (used for thought bubbles, particles, etc.)
 const emojiCache = new Map();
 function getEmojiImage(emoji, size = 20) {
   const key = `${emoji}_${size}`;
@@ -23,6 +25,49 @@ function getEmojiImage(emoji, size = 20) {
   return c;
 }
 
+// === Pixel sprite system ===
+const SPRITE_COUNT = 12;
+const NEIGHBOR_COUNT = 5;
+const spriteImages = {}; // { key: HTMLImageElement }
+let spritesLoaded = false;
+
+export function preloadSprites() {
+  if (spritesLoaded) return Promise.resolve();
+  const promises = [];
+
+  function load(key, src) {
+    const img = new Image();
+    img.src = src;
+    promises.push(new Promise(resolve => {
+      img.onload = () => { spriteImages[key] = img; resolve(); };
+      img.onerror = resolve;
+    }));
+  }
+
+  // Customer sprites
+  for (let i = 1; i <= SPRITE_COUNT; i++) load(`c${i}`, `customers/${i}.png`);
+  // Player sprite
+  load('player', 'player/player.png');
+  // Neighbor sprites
+  for (let i = 1; i <= NEIGHBOR_COUNT; i++) load(`n${i}`, `player/neighbor${i}.png`);
+  // Backgrounds & booth
+  load('bg1', 'minigame-background/bg.png');
+  load('bg2', 'minigame-background/bg2.png');
+  load('desk', 'minigame-background/desk.png');
+
+  return Promise.all(promises).then(() => { spritesLoaded = true; });
+}
+
+function drawSprite(ctx, key, x, y, size) {
+  const img = spriteImages[key];
+  if (!img) { drawEmoji(ctx, '👤', x, y, size); return; } // fallback
+  // Keep original aspect ratio, scale by height = size
+  const aspect = img.naturalWidth / img.naturalHeight;
+  const h = size;
+  const w = size * aspect;
+  ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
+}
+
 // === Mount Mini-Game UI ===
 export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
   const app = document.getElementById('app');
@@ -37,6 +82,7 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
   canvas.style.display = 'block';
   canvas.style.margin = '0 auto';
   canvas.style.borderRadius = '12px';
+  canvas.style.touchAction = 'manipulation';
   const ctx = canvas.getContext('2d');
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
@@ -46,29 +92,29 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
   container.style.background = 'var(--bg)';
   container.innerHTML = `
     <div style="padding:8px 16px 4px;display:flex;justify-content:space-between;align-items:center">
-      <span style="font-weight:700;font-size:0.9rem">🎪 ${mg.event.name}@${mg.event.city}</span>
+      <span style="font-weight:700;font-size:0.9rem">${ic('tent')} ${mg.event.name}@${mg.event.city}</span>
       <span style="display:flex;gap:4px">
-        <button class="btn btn-secondary mg-pause" style="padding:4px 10px;font-size:0.75rem;min-height:32px">⏸</button>
+        <button class="btn btn-secondary mg-pause" style="padding:4px 10px;font-size:0.75rem;min-height:32px">${ic('pause')}</button>
         <button class="btn btn-secondary mg-skip" style="padding:4px 10px;font-size:0.75rem;min-height:32px">跳过</button>
       </span>
     </div>
     <div style="padding:0 16px" id="mg-canvas-wrap"></div>
     <div style="padding:4px 16px;display:flex;gap:6px;justify-content:space-between;font-size:0.72rem;color:var(--text-light)">
-      <span id="mg-energy">⚡ 精力 100</span>
-      <span id="mg-sold">💰 售出 0</span>
-      <span id="mg-time">⏱️ 60s</span>
+      <span id="mg-energy">${ic('lightning')} 精力 100</span>
+      <span id="mg-sold">${ic('coins')} 售出 0</span>
+      <span id="mg-time">${ic('timer')} 60s</span>
     </div>
     <div class="mg-actions" id="mg-actions">
       ${Object.values(actions).map(a => `
         <button class="mg-action-btn" data-action="${a.id}">
-          <span style="font-size:1.2rem">${a.emoji}</span>
+          <span style="font-size:1.2rem">${ic(a.icon || a.emoji, '1.2rem')}</span>
           <span style="font-size:0.75rem;font-weight:600">${a.name}</span>
           <div class="mg-cd-bar" id="mg-cd-${a.id}"></div>
         </button>
       `).join('')}
     </div>
     <div id="mg-neighbor-chat" style="display:none;padding:4px 16px">
-      <button class="btn btn-accent btn-block mg-chat-btn" style="padding:8px;font-size:0.82rem">💬 和隔壁摊主聊天（热情+3）</button>
+      <button class="btn btn-accent btn-block mg-chat-btn" style="padding:8px;font-size:0.82rem">${ic('chat-circle')} 和隔壁摊主聊天（热情+3）</button>
     </div>
   `;
 
@@ -89,7 +135,7 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
     overlay.className = 'event-overlay';
     overlay.innerHTML = `
       <div class="event-card" style="max-width:320px;text-align:center">
-        <div style="font-size:1.5rem;margin-bottom:8px">⚠️</div>
+        <div style="font-size:1.5rem;margin-bottom:8px">${ic('warning', '1.5rem')}</div>
         <div style="font-weight:700;margin-bottom:8px">确定跳过小游戏？</div>
         <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:16px;line-height:1.5">
           跳过后将按当前已售出 <b>${mg.sold}件</b> 的成绩结算。<br/>剩余时间的销售机会将全部放弃。
@@ -113,13 +159,13 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
   container.querySelector('.mg-pause').addEventListener('click', () => {
     if (mg.phase === 'playing') {
       mg.phase = 'paused';
-      container.querySelector('.mg-pause').textContent = '▶';
+      container.querySelector('.mg-pause').innerHTML = ic('play');
       // Show pause overlay on canvas
       const pDiv = document.createElement('div');
       pDiv.id = 'mg-pause-overlay';
       pDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:12px;z-index:10';
       pDiv.innerHTML = `
-        <div style="color:#fff;font-size:1.2rem;font-weight:700">⏸ 暂停中</div>
+        <div style="color:#fff;font-size:1.2rem;font-weight:700">${ic('pause')} 暂停中</div>
         <button class="btn btn-primary" id="mg-resume" style="padding:8px 24px">继续</button>
         <button class="btn btn-secondary" id="mg-restart" style="padding:6px 20px;font-size:0.8rem">重新开始</button>
       `;
@@ -129,7 +175,7 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
       pDiv.querySelector('#mg-resume').addEventListener('click', () => {
         mg.phase = 'playing';
         mg.lastTimestamp = performance.now();
-        container.querySelector('.mg-pause').textContent = '⏸';
+        container.querySelector('.mg-pause').innerHTML = ic('pause');
         pDiv.remove();
       });
       pDiv.querySelector('#mg-restart').addEventListener('click', () => {
@@ -140,7 +186,7 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
     } else if (mg.phase === 'paused') {
       mg.phase = 'playing';
       mg.lastTimestamp = performance.now();
-      container.querySelector('.mg-pause').textContent = '⏸';
+      container.querySelector('.mg-pause').innerHTML = ic('pause');
       document.getElementById('mg-pause-overlay')?.remove();
     }
   });
@@ -159,9 +205,9 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
     const e = container.querySelector('#mg-energy');
     const s = container.querySelector('#mg-sold');
     const t = container.querySelector('#mg-time');
-    if (e) e.textContent = `⚡ 精力 ${Math.floor(mg.energy)}`;
-    if (s) s.textContent = `💰 售出 ${mg.score.sold}`;
-    if (t) t.textContent = `⏱️ ${Math.ceil(mg.timeRemaining / 1000)}s`;
+    if (e) e.innerHTML = `${ic('lightning')} 精力 ${Math.floor(mg.energy)}`;
+    if (s) s.innerHTML = `${ic('coins')} 售出 ${mg.score.sold}`;
+    if (t) t.innerHTML = `${ic('timer')} ${Math.ceil(mg.timeRemaining / 1000)}s`;
 
     // Update cooldown bars
     for (const [id, cd] of Object.entries(mg.cooldowns)) {
@@ -191,8 +237,59 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
     emojiCache.clear();
   }
 
+  // Dialog overlay management
+  let dialogOverlay = null;
+  function showDialog(dialog, onChoice) {
+    if (dialogOverlay) dialogOverlay.remove();
+    const wrap = container.querySelector('#mg-canvas-wrap');
+    wrap.style.position = 'relative';
+
+    dialogOverlay = document.createElement('div');
+    dialogOverlay.id = 'mg-dialog';
+    dialogOverlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.55);display:flex;flex-direction:column;justify-content:flex-end;border-radius:12px;z-index:20;padding:8px';
+
+    const spriteHtml = dialog.customerSprite
+      ? `<img src="customers/${dialog.customerSprite.replace('c','')}.png" style="width:40px;height:40px;object-fit:contain;border-radius:50%;background:#fff;border:2px solid #fff">`
+      : `<div style="width:40px;height:40px;border-radius:50%;background:#888;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem">?</div>`;
+
+    if (dialog.resolved) {
+      // Show reply
+      dialogOverlay.innerHTML = `
+        <div style="background:#fff;border-radius:12px;padding:10px 12px;display:flex;gap:8px;align-items:flex-start">
+          ${dialog.positive
+            ? '<img src="player/player.png" style="width:36px;height:36px;object-fit:contain;border-radius:50%;background:#FFE8E8;border:2px solid #fff;flex-shrink:0">'
+            : spriteHtml.replace('style="', 'style="flex-shrink:0;')}
+          <div style="font-size:0.78rem;line-height:1.5;color:${dialog.positive ? 'var(--success)' : 'var(--danger)'}">${dialog.reply}</div>
+        </div>`;
+    } else {
+      // Show question + choices
+      dialogOverlay.innerHTML = `
+        <div style="background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;gap:8px;align-items:flex-start">
+          ${spriteHtml}
+          <div style="font-size:0.8rem;line-height:1.5;color:var(--text);flex:1">${dialog.customerText}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${dialog.choices.map((c, i) => `
+            <button class="mg-dialog-choice" data-idx="${i}" style="background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:0.75rem;text-align:left;cursor:pointer;display:flex;gap:8px;align-items:center;transition:background 0.15s">
+              <img src="player/player.png" style="width:28px;height:28px;object-fit:contain;border-radius:50%;background:#FFE8E8;flex-shrink:0">
+              <span>${c.text}</span>
+            </button>`).join('')}
+        </div>`;
+      dialogOverlay.querySelectorAll('.mg-dialog-choice').forEach(btn => {
+        btn.addEventListener('click', () => onChoice(parseInt(btn.dataset.idx)));
+      });
+    }
+    wrap.appendChild(dialogOverlay);
+  }
+
+  function hideDialog() {
+    if (dialogOverlay) { dialogOverlay.remove(); dialogOverlay = null; }
+  }
+
   // Attach updateHUD to be callable
   canvas._updateHUD = updateHUD;
+  canvas._showDialog = showDialog;
+  canvas._hideDialog = hideDialog;
 
   return { canvas, ctx, container, cleanup };
 }
@@ -203,36 +300,36 @@ export function renderFrame(ctx, mg, canvas) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // --- Floor ---
-  ctx.fillStyle = '#F5E6D0';
-  ctx.fillRect(0, 0, W, H);
-  // Floor grid
-  ctx.strokeStyle = '#E8D5C0';
-  ctx.lineWidth = 0.5;
-  for (let x = 0; x < W; x += 30) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-  }
-  for (let y = 0; y < H; y += 30) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  // --- Background ---
+  const bgImg = spriteImages[mg._bgKey || 'bg1'];
+  if (bgImg) {
+    ctx.drawImage(bgImg, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#F5E6D0';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#E8D5C0';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x < W; x += 30) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 30) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   }
 
-  // --- Neighbor booths (active competitors) ---
-  drawBooth(ctx, 20, 190, 60, 40, '#D4C5B0', '🎨');
-  drawBooth(ctx, 400, 190, 60, 40, '#C5D4B0', '✏️');
-  // Neighbor shopkeepers
-  drawEmoji(ctx, '🧑‍🎨', 50, 225, 16);
-  drawEmoji(ctx, '🧑‍💻', 430, 225, 16);
+  // --- Neighbor booths ---
+  drawBooth(ctx, 10, 185, 80, 50, '#D4C5B0', null);
+  drawBooth(ctx, 390, 185, 80, 50, '#C5D4B0', null);
+  // Neighbor shopkeepers (pixel sprites)
+  drawSprite(ctx, mg._neighborLeftSprite || 'n1', 50, 218, 54);
+  drawSprite(ctx, mg._neighborRightSprite || 'n2', 430, 218, 54);
 
   // --- Player booth ---
-  drawBooth(ctx, mg.boothX, mg.boothY, mg.boothW, mg.boothH, '#FFD6D6', '📖🔑');
+  drawBooth(ctx, mg.boothX, mg.boothY, mg.boothW, mg.boothH, '#FFD6D6', null);
   // Works display
   ctx.fillStyle = '#3D2B1F';
   ctx.font = '9px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(`本${mg.playerWorks.hvp} 谷${mg.playerWorks.lvp}`, mg.boothX + mg.boothW / 2, mg.boothY + mg.boothH + 12);
 
-  // Player emoji at booth
-  drawEmoji(ctx, '🧑‍🎨', mg.boothX + mg.boothW / 2, mg.boothY + mg.boothH - 5, 22);
+  // Player pixel sprite at booth
+  drawSprite(ctx, 'player', mg.boothX + mg.boothW / 2, mg.boothY + mg.boothH - 12, 60);
 
   // --- Customers ---
   for (const c of mg.customers) {
@@ -329,13 +426,21 @@ export function renderScoring(ctx, result, canvas) {
 
 // === Helper: Draw booth ===
 function drawBooth(ctx, x, y, w, h, color, items) {
-  ctx.fillStyle = color;
-  ctx.strokeStyle = '#8B7355';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, x, y, w, h, 4);
-  ctx.fill();
-  ctx.stroke();
-  // Items on table
+  const deskImg = spriteImages['desk'];
+  if (deskImg) {
+    // Draw desk sprite, keeping aspect ratio, fitting to booth width
+    const aspect = deskImg.naturalWidth / deskImg.naturalHeight;
+    const dw = w;
+    const dh = w / aspect;
+    ctx.drawImage(deskImg, x, y + h - dh, dw, dh);
+  } else {
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#8B7355';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, x, y, w, h, 4);
+    ctx.fill();
+    ctx.stroke();
+  }
   if (items) {
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
@@ -351,8 +456,12 @@ function drawCustomer(ctx, c) {
   ctx.ellipse(c.x, c.y + 10, 8, 3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Emoji
-  drawEmoji(ctx, c.emoji, c.x, c.y, 18);
+  // Pixel sprite (or emoji fallback)
+  if (c.spriteId) {
+    drawSprite(ctx, `c${c.spriteId}`, c.x, c.y, 51);
+  } else {
+    drawEmoji(ctx, c.emoji || '👤', c.x, c.y, 18);
+  }
 
   // Thought bubble
   if (c.thoughtBubble && (c.state === 'browsing' || c.state === 'interested' || c.state === 'browsing_neighbor')) {

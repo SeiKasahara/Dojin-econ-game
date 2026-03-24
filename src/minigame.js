@@ -3,17 +3,21 @@
  * Player runs a booth at a doujin event, interacts with customers
  */
 
-import { renderMinigame, renderFrame, renderScoring } from './minigame-canvas.js';
+import { renderMinigame, renderFrame, renderScoring, preloadSprites } from './minigame-canvas.js';
+import dialogData from './minigame-dialogs.json';
 
 const CUSTOMER_EMOJIS = ['👤', '🧑', '👩', '👨', '🧒', '👧', '🧑‍🎓', '👩‍🎓'];
+const SPRITE_COUNT = 12;
+const DIALOG_CHANCE = 0.3; // 30% chance per action
+const MAX_DIALOGS_PER_GAME = 4; // cap to keep game flowing
 const PREF_MAP = { hvp: '📖', lvp: '🔑', any: '❓' };
 
 // === Actions ===
 const ACTIONS = {
-  greet:    { id: 'greet',    name: '招呼',     emoji: '🗣️', cooldown: 2000, energyCost: 4 },
-  explain:  { id: 'explain',  name: '介绍作品', emoji: '📖', cooldown: 3000, energyCost: 7 },
-  freebie:  { id: 'freebie',  name: '送无料',   emoji: '🎁', cooldown: 5000, moneyCost: 50 },
-  exchange: { id: 'exchange', name: '交换名片', emoji: '📇', cooldown: 4000, energyCost: 5 },
+  greet:    { id: 'greet',    name: '招呼',     emoji: '🗣️', icon: 'megaphone',      cooldown: 2000, energyCost: 4 },
+  explain:  { id: 'explain',  name: '介绍作品', emoji: '📖', icon: 'book-open-text',  cooldown: 3000, energyCost: 7 },
+  freebie:  { id: 'freebie',  name: '送无料',   emoji: '🎁', icon: 'gift',            cooldown: 5000, moneyCost: 50 },
+  exchange: { id: 'exchange', name: '交换名片', emoji: '📇', icon: 'address-book',    cooldown: 4000, energyCost: 5 },
 };
 
 // === Create Mini-Game State ===
@@ -57,10 +61,18 @@ function createState(mainState, event) {
     // Neighbor booth activity (competitors with their own reputation)
     neighborLeft:  { nextAction: 3000 + Math.random() * 5000, reputation: 0.5 + Math.random() * 4 },
     neighborRight: { nextAction: 5000 + Math.random() * 5000, reputation: 0.5 + Math.random() * 4 },
+    // Random background
+    _bgKey: Math.random() < 0.5 ? 'bg1' : 'bg2',
+    // Neighbor pixel sprites (random 2 from 5, no duplicates)
+    _neighborLeftSprite: `n${1 + Math.floor(Math.random() * 5)}`,
+    _neighborRightSprite: (() => { const a = 1 + Math.floor(Math.random() * 5); let b; do { b = 1 + Math.floor(Math.random() * 5); } while (b === a); return `n${b}`; })(),
     // Random in-game events
     randomEventTimer: 12000 + Math.random() * 8000, // first event after 12-20s
     randomEventsFired: 0,
     activeToast: null, // { text, emoji, life }
+    // Dialog system
+    dialogCount: 0,
+    activeDialog: null, // { customerSprite, customerText, choices, onResolve }
     // Particles (purchase animations)
     particles: [],
     // Animation frame
@@ -108,6 +120,7 @@ const MINIGAME_EVENTS = [
           targetX: mg.boothX + mg.boothW / 2, targetY: mg.boothY - 30,
           state: 'walking', preference: 'any', target: 'player_fan',
           patience: 5000, satisfaction: 55, emoji: '🧑‍🎓',
+          spriteId: 1 + Math.floor(Math.random() * SPRITE_COUNT),
           thoughtBubble: '❤️', speed: 0.05, stateTimer: 0,
         });
       }
@@ -215,6 +228,7 @@ function spawnCustomer(mg) {
     patience: 2500 + Math.random() * 3000, // 2.5-5.5s — faster turnover
     satisfaction: initSat,
     emoji: CUSTOMER_EMOJIS[Math.floor(Math.random() * CUSTOMER_EMOJIS.length)],
+    spriteId: 1 + Math.floor(Math.random() * SPRITE_COUNT),
     thoughtBubble: initBubble,
     speed: 0.03 + Math.random() * 0.02,
     stateTimer: 0,
@@ -379,11 +393,95 @@ function updateCustomers(mg, dt) {
   }
 }
 
+// === Dialog System ===
+function tryTriggerDialog(mg, actionId, nearby) {
+  if (mg.activeDialog) return false;
+  if (mg.dialogCount >= MAX_DIALOGS_PER_GAME) return false;
+  if (nearby.length === 0) return false;
+  if (Math.random() > DIALOG_CHANCE) return false;
+
+  // 10% troll, 12% fan, rest normal
+  const roll = Math.random();
+  let pool, dialogType = 'normal';
+  if (roll < 0.10 && dialogData.troll?.length) {
+    pool = dialogData.troll;
+    dialogType = 'troll';
+  } else if (roll < 0.22 && dialogData.fan?.length) {
+    pool = dialogData.fan;
+    dialogType = 'fan';
+  } else {
+    pool = dialogData[actionId];
+  }
+  if (!pool || pool.length === 0) return false;
+
+  const dialog = pool[Math.floor(Math.random() * pool.length)];
+  const target = nearby[Math.floor(Math.random() * nearby.length)];
+
+  mg.phase = 'dialog';
+  mg.dialogCount++;
+  mg.activeDialog = {
+    customerSprite: target.spriteId ? `c${target.spriteId}` : null,
+    customerText: dialog.customer,
+    choices: Math.random() < 0.5 ? [...dialog.choices] : [...dialog.choices].reverse(),
+    targetCustomer: target,
+    dialogType,
+  };
+  return true;
+}
+
+export function resolveDialog(mg, choiceIdx) {
+  if (!mg.activeDialog) return;
+  const choice = mg.activeDialog.choices[choiceIdx];
+  const target = mg.activeDialog.targetCustomer;
+
+  const dtype = mg.activeDialog.dialogType || 'normal';
+
+  if (dtype === 'troll') {
+    // Troll: always negative, heavier penalty
+    if (target) { target.state = 'leaving'; target.targetY = 340; target.thoughtBubble = null; }
+    mg.energy = Math.max(0, mg.energy - 8);
+    mg.passionBonus -= 2;
+  } else if (dtype === 'fan') {
+    // Fan: always positive, extra bonus + instant buy
+    if (target) { target.satisfaction = 100; target.state = 'buying'; target.stateTimer = 800; }
+    mg.energy = Math.min(100, mg.energy + 8);
+    mg.passionBonus += 3;
+  } else if (choice.positive) {
+    // Normal positive
+    if (target) target.satisfaction += 30;
+    mg.energy = Math.min(100, mg.energy + 5);
+    mg.passionBonus += 1;
+  } else {
+    // Normal negative: 50% leave, 50% stay with reduced satisfaction
+    if (target) {
+      if (Math.random() < 0.5) {
+        target.state = 'leaving'; target.targetY = 340; target.thoughtBubble = null;
+      } else {
+        target.satisfaction = Math.max(0, target.satisfaction - 15);
+      }
+    }
+    mg.energy = Math.max(0, mg.energy - 3);
+    mg.passionBonus -= 1;
+  }
+
+  // Store reply for brief display
+  mg.activeDialog.reply = choice.reply;
+  mg.activeDialog.resolved = true;
+  mg.activeDialog.positive = choice.positive;
+
+  // Auto-dismiss after delay
+  setTimeout(() => {
+    mg.activeDialog = null;
+    mg.phase = 'playing';
+  }, 1500);
+}
+
 // === Perform Action ===
 export function performAction(mg, actionId) {
   const act = ACTIONS[actionId];
   if (!act) return;
   if (mg.cooldowns[actionId] > 0) return;
+  if (mg.phase === 'dialog') return; // block during dialog
   if (act.energyCost && mg.energy < act.energyCost) return;
 
   // Apply cost
@@ -470,6 +568,9 @@ export function performAction(mg, actionId) {
     }
     mg.particles.push({ x: mg.boothX + mg.boothW / 2, y: mg.boothY - 10, text: '📇', life: 600, vy: -0.05 });
   }
+
+  // Maybe trigger a dialog interaction
+  tryTriggerDialog(mg, actionId, nearby);
 }
 
 // === Calculate Result ===
@@ -504,6 +605,9 @@ function calculateResult(mg, event) {
 
 // === Main Entry Point ===
 export function startMinigame(mainState, event, onComplete) {
+  // Preload pixel sprites (non-blocking, uses fallback emoji if not ready)
+  preloadSprites();
+
   const mg = createState(mainState, event);
 
   // Mount UI
@@ -536,6 +640,28 @@ export function startMinigame(mainState, event, onComplete) {
     if (mg.phase === 'paused') {
       mg.lastTimestamp = timestamp;
       renderFrame(ctx, mg, canvas);
+      mg.animFrameId = requestAnimationFrame(gameLoop);
+      return;
+    }
+
+    // Dialog: show dialog UI, pause time
+    if (mg.phase === 'dialog' && mg.activeDialog) {
+      mg.lastTimestamp = timestamp;
+      renderFrame(ctx, mg, canvas);
+      if (!mg._dialogShown) {
+        mg._dialogShown = true;
+        canvas._showDialog(mg.activeDialog, (idx) => {
+          resolveDialog(mg, idx);
+          // Show reply briefly, then hide
+          canvas._showDialog(mg.activeDialog, () => {});
+          setTimeout(() => { canvas._hideDialog(); mg._dialogShown = false; }, 1500);
+        });
+      }
+      // If dialog was resolved and auto-dismissed
+      if (!mg.activeDialog) {
+        canvas._hideDialog();
+        mg._dialogShown = false;
+      }
       mg.animFrameId = requestAnimationFrame(gameLoop);
       return;
     }

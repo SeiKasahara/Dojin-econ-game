@@ -5,6 +5,7 @@
  */
 
 import { getLifeStage, activeCrisisCount } from './engine.js';
+import { ic } from './icons.js';
 
 // =============================================
 // PHASE 4: Macro Shocks + Entrepreneurial Spirit
@@ -52,7 +53,7 @@ export function tickAdvanced(adv, market, playerState) {
     adv.stagflationTurnsLeft--;
     if (adv.stagflationTurnsLeft === 0) {
       adv.costInflation = 0;
-      events.push({ msg: '📈 滞胀结束，成本压力缓解' });
+      events.push({ msg: `${ic('trend-up')} 滞胀结束，成本压力缓解` });
     }
   }
 
@@ -61,7 +62,7 @@ export function tickAdvanced(adv, market, playerState) {
     adv.consumerDebt = Math.max(0, adv.consumerDebt - 0.5);
     if (adv.consumerDebt <= 0) {
       adv.debtCrisisActive = false;
-      events.push({ msg: '💳 消费者债务危机结束' });
+      events.push({ msg: `${ic('cardholder')} 消费者债务危机结束` });
     }
   }
 
@@ -93,7 +94,7 @@ export function tickAdvanced(adv, market, playerState) {
   if (adv.nicheDiscovered) {
     adv.nicheDiscovered.turnsLeft--;
     if (adv.nicheDiscovered.turnsLeft <= 0) {
-      events.push({ msg: `🔍 细分需求"${adv.nicheDiscovered.name}"的窗口期结束了` });
+      events.push({ msg: `${ic('magnifying-glass')} 细分需求"${adv.nicheDiscovered.name}"的窗口期结束了` });
       adv.nicheDiscovered = null;
     }
   }
@@ -101,7 +102,7 @@ export function tickAdvanced(adv, market, playerState) {
   // --- Foreign content pressure varies ---
   if (Math.random() < 0.03) {
     adv.foreignContentPressure = Math.min(0.5, adv.foreignContentPressure + 0.1);
-    events.push({ msg: '🌐 海外优质同人内容涌入，竞争加剧' });
+    events.push({ msg: `${ic('globe-simple')} 海外优质同人内容涌入，竞争加剧` });
   }
   adv.foreignContentPressure = Math.max(0, adv.foreignContentPressure - 0.01);
 
@@ -152,26 +153,26 @@ export function getSignalCost(adv) {
 export function getAdvancedNarratives(adv) {
   const phrases = [];
   const labels = { small: '小型全连接', growing: '成长期', mature: '无标度网络', fragmented: '碎片化' };
-  phrases.push(`🌐 网络: ${labels[adv.networkPhase]} · ${adv.cliques}个小圈子 · 基尼系数 ${adv.networkGini.toFixed(2)}`);
+  phrases.push(`${ic('globe-simple')} 网络: ${labels[adv.networkPhase]} · ${adv.cliques}个小圈子 · 基尼系数 ${adv.networkGini.toFixed(2)}`);
 
   if (adv.networkPhase === 'mature' || adv.networkPhase === 'fragmented') {
-    phrases.push(`📣 宣发成本×${adv.signalInflation.toFixed(1)}（信号通胀：圈子越大越难被看到）`);
+    phrases.push(`${ic('megaphone-simple')} 宣发成本×${adv.signalInflation.toFixed(1)}（信号通胀：圈子越大越难被看到）`);
   }
 
   if (adv.stagflationTurnsLeft > 0) {
-    phrases.push(`⚠️ 滞胀中（${adv.stagflationTurnsLeft}月）：收入下降成本上升同时发生，无避风港`);
+    phrases.push(`${ic('warning')} 滞胀中（${adv.stagflationTurnsLeft}月）：收入下降成本上升同时发生，无避风港`);
   }
   if (adv.debtCrisisActive) {
-    phrases.push(`💳 消费者债务危机：市场需求被永久性压缩(debt=${adv.consumerDebt.toFixed(0)})`);
+    phrases.push(`${ic('cardholder')} 消费者债务危机：市场需求被永久性压缩(debt=${adv.consumerDebt.toFixed(0)})`);
   }
   if (adv.aiRevolution) {
-    phrases.push(`🤖 AI时代：同人谷需求-${Math.round(adv.aiLvpPenalty * 100)}% · 同人本稀缺溢价+${Math.round(adv.aiHvpBonus * 100)}%`);
+    phrases.push(`${ic('robot')} AI时代：同人谷需求-${Math.round(adv.aiLvpPenalty * 100)}% · 同人本稀缺溢价+${Math.round(adv.aiHvpBonus * 100)}%`);
   }
   if (adv.nicheDiscovered) {
-    phrases.push(`🔍 发现细分需求"${adv.nicheDiscovered.name}"！制作相关内容销量×${adv.nicheDiscovered.bonusMult}（剩${adv.nicheDiscovered.turnsLeft}月）`);
+    phrases.push(`${ic('magnifying-glass')} 发现细分需求"${adv.nicheDiscovered.name}"！制作相关内容销量×${adv.nicheDiscovered.bonusMult}（剩${adv.nicheDiscovered.turnsLeft}月）`);
   }
   if (adv.foreignContentPressure > 0.15) {
-    phrases.push(`🌍 海外内容竞争压力: ${Math.round(adv.foreignContentPressure * 100)}%`);
+    phrases.push(`${ic('globe')} 海外内容竞争压力: ${Math.round(adv.foreignContentPressure * 100)}%`);
   }
 
   return phrases;
@@ -184,7 +185,7 @@ export function getAdvancedNarratives(adv) {
 export const ADVANCED_EVENTS = [
   // --- STAGFLATION (macro_shocks.md §1) ---
   {
-    id: 'stagflation', emoji: '🔥📉', title: '滞胀来了！',
+    id: 'stagflation', emoji: 'fire', title: '滞胀来了！',
     desc: '经济停滞和通货膨胀同时发生——收入下降的同时物价上涨。这是最残酷的宏观冲击：你无法"买便宜的"（因为物价涨了），也无法"提价转嫁"（因为需求降了）。没有任何避风港...',
     effect: '销量-40% 成本+30%（持续18~30月）', effectClass: 'negative',
     apply: (s) => {
@@ -199,7 +200,7 @@ export const ADVANCED_EVENTS = [
 
   // --- DEBT CRISIS (macro_shocks.md §2) ---
   {
-    id: 'debt_crisis', emoji: '💳', title: '消费者债务危机',
+    id: 'debt_crisis', emoji: 'cardholder', title: '消费者债务危机',
     desc: '大量消费者背负学贷和消费贷，有效可支配收入被永久扣减。更糟的是，消费者开始抛售收藏品来还债——二手市场涌入大量廉价商品...',
     effect: '市场需求永久下降， 二手品存量倾泻 同人谷利润崩溃...', effectClass: 'negative',
     apply: (s) => {
@@ -218,7 +219,7 @@ export const ADVANCED_EVENTS = [
 
   // --- AI STRUCTURAL SHIFT (lksj.md) ---
   {
-    id: 'ai_revolution', emoji: '🤖', title: 'AI革命：市场结构永久改变',
+    id: 'ai_revolution', emoji: 'robot', title: 'AI革命：市场结构永久改变',
     desc: '生成式AI全面成熟。执行劳动被无限贬值。这不是一次冲击，而是永久的结构变化。',
     effect: '同人谷需求永久-30% 同人本获得稀缺溢价+15%', effectClass: 'neutral',
     apply: (s) => {
@@ -233,7 +234,7 @@ export const ADVANCED_EVENTS = [
 
   // --- ENTREPRENEURIAL ALERTNESS / NICHE DISCOVERY (lksj.md Kirzner) ---
   {
-    id: 'niche_discovery', emoji: '🔍', title: '发现细分需求缺口！',
+    id: 'niche_discovery', emoji: 'magnifying-glass', title: '发现细分需求缺口！',
     desc: '你敏锐地察觉到一个未被满足的市场需求——也许是一个冷门CP，一个独特的世界观设定，或者一种新的表达形式。这个发现只属于你！',
     effect: '接下来4~6个月制作的作品销量×1.8', effectClass: 'positive',
     apply: (s) => {
@@ -249,7 +250,7 @@ export const ADVANCED_EVENTS = [
 
   // --- NETWORK PHASE TRANSITION (pk45.md) ---
   {
-    id: 'network_transition', emoji: '🌐', title: '社群网络发生相变！',
+    id: 'network_transition', emoji: 'globe-simple', title: '社群网络发生相变！',
     desc: '随着社群规模扩大，网络结构发生了根本性变化。你的作品现在更难触达所有人——但在自己的圈层内更有影响力。',
     effect: '宣发成本↑ 圈层内声誉更集中', effectClass: 'neutral',
     apply: (s) => {
@@ -270,7 +271,7 @@ export const ADVANCED_EVENTS = [
 
   // --- FOREIGN CONTENT WAVE (pk45.md cross-border) ---
   {
-    id: 'foreign_wave', emoji: '🌊', title: '海外神作涌入！',
+    id: 'foreign_wave', emoji: 'waves', title: '海外神作涌入！',
     desc: '一批极高质量的海外同人作品被搬运进来。消费者惊叹之余，本土创作者感受到了强烈的竞争压力。但同时，这些作品也激发了新的创作灵感...',
     effect: '海外竞争↑ 热情+5（灵感激发） 声誉-0.1', effectClass: 'neutral',
     apply: (s) => {
@@ -284,7 +285,7 @@ export const ADVANCED_EVENTS = [
 
   // --- VEBLEN GOOD EVENT (pk45.md) ---
   {
-    id: 'veblen_hype', emoji: '💎', title: '你的旧作品成了"圣遗物"',
+    id: 'veblen_hype', emoji: 'diamond', title: '你的旧作品成了"圣遗物"',
     desc: '你早期的一部作品因为绝版而被炒出高价。圈内开始有人把它当作"正统粉丝"的身份象征，价格越高反而越多人想要...',
     effect: '资金+800 声誉+0.3', effectClass: 'positive',
     apply: (s) => { s.money += 800; s.reputation += 0.3; },
@@ -294,7 +295,7 @@ export const ADVANCED_EVENTS = [
 
   // --- SIGNAL INFLATION (posp.md Spence) ---
   {
-    id: 'signal_inflation', emoji: '📢', title: '宣发成本通胀',
+    id: 'signal_inflation', emoji: 'megaphone', title: '宣发成本通胀',
     desc: '市场上的信号噪声越来越大——AI量产的精美宣发、狂热新人的用力过猛，使得消费者越来越难辨别真实质量。你需要投入更多才能让别人注意到你。',
     effect: '宣发恢复的信息透明度↓', effectClass: 'negative',
     apply: (s) => {

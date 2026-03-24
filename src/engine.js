@@ -1,8 +1,9 @@
 /**
  * Game Engine — 同人社团物语 v4
- * 
+ *
  */
 
+import { ic } from './icons.js';
 import { createMarketState, tickMarket, getCompetitionModifier } from './market.js';
 import { createOfficialState, tickOfficial, getSecondHandModifier, recordPlayerWork } from './official.js';
 import { createAdvancedState, tickAdvanced, getAdvancedCostMod, getAdvancedSalesMod, getSignalCost, ADVANCED_EVENTS } from './advanced.js';
@@ -38,7 +39,7 @@ export function getLifeStageLabel(turn) {
 
 export function getTimeLabel(turn) {
   const m = getCalendarMonth(turn);
-  const emoji = m >= 3 && m <= 5 ? '🌸' : m >= 6 && m <= 8 ? '☀️' : m >= 9 && m <= 11 ? '🍂' : '❄️';
+  const emoji = m >= 3 && m <= 5 ? ic('flower-lotus') : m >= 6 && m <= 8 ? ic('sun') : m >= 9 && m <= 11 ? ic('leaf') : ic('snowflake');
   return `${emoji} ${getAge(turn)}岁 · ${getLifeStageLabel(turn)} · ${m}月`;
 }
 
@@ -96,10 +97,10 @@ function getRealityDrain(turn) {
 // === Partner Types ===
 // feeRange: [min, max] — cost to hire. 15% chance of fee=0 (人好)
 export const PARTNER_TYPES = {
-  supportive: { id: 'supportive', name: '默契搭档', emoji: '😊', desc: '合作愉快，效率提升', salesBonus: 1.3, passionPerTurn: 2, dramaChance: 0, feeRange: [600, 1000] },
-  demanding:  { id: 'demanding',  name: '严格搭档', emoji: '😤', desc: '要求极高，出品精良但压力大', salesBonus: 1.5, passionPerTurn: -3, dramaChance: 0.12, feeRange: [1000, 1500] },
-  unreliable: { id: 'unreliable', name: '不靠谱搭档', emoji: '😅', desc: '有时很给力，有时完全消失', salesBonus: 0.9, passionPerTurn: -1, dramaChance: 0.25, feeRange: [400, 800] },
-  toxic:      { id: 'toxic',      name: '有毒搭档', emoji: '😈', desc: '经常制造矛盾，但就是甩不掉...', salesBonus: 1.1, passionPerTurn: -6, dramaChance: 0.35, feeRange: [800, 1200] },
+  supportive: { id: 'supportive', name: '默契搭档', emoji: 'smiley', desc: '合作愉快，效率提升', salesBonus: 1.3, passionPerTurn: 2, dramaChance: 0, feeRange: [600, 1000] },
+  demanding:  { id: 'demanding',  name: '严格搭档', emoji: 'smiley-angry', desc: '要求极高，出品精良但压力大', salesBonus: 1.5, passionPerTurn: -3, dramaChance: 0.12, feeRange: [1000, 1500] },
+  unreliable: { id: 'unreliable', name: '不靠谱搭档', emoji: 'smiley-nervous', desc: '有时很给力，有时完全消失', salesBonus: 0.9, passionPerTurn: -1, dramaChance: 0.25, feeRange: [400, 800] },
+  toxic:      { id: 'toxic',      name: '有毒搭档', emoji: 'skull', desc: '经常制造矛盾，但就是甩不掉...', salesBonus: 1.1, passionPerTurn: -6, dramaChance: 0.35, feeRange: [800, 1200] },
 };
 
 function rollPartnerType(social = 0) {
@@ -113,19 +114,59 @@ function rollPartnerType(social = 0) {
   return 'toxic';
 }
 
+// === Partner Candidate Generation ===
+const PARTNER_NAMES = [
+  '星野碧', '墨染', '月见里', '七色的猫窝', '画不完的鱼',
+  '雪代薰', '桃乐丝', '玻璃鞋', '黑猫', '夕颜',
+  '柚子茶', '蓝莓酱', '小透明', '大触本触', '咸鱼太太',
+  '红茶很甜', '修罗场', '二次元住民', '深夜作画人', '社恐画师',
+];
+const PARTNER_BIOS = {
+  supportive: ['画风很稳的太太，合作过的人都说好', '效率很高，沟通也很顺畅', '人超好的！据说从来不催稿'],
+  demanding: ['据说出品质量极高但非常严格', '是个完美主义者，对细节要求很苛刻', '作品质量没话说，就是脾气有点大'],
+  unreliable: ['很有才华但好像不太靠谱', '上次展会临时消失过...但画真的好看', '回复消息时快时慢，令人捉摸不透'],
+  toxic: ['很健谈很热情，主动找你合作', '在圈里认识很多人，交际很广', '说话很直接，看起来是个有想法的人'],
+};
+
+export function generatePartnerCandidates(state) {
+  const social = state.endowments.social || 0;
+  let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + social * 0.08);
+  if (getLifeStage(state.turn) === 'work') prob *= 0.6;
+  const workYears = (state.turn - 50) / 12;
+  if (getLifeStage(state.turn) === 'work' && workYears > 3 && (state.turn - state.lastCreativeTurn) <= 6) prob += 0.1;
+
+  // Roll overall success first
+  if (Math.random() >= prob) return null; // no candidates this month
+
+  // Generate 2-3 candidates
+  const count = 2 + (Math.random() < 0.4 ? 1 : 0);
+  const usedNames = new Set();
+  const candidates = [];
+  for (let i = 0; i < count; i++) {
+    const type = rollPartnerType(social);
+    let name;
+    do { name = PARTNER_NAMES[Math.floor(Math.random() * PARTNER_NAMES.length)]; } while (usedNames.has(name));
+    usedNames.add(name);
+    const bios = PARTNER_BIOS[type];
+    const bio = bios[Math.floor(Math.random() * bios.length)];
+    candidates.push({ name, bio, _type: type }); // _type hidden from UI
+  }
+  return candidates;
+}
+
 // === Work Subtypes ===
 export const HVP_SUBTYPES = {
-  manga:    { id: 'manga',    name: '漫画本',       emoji: '📕', monthsSolo: 3, monthsPartner: 2, costRange: [3500, 5000], repMult: 1.0,  audienceMult: 1.0,  requiredRep: 0, desc: '标准同人本，全彩小批量印刷贵' },
-  novel:    { id: 'novel',    name: '小说本',       emoji: '📗', monthsSolo: 2, monthsPartner: 1, costRange: [1500, 2500], repMult: 0.8,  audienceMult: 0.75, requiredRep: 0, desc: '成本低周期短，受众略小' },
-  artbook:  { id: 'artbook',  name: '创意绘本',     emoji: '🎨', monthsSolo: 3, monthsPartner: 2, costRange: [4500, 6000], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
-  lorebook: { id: 'lorebook', name: '设定集',       emoji: '📜', monthsSolo: 2, monthsPartner: 1, costRange: [2500, 3500], repMult: 1.2,  audienceMult: 0.6,  requiredRep: 2, desc: '小众高价值，需声誉≥2' },
-  music:    { id: 'music',    name: '同人音乐专辑', emoji: '🎵', monthsSolo: 4, monthsPartner: 3, costRange: [4000, 5000], repMult: 1.3,  audienceMult: 0.7,  requiredRep: 0, desc: '独特受众，周期长' },
+  manga:    { id: 'manga',    name: '漫画本',       emoji: 'book-open', monthsSolo: 3, monthsPartner: 2, costRange: [3500, 5000], repMult: 1.0,  audienceMult: 1.0,  requiredRep: 0, desc: '标准同人本，全彩小批量印刷贵' },
+  novel:    { id: 'novel',    name: '小说本',       emoji: 'book', monthsSolo: 2, monthsPartner: 1, costRange: [1500, 2500], repMult: 0.8,  audienceMult: 0.75, requiredRep: 0, desc: '成本低周期短，受众略小' },
+  artbook:  { id: 'artbook',  name: '创意绘本',     emoji: 'palette', monthsSolo: 3, monthsPartner: 2, costRange: [4500, 6000], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
+  lorebook: { id: 'lorebook', name: '设定集',       emoji: 'scroll', monthsSolo: 2, monthsPartner: 1, costRange: [2500, 3500], repMult: 1.2,  audienceMult: 0.6,  requiredRep: 2, desc: '小众高价值，需声誉≥2' },
+  music:    { id: 'music',    name: '同人音乐专辑', emoji: 'music-notes', monthsSolo: 4, monthsPartner: 3, costRange: [4000, 5000], repMult: 1.3,  audienceMult: 0.7,  requiredRep: 0, desc: '独特受众，周期长' },
 };
 export const LVP_SUBTYPES = {
-  acrylic:  { id: 'acrylic',  name: '亚克力',     emoji: '💠', cost: 400, batchSize: 28, marginMult: 1.0, desc: '标准谷子，开模费较贵' },
-  badge:    { id: 'badge',    name: '吧唧',       emoji: '🔘', cost: 100, batchSize: 40, marginMult: 0.7, desc: '便宜量大走量型' },
-  shikishi: { id: 'shikishi', name: '色纸',       emoji: '🖼️', cost: 250, batchSize: 25, marginMult: 1.1, desc: '利润率较高' },
-  postcard: { id: 'postcard', name: '明信片套组', emoji: '💌', cost: 120, batchSize: 50, marginMult: 0.8, desc: '成本低量大' },
+  acrylic:  { id: 'acrylic',  name: '亚克力',     emoji: 'diamond', cost: 400, batchSize: 28, marginMult: 1.0, desc: '标准谷子，开模费较贵' },
+  badge:    { id: 'badge',    name: '吧唧',       emoji: 'tag', cost: 100, batchSize: 40, marginMult: 0.7, desc: '便宜量大走量型' },
+  shikishi: { id: 'shikishi', name: '色纸',       emoji: 'image', cost: 250, batchSize: 25, marginMult: 1.1, desc: '利润率较高' },
+  postcard: { id: 'postcard', name: '明信片套组', emoji: 'envelope', cost: 120, batchSize: 50, marginMult: 0.8, desc: '成本低量大' },
 };
 
 // === Creative Choices ===
@@ -133,33 +174,33 @@ export const CREATIVE_CHOICES = {
   theme: {
     title: '选择创作方向', desc: '这部作品的基调是什么？',
     options: [
-      { id: 'sweet',     name: '甜文日常', emoji: '🍰', desc: '温暖治愈的日常故事', tag: '甜文' },
-      { id: 'angst',     name: '刀子虐心', emoji: '🗡️', desc: '虐心催泪的情感冲击', tag: '虐心' },
-      { id: 'adventure', name: '热血冒险', emoji: '⚔️', desc: '热血沸腾的冒险故事', tag: '热血' },
+      { id: 'sweet',     name: '甜文日常', emoji: 'flower', desc: '温暖治愈的日常故事', tag: '甜文' },
+      { id: 'angst',     name: '刀子虐心', emoji: 'sword', desc: '虐心催泪的情感冲击', tag: '虐心' },
+      { id: 'adventure', name: '热血冒险', emoji: 'shield-chevron', desc: '热血沸腾的冒险故事', tag: '热血' },
     ],
   },
   execution: {
     title: '创作进度决策', desc: '目前进展如何？接下来要怎么做？',
     options: [
-      { id: 'rush',   name: '赶工加速', emoji: '⚡', desc: '压缩工期，省一个月但可能影响品质' },
-      { id: 'normal', name: '正常进度', emoji: '📝', desc: '按部就班，稳扎稳打' },
-      { id: 'polish', name: '精雕细琢', emoji: '✨', desc: '花更多心思打磨，额外消耗一些精力' },
+      { id: 'rush',   name: '赶工加速', emoji: 'lightning', desc: '压缩工期，省一个月但可能影响品质' },
+      { id: 'normal', name: '正常进度', emoji: 'note-pencil', desc: '按部就班，稳扎稳打' },
+      { id: 'polish', name: '精雕细琢', emoji: 'sparkle', desc: '花更多心思打磨，额外消耗一些精力' },
     ],
   },
   finalPolish: {
     title: '最后冲刺', desc: '作品即将完成，最后阶段如何处理？',
     options: [
-      { id: 'safe',       name: '保守完成',     emoji: '📦', desc: '安全收尾，稳定输出' },
-      { id: 'overhaul',   name: '大改封面/曲目', emoji: '🔄', desc: '推翻重做，可能翻车也可能惊艳' },
-      { id: 'experiment', name: '加入实验性元素', emoji: '🧪', desc: '大胆尝试，也许会成为cult经典' },
+      { id: 'safe',       name: '保守完成',     emoji: 'package', desc: '安全收尾，稳定输出' },
+      { id: 'overhaul',   name: '大改封面/曲目', emoji: 'arrows-clockwise', desc: '推翻重做，可能翻车也可能惊艳' },
+      { id: 'experiment', name: '加入实验性元素', emoji: 'flask', desc: '大胆尝试，也许会成为cult经典' },
     ],
   },
   lvpProcess: {
     title: '制作工艺', desc: '选择这批谷子的制作方式',
     options: [
-      { id: 'standard', name: '标准工艺', emoji: '📦', desc: '正常制作，品质适中' },
-      { id: 'premium',  name: '精装工艺', emoji: '💎', desc: '更好的材料和做工，成本更高' },
-      { id: 'budget',   name: '简装快出', emoji: '📋', desc: '压低成本快速出货，量大但品质一般' },
+      { id: 'standard', name: '标准工艺', emoji: 'package', desc: '正常制作，品质适中' },
+      { id: 'premium',  name: '精装工艺', emoji: 'diamond', desc: '更好的材料和做工，成本更高' },
+      { id: 'budget',   name: '简装快出', emoji: 'clipboard', desc: '压低成本快速出货，量大但品质一般' },
     ],
   },
 };
@@ -235,23 +276,23 @@ export function syncInventoryAggregates(state) {
 // === Initial State ===
 // === Endowment definitions ===
 export const ENDOWMENTS = {
-  talent:     { name: '创作天赋', emoji: '🎨', desc: '作品质量与声誉积累速度', effects: ['声誉积累+15%/级', '印刷成本-5%/级'] },
-  stamina:    { name: '体力精力', emoji: '💪', desc: '热情恢复力与创作消耗', effects: ['休息恢复+3/级', '制作同人本时间月耗-1/级'] },
-  social:     { name: '社交魅力', emoji: '🤝', desc: '搭档质量与展会表现', effects: ['找搭档+8%/级', '毒搭档率-2%/级'] },
-  marketing:  { name: '营销直觉', emoji: '📢', desc: '宣发效果与信息衰减', effects: ['宣发效果+12%/级', '信息衰减-1%/级'] },
-  resilience: { name: '心理韧性', emoji: '🛡️', desc: '抵抗现实消耗与负面事件', effects: ['现实消耗-0.5/级', '负债焦虑阈+200/级'] },
+  talent:     { name: '创作天赋', emoji: 'palette', desc: '作品质量与声誉积累速度', effects: ['声誉积累+15%/级', '印刷成本-5%/级'] },
+  stamina:    { name: '体力精力', emoji: 'barbell', desc: '热情恢复力与创作消耗', effects: ['休息恢复+3/级', '制作同人本时间月耗-1/级'] },
+  social:     { name: '社交魅力', emoji: 'handshake', desc: '搭档质量与展会表现', effects: ['找搭档+8%/级', '毒搭档率-2%/级'] },
+  marketing:  { name: '营销直觉', emoji: 'megaphone', desc: '宣发效果与信息衰减', effects: ['宣发效果+12%/级', '信息衰减-1%/级'] },
+  resilience: { name: '心理韧性', emoji: 'shield', desc: '抵抗现实消耗与负面事件', effects: ['现实消耗-0.5/级', '负债焦虑阈+200/级'] },
 };
 export const ENDOWMENT_TOTAL_POINTS = 7;
 export const ENDOWMENT_MAX_PER_TRAIT = 3;
 
 // === Background (家庭背景) ===
 export const BACKGROUNDS = {
-  poor:     { name: '困难家庭', emoji: '🏚️', weight: 5,  money: 800,  allowanceMult: 0.6, salaryMult: 0.85, fireResist: 0, desc: '拮据但坚韧，逆境出发' },
-  ordinary: { name: '普通家庭', emoji: '🏠', weight: 70, money: 2000, allowanceMult: 1.0, salaryMult: 1.0,  fireResist: 0, desc: '标准起点' },
-  comfort:  { name: '小康家庭', emoji: '🏡', weight: 12, money: 3500, allowanceMult: 1.3, salaryMult: 1.1,  fireResist: 0.02, desc: '稍有余裕，更多试错空间' },
-  educated: { name: '书香门第', emoji: '📚', weight: 8,  money: 2500, allowanceMult: 1.15, salaryMult: 1.05, fireResist: 0.01, desc: '文化氛围好，创作更容易被理解' },
-  wealthy:  { name: '富裕家庭', emoji: '💎', weight: 3,  money: 8000, allowanceMult: 2.0, salaryMult: 1.4,  fireResist: 0.04, desc: '资金充裕，几乎不用担心钱' },
-  tycoon:   { name: '超级富哥', emoji: '👑', weight: 2,  money: 20000, allowanceMult: 3.0, salaryMult: 2.0, fireResist: 0.05, desc: '钱不是问题，热情才是' },
+  poor:     { name: '困难家庭', emoji: 'house-simple', weight: 5,  money: 800,  allowanceMult: 0.6, salaryMult: 0.85, fireResist: 0, desc: '拮据但坚韧，逆境出发' },
+  ordinary: { name: '普通家庭', emoji: 'house', weight: 70, money: 2000, allowanceMult: 1.0, salaryMult: 1.0,  fireResist: 0, desc: '标准起点' },
+  comfort:  { name: '小康家庭', emoji: 'house-line', weight: 12, money: 3500, allowanceMult: 1.3, salaryMult: 1.1,  fireResist: 0.02, desc: '稍有余裕，更多试错空间' },
+  educated: { name: '书香门第', emoji: 'books', weight: 8,  money: 2500, allowanceMult: 1.15, salaryMult: 1.05, fireResist: 0.01, desc: '文化氛围好，创作更容易被理解' },
+  wealthy:  { name: '富裕家庭', emoji: 'diamond', weight: 3,  money: 8000, allowanceMult: 2.0, salaryMult: 1.4,  fireResist: 0.04, desc: '资金充裕，几乎不用担心钱' },
+  tycoon:   { name: '超级富哥', emoji: 'crown', weight: 2,  money: 20000, allowanceMult: 3.0, salaryMult: 2.0, fireResist: 0.05, desc: '钱不是问题，热情才是' },
 };
 
 export function rollBackground() {
@@ -317,6 +358,10 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     equipmentLevel: 0,              // 0/1/2/3 — upgraded equipment improves quality & reduces passion cost
     lastSponsorTurn: -12,           // turn of last community sponsorship (cooldown)
     lastSalary: 0,                  // last salary received (for unemployment spending inertia)
+    // Achievement tracking counters
+    _debtPassionStreak: 0,          // consecutive months with money<0 and passion>=60
+    _lowPassionHit: false,          // ever had passion<=15
+    _passionRecovered: false,       // recovered from <=15 to >=80
   };
 }
 
@@ -324,39 +369,39 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
 // Time is monthly leisure: 0-10 scale (10=entire month free, 0=no free time)
 // HVP is multi-turn: solo 3 months, with partner 2 months
 export const ACTIONS = {
-  hvp:         { id: 'hvp',         name: '创作同人本', emoji: '📖', type: 'hvp',
+  hvp:         { id: 'hvp',         name: '创作同人本', emoji: 'book-open-text', type: 'hvp',
                  costLabel: '热情-15/月 印刷¥2500~3000 需闲暇≥4(有搭档≥2)', requires: { passion: 15, time: 4 } },
-  lvp:         { id: 'lvp',         name: '制作谷子',   emoji: '🔑', type: 'lvp',
+  lvp:         { id: 'lvp',         name: '制作谷子',   emoji: 'key', type: 'lvp',
                  costLabel: '热情-8 资金-200 需闲暇≥2', requires: { passion: 10, time: 2 } },
-  rest:        { id: 'rest',        name: '休息充电',   emoji: '☕', type: 'rest',
+  rest:        { id: 'rest',        name: '休息充电',   emoji: 'coffee', type: 'rest',
                  costLabel: '热情+15~25', requires: {} },
-  promote_light: { id: 'promote_light', name: '轻度宣发', emoji: '📢', type: 'promote',
+  promote_light: { id: 'promote_light', name: '轻度宣发', emoji: 'megaphone', type: 'promote',
                    costLabel: '热情-3 小幅提升信息', requires: { passion: 3, time: 1 }, promoteIntensity: 'light' },
-  promote_heavy: { id: 'promote_heavy', name: '全力宣发', emoji: '📣', type: 'promote',
+  promote_heavy: { id: 'promote_heavy', name: '全力宣发', emoji: 'megaphone-simple', type: 'promote',
                    costLabel: '热情-12 大幅提升信息 需闲暇≥3', requires: { passion: 10, time: 3 }, promoteIntensity: 'heavy' },
-  findPartner: { id: 'findPartner', name: '寻找搭档',   emoji: '🤝', type: 'social',
+  findPartner: { id: 'findPartner', name: '寻找搭档',   emoji: 'handshake', type: 'social',
                  costLabel: '热情-3 搭档有稿费成本', requires: { passion: 3, time: 2 } },
-  partTimeJob: { id: 'partTimeJob', name: '普通打工',   emoji: '🏪', type: 'work',
+  partTimeJob: { id: 'partTimeJob', name: '普通打工',   emoji: 'storefront', type: 'work',
                  costLabel: '赚¥300~500 下月闲暇-1h 仅学生/失业', requires: { passion: 2, time: 3 } },
-  freelance:   { id: 'freelance',   name: '接稿赚钱',   emoji: '🎨', type: 'freelance',
+  freelance:   { id: 'freelance',   name: '接稿赚钱',   emoji: 'paint-brush', type: 'freelance',
                  costLabel: '热情-4 下月闲暇-2h 收入看声誉', requires: { passion: 4, time: 2 } },
-  attendEvent: { id: 'attendEvent', name: '参加同人展', emoji: '🎪', type: 'attendEvent',
+  attendEvent: { id: 'attendEvent', name: '参加同人展', emoji: 'tent', type: 'attendEvent',
                  costLabel: '需有同人展·路费·亲参≥3h/寄售≥1h', requires: { passion: 5, time: 1 } },
-  jobSearch:   { id: 'jobSearch',   name: '找工作',     emoji: '💼', type: 'jobSearch',
+  jobSearch:   { id: 'jobSearch',   name: '找工作',     emoji: 'briefcase', type: 'jobSearch',
                  costLabel: '热情-10 面试奔波', requires: { passion: 5 } },
-  reprint:     { id: 'reprint',     name: '追加印刷',   emoji: '🖨️', type: 'reprint',
+  reprint:     { id: 'reprint',     name: '追加印刷',   emoji: 'printer', type: 'reprint',
                  costLabel: '补印库存 需有旧作', requires: { passion: 3, time: 2 } },
-  buyGoods:    { id: 'buyGoods',    name: '购买谷子',   emoji: '🛍️', type: 'buyGoods',
+  buyGoods:    { id: 'buyGoods',    name: '购买谷子',   emoji: 'shopping-bag', type: 'buyGoods',
                  costLabel: '¥200 热情↑(效果逐年递减)', requires: { time: 1 } },
-  sellGoods:   { id: 'sellGoods',   name: '出售闲置',   emoji: '📤', type: 'sellGoods',
+  sellGoods:   { id: 'sellGoods',   name: '出售闲置',   emoji: 'export', type: 'sellGoods',
                  costLabel: '卖掉收藏品换钱 需有收藏', requires: { time: 1 } },
-  goCommercial: { id: 'goCommercial', name: '商业出道',  emoji: '🌟', type: 'goCommercial',
+  goCommercial: { id: 'goCommercial', name: '商业出道',  emoji: 'star', type: 'goCommercial',
                  costLabel: '接受出版社邀约，告别同人时代', requires: {} },
-  hireAssistant: { id: 'hireAssistant', name: '外包助手', emoji: '🧑‍💼', type: 'hireAssistant',
+  hireAssistant: { id: 'hireAssistant', name: '外包助手', emoji: 'user', type: 'hireAssistant',
                  costLabel: '¥800~1500 加速当前同人本进度', requires: { time: 1 } },
-  upgradeEquipment: { id: 'upgradeEquipment', name: '升级设备', emoji: '🖥️', type: 'upgradeEquipment',
+  upgradeEquipment: { id: 'upgradeEquipment', name: '升级设备', emoji: 'desktop', type: 'upgradeEquipment',
                  costLabel: '一次性大额投入 永久提升创作质量', requires: {} },
-  sponsorCommunity: { id: 'sponsorCommunity', name: '赞助社区', emoji: '🎗️', type: 'sponsorCommunity',
+  sponsorCommunity: { id: 'sponsorCommunity', name: '赞助社区', emoji: 'hand-heart', type: 'sponsorCommunity',
                  costLabel: '¥1500~3000 声誉↑热情↑ 冷却6月', requires: { time: 1 } },
 };
 
@@ -369,7 +414,7 @@ export function getActionDisplay(actionId, state) {
     const eff = Math.max(35, Math.round((1 - yearsIn * 0.06) * 100));
     const idle = state.turn - state.lastCreativeTurn;
     let extra = '';
-    if (idle >= 3) extra = ` ⚠️已${idle}月未活动`;
+    if (idle >= 3) extra = ` ${ic('warning')}已${idle}月未活动`;
     return { ...base, costLabel: `恢复效率${eff}%${extra}` };
   }
   if (actionId === 'jobSearch') {
@@ -378,13 +423,13 @@ export function getActionDisplay(actionId, state) {
   if (actionId === 'freelance') {
     const tc = getFreelanceTimeCost(state);
     const label = state.unemployed ? '失业接稿' : getLifeStage(state.turn) === 'university' ? '课余接稿' : '下班接稿';
-    const recTag = state.recessionTurnsLeft > 0 ? ' 📉-50%' : '';
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}-50%` : '';
     return { ...base, costLabel: `热情-4 下月闲暇-2h 需≥${tc}h ${label}${recTag}` };
   }
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
     if (stage === 'work' && !state.unemployed) return { ...base, costLabel: '仅学生/失业可用' };
-    const recTag = state.recessionTurnsLeft > 0 ? ' 📉' : '';
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
     return { ...base, costLabel: `赚¥300~500 下月闲暇-1h${recTag}` };
   }
   if (actionId === 'attendEvent') {
@@ -396,7 +441,7 @@ export function getActionDisplay(actionId, state) {
     }
     const evts = state.availableEvents;
     const best = evts[0];
-    const stockInfo = `📦本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}`;
+    const stockInfo = `${ic('package')}本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}`;
     return { ...base, costLabel: `${best.name}@${best.city} 路费¥${best.travelCost} ${stockInfo}` };
   }
   if (actionId === 'promote_light' || actionId === 'promote_heavy') {
@@ -405,7 +450,7 @@ export function getActionDisplay(actionId, state) {
     return { ...base, costLabel: base.costLabel + sigLabel };
   }
   if (actionId === 'hvp') {
-    const recTag = state.recessionTurnsLeft > 0 ? ' 📉' : '';
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
     const staCost = Math.max(8, 15 - (state.endowments?.stamina || 0));
     if (state.hvpProject) {
       const p = state.hvpProject;
@@ -415,7 +460,7 @@ export function getActionDisplay(actionId, state) {
     return { ...base, costLabel: `选择类型后开始创作${recTag}` };
   }
   if (actionId === 'lvp') {
-    const recTag = state.recessionTurnsLeft > 0 ? ' 📉' : '';
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
     return { ...base, costLabel: `选择类型和工艺${recTag}` };
   }
   if (actionId === 'reprint') {
@@ -430,7 +475,7 @@ export function getActionDisplay(actionId, state) {
   if (actionId === 'buyGoods') {
     const yearsIn = state.turn / 12;
     const eff = Math.max(30, Math.round((1 - yearsIn * 0.08) * 100));
-    return { ...base, costLabel: `¥200 热情+${Math.round(12 * eff / 100)} 效率${eff}%${state.money < 200 ? ' ⚠️资金不足' : ''}` };
+    return { ...base, costLabel: `¥200 热情+${Math.round(12 * eff / 100)} 效率${eff}%${state.money < 200 ? ` ${ic('warning')}资金不足` : ''}` };
   }
   if (actionId === 'sellGoods') {
     if (state.goodsCollection <= 0) return { ...base, costLabel: '没有收藏品可出' };
@@ -713,7 +758,7 @@ const SCHEDULED_EVENTS = [
   {
     turns: [2, 14],
     event: {
-      id: 'uni_club', emoji: '🎭', title: '社团招新',
+      id: 'uni_club', emoji: 'mask-happy', title: '社团招新',
       desc: '大学社团招新季！你加入了创作相关社团，认识了很多同好。',
       effect: '声誉+0.2 热情+5', effectClass: 'positive',
       apply: (s) => { s.reputation += 0.2; s.passion = Math.min(100, s.passion + 5); },
@@ -724,7 +769,7 @@ const SCHEDULED_EVENTS = [
   {
     condition: (turn) => getLifeStage(turn) === 'university' && (getCalendarMonth(turn) === 12 || getCalendarMonth(turn) === 6),
     event: {
-      id: 'uni_exam', emoji: '📝', title: '期末考试周',
+      id: 'uni_exam', emoji: 'note-pencil', title: '期末考试周',
       desc: '期末考试来了！接下来要全力复习，创作只能暂停...',
       effect: '时间-3h（持续2回合）', effectClass: 'negative',
       apply: (s) => { s.timeDebuffs.push({ id: 'exam', reason: '期末考试', turnsLeft: 2, delta: -3 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
@@ -735,7 +780,7 @@ const SCHEDULED_EVENTS = [
   {
     turns: [49],
     event: {
-      id: 'graduation', emoji: '🎓', title: '毕业了',
+      id: 'graduation', emoji: 'graduation-cap', title: '毕业了',
       desc: '四年大学生活结束了。从此以后，同人创作变成了"业余爱好"。工作会给你收入，但空闲时间将大幅减少...',
       effect: '热情-5 开始工作生涯', effectClass: 'neutral',
       apply: (s) => { s.passion -= 5; },
@@ -764,7 +809,7 @@ function getScheduledEvent(state) {
 // --- Random events with frequency caps ---
 const RANDOM_EVENTS = [
   {
-    id: 'boom', emoji: '🔥', title: '圈内大佬出圈了！',
+    id: 'boom', emoji: 'fire', title: '圈内大佬出圈了！',
     desc: '一位知名创作者的作品在社交媒体上爆火，整个圈子的关注度都上升了。',
     effect: '声誉+0.3 热情+10', effectClass: 'positive',
     apply: (s) => { s.reputation += 0.3; s.passion = Math.min(100, s.passion + 10); },
@@ -772,7 +817,7 @@ const RANDOM_EVENTS = [
     weight: 12, when: () => true, maxTotal: Infinity,
   },
   {
-    id: 'collapse', emoji: '💥', title: '塌方事件！',
+    id: 'collapse', emoji: 'warning-circle', title: '塌方事件！',
     desc: '圈内爆发争吵，有创作者被挂，社群气氛紧张...',
     effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(15 * m)} 声誉-${Math.round(20 * m)}%`; }, effectClass: 'negative',
     apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(15 * m); s.reputation *= (1 - 0.2 * m); },
@@ -781,7 +826,7 @@ const RANDOM_EVENTS = [
   },
   // --- 家人生病：整个游戏最多1-2次 ---
   {
-    id: 'family_emergency', emoji: '🏥', title: '家人生病了',
+    id: 'family_emergency', emoji: 'first-aid', title: '家人生病了',
     desc: '家里突然有人生病需要照顾，接下来几个月你的空闲时间会大幅减少，医疗费也是一大笔...',
     effect: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.8 + Math.random() * 0.7)); return `时间-3h(3回合) 资金-¥${cost}`; }, effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'family', reason: '照顾家人', turnsLeft: 3, delta: -3 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); const cost = Math.round((s.monthlyIncome || 800) * (0.8 + Math.random() * 0.7)); s.money -= cost; },
@@ -790,7 +835,7 @@ const RANDOM_EVENTS = [
   },
   // --- 加班/赶DDL ---
   {
-    id: 'overtime', emoji: '⏰', title: '连续加班/赶论文',
+    id: 'overtime', emoji: 'clock', title: '连续加班/赶论文',
     desc: '这段时间完全被工作或学业占满，几乎没有私人时间...',
     effect: '时间-4h（持续2回合）', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'overtime', reason: '加班/赶DDL', turnsLeft: 2, delta: -4 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
@@ -799,7 +844,7 @@ const RANDOM_EVENTS = [
   },
   // --- 假期 ---
   {
-    id: 'holiday', emoji: '🌴', title: '一段悠闲时光',
+    id: 'holiday', emoji: 'tree-palm', title: '一段悠闲时光',
     desc: '难得的闲暇，可以专心创作。',
     effect: '时间+2h(2回合) 热情+8', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'holiday', reason: '悠闲时光', turnsLeft: 2, delta: 2 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
@@ -808,7 +853,7 @@ const RANDOM_EVENTS = [
   },
   // --- 同人展 ---
   {
-    id: 'doujin_event', emoji: '🎪', title: '同人展开催！',
+    id: 'doujin_event', emoji: 'tent', title: '同人展开催！',
     desc: '本地同人展即将举办！面对面贩售，信息披露自动拉满。',
     effect: '声誉+0.2 资金+200 信息↑', effectClass: 'positive',
     apply: (s) => { s.reputation += 0.2; s.money += 200; s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); },
@@ -817,7 +862,7 @@ const RANDOM_EVENTS = [
   },
   // --- 经济下行：长期影响2-3年，整个游戏最多1-2次 ---
   {
-    id: 'recession', emoji: '📉', title: '经济下行',
+    id: 'recession', emoji: 'trend-down', title: '经济下行',
     desc: '宏观经济进入下行周期，消费者的可支配休闲资金持续减少。这不是一时的困难，而是持续数年的寒冬...',
     effect: '销量-30%（持续2~3年！）', effectClass: 'negative',
     apply: (s) => {
@@ -831,7 +876,7 @@ const RANDOM_EVENTS = [
   },
   // --- AI冲击 ---
   {
-    id: 'ai', emoji: '🤖', title: 'AI冲击波',
+    id: 'ai', emoji: 'robot', title: 'AI冲击波',
     desc: '大量AI生成的内容涌入市场，竞争加剧...',
     effect: '声誉-0.15', effectClass: 'neutral',
     apply: (s) => { s.reputation = Math.max(0, s.reputation - 0.15); },
@@ -840,7 +885,7 @@ const RANDOM_EVENTS = [
   },
   // --- 收到长评 ---
   {
-    id: 'fanmail', emoji: '💌', title: '收到热情长评！',
+    id: 'fanmail', emoji: 'envelope', title: '收到热情长评！',
     desc: '一位读者写了很长的感想，详细描述了你的作品给TA带来的感动...',
     effect: '热情+15', effectClass: 'positive',
     apply: (s) => { s.passion = Math.min(100, s.passion + 15); },
@@ -849,7 +894,7 @@ const RANDOM_EVENTS = [
   },
   // --- 印刷成本上涨 ---
   {
-    id: 'inflation', emoji: '💸', title: '印刷成本上涨',
+    id: 'inflation', emoji: 'money', title: '印刷成本上涨',
     desc: '原材料涨价，印刷和制作成本提高了...',
     effect: '资金-400', effectClass: 'negative',
     apply: (s) => { s.money -= 400; },
@@ -858,7 +903,7 @@ const RANDOM_EVENTS = [
   },
   // --- 感情变动：大学期间最多2次 ---
   {
-    id: 'uni_breakup', emoji: '💔', title: '感情变动',
+    id: 'uni_breakup', emoji: 'heart-break', title: '感情变动',
     desc: '一段感情的开始或结束占据了你大量的心理能量...',
     effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(12 * m)}`; }, effectClass: 'negative',
     apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(12 * m); },
@@ -867,7 +912,7 @@ const RANDOM_EVENTS = [
   },
   // --- 工作：升职加薪 ---
   {
-    id: 'work_raise', emoji: '📈', title: '升职加薪！',
+    id: 'work_raise', emoji: 'trend-up', title: '升职加薪！',
     desc: '工作表现不错，获得了加薪。但责任更重，时间更少...',
     effect: '资金+1000 时间-1h（永久）', effectClass: 'neutral',
     apply: (s) => { s.money += 1000; s.timeDebuffs.push({ id: 'promotion', reason: '升职加责', turnsLeft: 999, delta: -1 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
@@ -876,7 +921,7 @@ const RANDOM_EVENTS = [
   },
   // --- 工作：996 ---
   {
-    id: 'work_996', emoji: '🏢', title: '996加班季',
+    id: 'work_996', emoji: 'building-office', title: '996加班季',
     desc: '项目紧急，公司要求全员加班。几乎没有私人时间...',
     effect: '时间-4h(3回合) 资金+500', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: '996', reason: '996加班', turnsLeft: 3, delta: -4 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.money += 500; },
@@ -885,7 +930,7 @@ const RANDOM_EVENTS = [
   },
   // === Endowment-gated events ===
   {
-    id: 'inspiration_burst', emoji: '✨', title: '灵感爆发！',
+    id: 'inspiration_burst', emoji: 'sparkle', title: '灵感爆发！',
     desc: '你的创作天赋在某个瞬间被点燃，脑海中涌现出绝妙的创意！',
     effect: '热情+8 声誉+0.2', effectClass: 'positive',
     apply: (s) => { s.passion = Math.min(100, s.passion + 8); s.reputation += 0.2; },
@@ -893,7 +938,7 @@ const RANDOM_EVENTS = [
     weight: 4, when: (s) => (s.endowments.talent || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
-    id: 'creative_block', emoji: '🧱', title: '创作瓶颈',
+    id: 'creative_block', emoji: 'wall', title: '创作瓶颈',
     desc: '怎么画都不满意，反复推翻重来...感觉自己江郎才尽了。',
     effect: '热情-6', effectClass: 'negative',
     apply: (s) => { s.passion = Math.max(0, s.passion - 6); },
@@ -901,7 +946,7 @@ const RANDOM_EVENTS = [
     weight: 5, when: (s) => (s.endowments.talent || 0) <= 1 && s.totalHVP > 0, maxTotal: Infinity,
   },
   {
-    id: 'health_issue', emoji: '🤒', title: '身体不适',
+    id: 'health_issue', emoji: 'thermometer', title: '身体不适',
     desc: '最近免疫力下降，生了一场病，看病买药花了不少...',
     effect: '热情-5 时间-2h(2回合) 资金-¥500~800', effectClass: 'negative',
     apply: (s) => { s.passion = Math.max(0, s.passion - 5); s.timeDebuffs.push({ id: 'sick', reason: '身体不适', turnsLeft: 2, delta: -2 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.money -= 500 + Math.floor(Math.random() * 300); },
@@ -909,7 +954,7 @@ const RANDOM_EVENTS = [
     weight: 4, when: (s) => (s.endowments.stamina || 0) <= 1, maxTotal: 3,
   },
   {
-    id: 'energy_surge', emoji: '🔥', title: '精力充沛！',
+    id: 'energy_surge', emoji: 'fire', title: '精力充沛！',
     desc: '最近状态特别好，精力旺盛，感觉什么都能做！',
     effect: '热情+6', effectClass: 'positive',
     apply: (s) => { s.passion = Math.min(100, s.passion + 6); },
@@ -917,7 +962,7 @@ const RANDOM_EVENTS = [
     weight: 3, when: (s) => (s.endowments.stamina || 0) >= 2, maxTotal: Infinity,
   },
   {
-    id: 'friend_intro', emoji: '💬', title: '朋友介绍了靠谱搭档',
+    id: 'friend_intro', emoji: 'chat-circle', title: '朋友介绍了靠谱搭档',
     desc: '你的社交圈帮你找到了一位口碑很好的创作者，TA愿意合作！',
     effect: '自动获得优质搭档(3个月·免稿费)', effectClass: 'positive',
     apply: (s) => { if (!s.hasPartner) { s.hasPartner = true; s.partnerType = 'supportive'; s.partnerTurns = 3; s.partnerFee = 0; } },
@@ -925,7 +970,7 @@ const RANDOM_EVENTS = [
     weight: 3, when: (s) => (s.endowments.social || 0) >= 2 && !s.hasPartner, maxTotal: 2,
   },
   {
-    id: 'viral_post', emoji: '📱', title: '帖子意外火了！',
+    id: 'viral_post', emoji: 'phone', title: '帖子意外火了！',
     desc: '你随手发的一条动态获得了大量转发，信息扩散到了意想不到的范围！',
     effect: '信息+30% 声誉+0.15', effectClass: 'positive',
     apply: (s) => { s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); s.reputation += 0.15; },
@@ -933,7 +978,7 @@ const RANDOM_EVENTS = [
     weight: 3, when: (s) => (s.endowments.marketing || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
-    id: 'promo_fail', emoji: '🙈', title: '宣传翻车...',
+    id: 'promo_fail', emoji: 'eye-closed', title: '宣传翻车...',
     desc: '发了一条宣传但措辞不当，引发了一些争议...',
     effect: '声誉-0.1 信息+10%(黑红也是红)', effectClass: 'negative',
     apply: (s) => { s.reputation = Math.max(0, s.reputation - 0.1); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1); },
@@ -941,7 +986,7 @@ const RANDOM_EVENTS = [
     weight: 4, when: (s) => (s.endowments.marketing || 0) <= 1 && s.infoDisclosure > 0.3 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
-    id: 'harsh_review', emoji: '😤', title: '遭遇恶评',
+    id: 'harsh_review', emoji: 'smiley-angry', title: '遭遇恶评',
     desc: '有人公开发了一篇针对你的尖锐批评，言辞很伤人...',
     effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)}`; }, effectClass: 'negative',
     apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); },
@@ -950,7 +995,7 @@ const RANDOM_EVENTS = [
   },
   // === Speculator & secondhand market events (frmn.md) ===
   {
-    id: 'speculator_rush', emoji: '📈', title: '投机客涌入二手市场！',
+    id: 'speculator_rush', emoji: 'trend-up', title: '投机客涌入二手市场！',
     desc: '有人发现圈内某些旧作价格在涨，大量投机客开始囤货。二手市场价格被推高，普通消费者被挤出...',
     effect: '二手压力暂降 收藏品增值', effectClass: 'neutral',
     apply: (s) => {
@@ -963,7 +1008,7 @@ const RANDOM_EVENTS = [
     weight: 3, when: (s) => s.turn > 12 && s.official && (s.official.secondHandPool.lvp > 10 || s.official.secondHandPool.hvp > 5), maxTotal: Infinity,
   },
   {
-    id: 'bubble_burst', emoji: '💥', title: '二手泡沫破裂！',
+    id: 'bubble_burst', emoji: 'warning-circle', title: '二手泡沫破裂！',
     desc: '投机客集体抛售，大量二手商品涌入市场，价格暴跌！新品销量也受到冲击...',
     effect: '二手压力大幅上升 同人谷销量受挫', effectClass: 'negative',
     apply: (s) => {
@@ -976,7 +1021,7 @@ const RANDOM_EVENTS = [
     weight: 2, when: (s) => s.turn > 18 && (s.eventCounts['speculator_rush'] || 0) > 0, maxTotal: 3,
   },
   {
-    id: 'rare_work_found', emoji: '💎', title: '你的旧作成了海景房！',
+    id: 'rare_work_found', emoji: 'diamond', title: '你的旧作成了海景房！',
     desc: '你早期的一件作品因为绝版和声誉加持，在二手市场上被炒到了高价。有人愿意出高价向你求购签名版...',
     effect: '资金+声誉加成 声誉+0.3', effectClass: 'positive',
     apply: (s) => {
@@ -989,7 +1034,7 @@ const RANDOM_EVENTS = [
   },
   // === Work stage difficulty events ===
   {
-    id: 'rent_increase', emoji: '🏠', title: '房租上涨',
+    id: 'rent_increase', emoji: 'house', title: '房租上涨',
     desc: '房东通知下个月开始涨租。在这个城市，住房成本是越来越重的负担...',
     effect: '资金-300~500 热情-3', effectClass: 'negative',
     apply: (s) => {
@@ -1001,7 +1046,7 @@ const RANDOM_EVENTS = [
     weight: 5, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: 3,
   },
   {
-    id: 'work_burnout', emoji: '😩', title: '职业倦怠',
+    id: 'work_burnout', emoji: 'smiley-sad', title: '职业倦怠',
     desc: '每天重复的工作内容让你感到麻木，回到家只想瘫着什么都不做，还忍不住冲动消费...',
     effect: '热情-8 时间-2h(3回合) 资金-¥300~600', effectClass: 'negative',
     apply: (s) => {
@@ -1014,7 +1059,7 @@ const RANDOM_EVENTS = [
     weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
   },
   {
-    id: 'social_obligation', emoji: '🍻', title: '社交应酬',
+    id: 'social_obligation', emoji: 'beer-stein', title: '社交应酬',
     desc: '公司团建、同事聚餐、客户应酬……这些"不得不去"的社交活动占据了你的创作时间。',
     effect: '时间-2h(2回合) 资金-200 热情-2', effectClass: 'negative',
     apply: (s) => {
@@ -1027,7 +1072,7 @@ const RANDOM_EVENTS = [
     weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
   },
   {
-    id: 'commute_hell', emoji: '🚇', title: '通勤地狱',
+    id: 'commute_hell', emoji: 'train', title: '通勤地狱',
     desc: '公司搬了办公地点，或者你不得不搬到更远的地方住。每天通勤时间大幅增加...',
     effect: '时间-1h(永久)', effectClass: 'negative',
     apply: (s) => {
@@ -1038,7 +1083,7 @@ const RANDOM_EVENTS = [
     weight: 3, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: 2,
   },
   {
-    id: 'life_admin', emoji: '📋', title: '生活琐事',
+    id: 'life_admin', emoji: 'clipboard', title: '生活琐事',
     desc: '交费、修电器、跑手续……生活充满了琐碎但不得不做的事情，还得花钱。',
     effect: (s) => { const cost = getLifeStage(s.turn) === 'work' ? '200~500' : '50~150'; return `时间-2h(2回合) 热情-3 资金-¥${cost}`; }, effectClass: 'negative',
     apply: (s) => {
@@ -1052,7 +1097,7 @@ const RANDOM_EVENTS = [
     weight: 7, when: () => true, maxTotal: Infinity,
   },
   {
-    id: 'old_friend_reunion', emoji: '🍺', title: '老友重聚',
+    id: 'old_friend_reunion', emoji: 'beer-bottle', title: '老友重聚',
     desc: '大学时一起搞同人的朋友约你出来聚聚。几年不见，大家的生活都变了很多...',
     effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情+5 或 -${Math.round(5 * m)}（看情况）`; }, effectClass: 'neutral',
     apply: (s) => {
@@ -1068,14 +1113,14 @@ const RANDOM_EVENTS = [
   },
   // === Commercial transition event ===
   {
-    id: 'commercial_offer', emoji: '✉️', title: '出版社的邀约',
+    id: 'commercial_offer', emoji: 'envelope', title: '出版社的邀约',
     desc: '你的作品在业界引起了关注。一位出版社编辑在展会后找到你，递来了名片——"我们很看好你的创作实力，有兴趣聊聊商业出版吗？"',
     effect: '解锁「商业出道」行动', effectClass: 'positive',
     apply: (s) => { s.commercialOfferReceived = true; s.passion = Math.min(100, s.passion + 10); },
     tip: '从同人到商业是许多创作者的自然进化路径。Type-Moon从Comiket走向Fate，KEY从同人走向Kanon。当声誉和销量达到临界点，商业化就不再是"卖梦想"，而是"顺势而为"。你可以选择接受，也可以继续留在同人圈。',
     weight: 15,
     when: (s) => {
-      if (s.commercialOfferReceived || s.reputation < 12 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
+      if (s.commercialOfferReceived || s.reputation < 10 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
       // Economic crisis: publishers are cautious, only 30% chance of scouting
       if (s.recessionTurnsLeft > 0 || (s.advanced && (s.advanced.stagflationTurnsLeft > 0 || s.advanced.debtCrisisActive))) return Math.random() < 0.3;
       return true;
@@ -1084,7 +1129,7 @@ const RANDOM_EVENTS = [
   },
   // === Secondhand market event ===
   {
-    id: 'secondhand_crackdown', emoji: '🛡️', title: '平台整治二手倒卖',
+    id: 'secondhand_crackdown', emoji: 'shield', title: '平台整治二手倒卖',
     desc: '交易平台开始打击无授权二手倒卖行为，大量违规商品被下架。正规新品的竞争环境暂时好转了。',
     effect: '二手压力大幅下降 新品销量回升', effectClass: 'positive',
     apply: (s) => {
@@ -1099,7 +1144,7 @@ const RANDOM_EVENTS = [
   },
   // === Financial shock events ===
   {
-    id: 'unexpected_expense', emoji: '💳', title: '意外大额支出',
+    id: 'unexpected_expense', emoji: 'cardholder', title: '意外大额支出',
     desc: '手机摔碎了/电脑出问题/朋友随礼……生活总会给你一些"惊喜"。',
     effect: (s) => { const isWork = getLifeStage(s.turn) === 'work'; const cost = isWork ? 1500 + Math.round(Math.random() * 1500) : 300 + Math.round(Math.random() * 400); return `资金-¥${cost} 热情-3`; }, effectClass: 'negative',
     apply: (s) => { const isWork = getLifeStage(s.turn) === 'work'; const cost = isWork ? 1500 + Math.floor(Math.random() * 1500) : 300 + Math.floor(Math.random() * 400); s.money -= cost; s.passion = Math.max(0, s.passion - 3); },
@@ -1107,7 +1152,7 @@ const RANDOM_EVENTS = [
     weight: 5, when: (s) => s.turn > 3, maxTotal: Infinity,
   },
   {
-    id: 'tax_season', emoji: '🧾', title: '年度税费清算',
+    id: 'tax_season', emoji: 'receipt', title: '年度税费清算',
     desc: '工作满一年，个税汇算、社保补缴、各种年度账单一起到……钱包大出血。',
     effect: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.5 + Math.random() * 0.5)); return `资金-¥${cost}`; }, effectClass: 'negative',
     apply: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.5 + Math.random() * 0.5)); s.money -= cost; },
@@ -1192,7 +1237,7 @@ export function executeTurn(state, actionId) {
   // --- Show savings dip from last turn's event (if any) ---
   if (state._pendingEventDip) {
     const d = state._pendingEventDip;
-    result.deltas.push({ icon: '💸', label: `上月"${d.label}"导致挪用同人存款`, value: `-¥${d.amount}`, positive: false });
+    result.deltas.push({ icon: 'money', label: `上月"${d.label}"导致挪用同人存款`, value: `-¥${d.amount}`, positive: false });
     state._pendingEventDip = null;
   }
 
@@ -1204,13 +1249,13 @@ export function executeTurn(state, actionId) {
     const fatigueMult = Math.max(0.35, 1 - yearsIn * 0.06);   // Y0=100%, Y3=82%, Y5=70%, Y10+=35%
     const restore = Math.max(3, Math.round(basRestore * fatigueMult));
     state.passion = Math.min(100, state.passion + restore);
-    result.deltas.push({ icon: '❤️', label: '热情恢复', value: `+${restore}`, positive: true });
+    result.deltas.push({ icon: 'heart', label: '热情恢复', value: `+${restore}`, positive: true });
     if (fatigueMult < 0.8) {
-      result.deltas.push({ icon: '😮‍💨', label: '长期疲惫', value: `恢复效率${Math.round(fatigueMult * 100)}%`, positive: false });
+      result.deltas.push({ icon: 'smiley-sad', label: '长期疲惫', value: `恢复效率${Math.round(fatigueMult * 100)}%`, positive: false });
     }
     const decay = state.reputation * 0.02;
     state.reputation = Math.max(0, state.reputation - decay);
-    if (decay > 0.01) result.deltas.push({ icon: '⭐', label: '声誉自然衰减', value: `-${decay.toFixed(2)}`, positive: false });
+    if (decay > 0.01) result.deltas.push({ icon: 'star', label: '声誉自然衰减', value: `-${decay.toFixed(2)}`, positive: false });
     result.tip = TIPS.rest;
 
   } else if (action.type === 'promote') {
@@ -1229,14 +1274,14 @@ export function executeTurn(state, actionId) {
     const minGain = intensity === 'heavy' ? 0.12 : 0.05;
     const gain = Math.max(minGain, scaledGain);
     state.infoDisclosure = Math.min(1, state.infoDisclosure + gain);
-    result.deltas.push({ icon: '❤️', label: '精力消耗', value: `-${passionCost}`, positive: false });
-    result.deltas.push({ icon: '📢', label: '信息透明度', value: `+${(gain * 100).toFixed(0)}% → ${(state.infoDisclosure * 100).toFixed(0)}%`, positive: true });
-    if (sigCost > 1.2) result.deltas.push({ icon: '📣', label: '信号通胀', value: `效果${Math.round(gain / rawGain * 100)}%（保底${Math.round(minGain * 100)}%）`, positive: false });
+    result.deltas.push({ icon: 'heart', label: '精力消耗', value: `-${passionCost}`, positive: false });
+    result.deltas.push({ icon: 'megaphone', label: '信息透明度', value: `+${(gain * 100).toFixed(0)}% → ${(state.infoDisclosure * 100).toFixed(0)}%`, positive: true });
+    if (sigCost > 1.2) result.deltas.push({ icon: 'megaphone-simple', label: '信号通胀', value: `效果${Math.round(gain / rawGain * 100)}%（保底${Math.round(minGain * 100)}%）`, positive: false });
     result.tip = intensity === 'heavy' ? TIPS.promoteHeavy : TIPS.promoteLight;
 
   } else if (action.type === 'social') {
     state.passion -= 3;
-    result.deltas.push({ icon: '❤️', label: '精力消耗', value: '-3', positive: false });
+    result.deltas.push({ icon: 'heart', label: '精力消耗', value: '-3', positive: false });
     let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + (state.endowments.social || 0) * 0.08);
     // Work stage: smaller social circle → harder to find partners
     if (getLifeStage(state.turn) === 'work') {
@@ -1245,33 +1290,40 @@ export function executeTurn(state, actionId) {
       const workYears = (state.turn - 50) / 12;
       if (workYears > 3 && (state.turn - state.lastCreativeTurn) <= 6) {
         prob += 0.1;
-        result.deltas.push({ icon: '🎖️', label: '老炮加成', value: '长期活跃+10%', positive: true });
+        result.deltas.push({ icon: 'medal', label: '老炮加成', value: '长期活跃+10%', positive: true });
       }
     }
-    if (Math.random() < prob) {
-      const pType = rollPartnerType(state.endowments.social || 0);
+    // Check if candidate was selected via UI or if search failed
+    const candidate = state._selectedPartnerCandidate;
+    state._selectedPartnerCandidate = null;
+    const searchFailed = state._partnerSearchFailed;
+    state._partnerSearchFailed = false;
+
+    if (candidate) {
+      // Candidate selected — reveal true type
+      const pType = candidate._type;
       const pt = PARTNER_TYPES[pType];
       state.hasPartner = true;
       state.partnerType = pType;
       state.partnerTurns = pType === 'unreliable' ? (1 + Math.floor(Math.random() * 3)) : (3 + Math.floor(Math.random() * 4));
-      // Partner fee: 15% chance free (人好), otherwise roll from range
       const isFree = Math.random() < 0.15;
       if (isFree) {
         state.partnerFee = 0;
-        result.deltas.push({ icon: pt.emoji, label: `找到了${pt.name}！`, value: `${state.partnerTurns}回合`, positive: true });
-        result.deltas.push({ icon: '💝', label: '人好！不要稿费', value: '免费合作', positive: true });
+        result.deltas.push({ icon: pt.emoji, label: `"${candidate.name}"原来是${pt.name}！`, value: `${state.partnerTurns}回合`, positive: true });
+        result.deltas.push({ icon: 'hand-heart', label: '人好！不要稿费', value: '免费合作', positive: true });
       } else {
         const [fmin, fmax] = pt.feeRange;
         state.partnerFee = fmin + Math.floor(Math.random() * (fmax - fmin));
-        result.deltas.push({ icon: pt.emoji, label: `找到了${pt.name}！`, value: `${state.partnerTurns}回合`, positive: pType === 'supportive' });
-        result.deltas.push({ icon: '💰', label: '搭档稿费', value: `¥${state.partnerFee}/本`, positive: false });
+        result.deltas.push({ icon: pt.emoji, label: `"${candidate.name}"原来是${pt.name}！`, value: `${state.partnerTurns}回合`, positive: pType === 'supportive' });
+        result.deltas.push({ icon: 'coins', label: '搭档稿费', value: `¥${state.partnerFee}/本`, positive: false });
       }
-      result.deltas.push({ icon: '📝', label: pt.desc, value: '', positive: false });
+      result.deltas.push({ icon: 'note-pencil', label: pt.desc, value: '', positive: false });
       result.tip = pType === 'toxic' ? TIPS.partnerToxic : pType === 'supportive' ? TIPS.partnerFound : TIPS.partnerRisk;
     } else {
-      result.deltas.push({ icon: '🤝', label: '没找到合适搭档', value: '', positive: false });
+      // No candidates or search failed
+      result.deltas.push({ icon: 'handshake', label: '本月没找到合适的搭档', value: '', positive: false });
       if (getLifeStage(state.turn) === 'work') {
-        result.deltas.push({ icon: '💼', label: '工作后同人圈子变小，找搭档更难了', value: '', positive: false });
+        result.deltas.push({ icon: 'briefcase', label: '工作后同人圈子变小，找搭档更难了', value: '', positive: false });
       }
       result.tip = TIPS.partnerFail;
     }
@@ -1284,9 +1336,9 @@ export function executeTurn(state, actionId) {
     const wage = Math.floor(baseWage * recessionCut);
     state.money += wage;
     state.timeDebuffs.push({ id: 'tired_work', reason: '打工疲惫', turnsLeft: 1, delta: -1 });
-    result.deltas.push({ icon: '💪', label: '体力消耗', value: '下月闲暇-1h', positive: false });
-    result.deltas.push({ icon: '💰', label: '打工收入', value: `+¥${wage}`, positive: true });
-    if (recessionCut < 1) result.deltas.push({ icon: '📉', label: '经济下行压低工资', value: '-40%', positive: false });
+    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-1h', positive: false });
+    result.deltas.push({ icon: 'coins', label: '打工收入', value: `+¥${wage}`, positive: true });
+    if (recessionCut < 1) result.deltas.push({ icon: 'trend-down', label: '经济下行压低工资', value: '-40%', positive: false });
     result.tip = TIPS.partTimeJob;
 
   } else if (action.type === 'freelance') {
@@ -1300,11 +1352,11 @@ export function executeTurn(state, actionId) {
     const repGain = 0.02 + state.reputation * 0.01;
     state.reputation += repGain;
     state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: -2 });
-    result.deltas.push({ icon: '❤️', label: '创作精力', value: '-4', positive: false });
-    result.deltas.push({ icon: '💪', label: '体力消耗', value: '下月闲暇-2h', positive: false });
-    result.deltas.push({ icon: '💰', label: '接稿收入', value: `+¥${income}`, positive: true });
-    if (recessionCut < 1) result.deltas.push({ icon: '📉', label: '经济下行需求萎缩', value: '-50%', positive: false });
-    result.deltas.push({ icon: '⭐', label: '商业声誉', value: `+${repGain.toFixed(2)}`, positive: true });
+    result.deltas.push({ icon: 'heart', label: '创作精力', value: '-4', positive: false });
+    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-2h', positive: false });
+    result.deltas.push({ icon: 'coins', label: '接稿收入', value: `+¥${income}`, positive: true });
+    if (recessionCut < 1) result.deltas.push({ icon: 'trend-down', label: '经济下行需求萎缩', value: '-50%', positive: false });
+    result.deltas.push({ icon: 'star', label: '商业声誉', value: `+${repGain.toFixed(2)}`, positive: true });
     result.tip = state.reputation >= 3 ? TIPS.freelanceHigh : TIPS.freelanceLow;
 
   } else if (action.type === 'attendEvent') {
@@ -1318,17 +1370,17 @@ export function executeTurn(state, actionId) {
           const cancelLodging = Math.round(evt.travelCost * 1.2 + 200);
           state.money -= evt.travelCost + cancelLodging;
           state.passion = Math.max(0, state.passion - 5);
-          result.deltas.push({ icon: '😱', label: `${evt.name}@${evt.city} 流展！`, value: '白跑一趟', positive: false });
-          result.deltas.push({ icon: '💰', label: '路费+住宿（沉没成本）', value: `-¥${evt.travelCost + cancelLodging}`, positive: false });
-          result.deltas.push({ icon: '❤️', label: '白忙一场的沮丧', value: '-5', positive: false });
+          result.deltas.push({ icon: 'smiley-x-eyes', label: `${evt.name}@${evt.city} 流展！`, value: '白跑一趟', positive: false });
+          result.deltas.push({ icon: 'coins', label: '路费+住宿（沉没成本）', value: `-¥${evt.travelCost + cancelLodging}`, positive: false });
+          result.deltas.push({ icon: 'heart', label: '白忙一场的沮丧', value: '-5', positive: false });
         } else {
           // 寄售流展：货还在手里，只损失邮费
           const shipCost = Math.round(evt.travelCost * 0.3);
           state.money -= shipCost;
           state.passion = Math.max(0, state.passion - 1);
-          result.deltas.push({ icon: '📦', label: `${evt.name}@${evt.city} 流展！`, value: '寄售取消，货物退回', positive: false });
-          result.deltas.push({ icon: '💰', label: '邮费（沉没成本）', value: `-¥${shipCost}`, positive: false });
-          result.deltas.push({ icon: '❤️', label: '小遗憾', value: '-1', positive: false });
+          result.deltas.push({ icon: 'package', label: `${evt.name}@${evt.city} 流展！`, value: '寄售取消，货物退回', positive: false });
+          result.deltas.push({ icon: 'coins', label: '邮费（沉没成本）', value: `-¥${shipCost}`, positive: false });
+          result.deltas.push({ icon: 'heart', label: '小遗憾', value: '-1', positive: false });
         }
         state.attendingEvent = null;
         result.tip = { label: '流展风险', text: '展会因故取消是同人创作者面临的真实风险。路费变成沉没成本，无法追回。经济学告诉我们：不要因为已经花了路费就做出非理性决策——关键是接下来怎么安排。' };
@@ -1364,15 +1416,15 @@ export function executeTurn(state, actionId) {
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = { ...evt, salesBoost: mg.salesMultiplier };
 
-        result.deltas.push({ icon: '🏪', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
-        result.deltas.push({ icon: '💰', label: '路费+住宿餐饮+摊位' + (mg.moneySpent > 0 ? '+无料' : ''), value: `-¥${evt.travelCost + lodgingCost + mg.moneySpent}`, positive: false });
-        result.deltas.push({ icon: '❤️', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
+        result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
+        result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位' + (mg.moneySpent > 0 ? '+无料' : ''), value: `-¥${evt.travelCost + lodgingCost + mg.moneySpent}`, positive: false });
+        result.deltas.push({ icon: 'heart', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
         if (eventFatigue < 1) {
           const rc = state.recentEventTurns.filter(t => state.turn - t < 6).length;
-          result.deltas.push({ icon: '😮‍💨', label: `连续亲参疲劳(近6月第${rc}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
+          result.deltas.push({ icon: 'smiley-sad', label: `连续亲参疲劳(近6月第${rc}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
         }
         if (evt.condition === 'popular') {
-          result.deltas.push({ icon: '🔥', label: '人气爆棚！人流超出预期', value: '', positive: true });
+          result.deltas.push({ icon: 'fire', label: '人气爆棚！人流超出预期', value: '', positive: true });
         }
       } else if (isAttend) {
         // === 亲参 but skipped minigame ===
@@ -1384,12 +1436,12 @@ export function executeTurn(state, actionId) {
         state.reputation += evt.reputationBoost;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = evt;
-        result.deltas.push({ icon: '🏪', label: `亲参 ${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
-        result.deltas.push({ icon: '💰', label: '路费+住宿餐饮+摊位', value: `-¥${evt.travelCost + lodgingCost}`, positive: false });
+        result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
+        result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位', value: `-¥${evt.travelCost + lodgingCost}`, positive: false });
       } else {
         // === 寄售 (consignment) ===
         if (state._leaveDenied) {
-          result.deltas.push({ icon: '🏢', label: '请假被拒！无法亲自参展', value: '降级为寄售', positive: false });
+          result.deltas.push({ icon: 'building-office', label: '请假被拒！无法亲自参展', value: '降级为寄售', positive: false });
           state._leaveDenied = null;
         }
         state.consecutiveConsigns++;
@@ -1397,8 +1449,8 @@ export function executeTurn(state, actionId) {
         state.passion -= 2;
         state.money -= shipCost;
         state.attendingEvent = evt; // for calculateSales event boost
-        result.deltas.push({ icon: '📦', label: `寄售 ${evt.name}@${evt.city}`, value: '委托代售', positive: true });
-        result.deltas.push({ icon: '💰', label: '邮寄费用', value: `-¥${shipCost}`, positive: false });
+        result.deltas.push({ icon: 'package', label: `寄售 ${evt.name}@${evt.city}`, value: '委托代售', positive: true });
+        result.deltas.push({ icon: 'coins', label: '邮寄费用', value: `-¥${shipCost}`, positive: false });
 
         // --- Consignment agent mishap: risk scales with consecutive consigns ---
         const mishapChance = Math.min(0.7, (state.consecutiveConsigns - 1) * 0.15); // 0% first, 15% second, 30% third...
@@ -1414,15 +1466,15 @@ export function executeTurn(state, actionId) {
             state.inventory.hvpStock -= lostHVP;
             state.inventory.lvpStock -= lostLVP;
             const lostPassion = Math.round(5 * _im);
-            result.deltas.push({ icon: '😱', label: '代理弄丢了部分库存！', value: `本-${lostHVP} 谷-${lostLVP}`, positive: false });
+            result.deltas.push({ icon: 'smiley-x-eyes', label: '代理弄丢了部分库存！', value: `本-${lostHVP} 谷-${lostLVP}`, positive: false });
             state.passion = Math.max(0, state.passion - lostPassion);
-            result.deltas.push({ icon: '❤️', label: '货都丢了...', value: `热情-${lostPassion}`, positive: false });
+            result.deltas.push({ icon: 'heart', label: '货都丢了...', value: `热情-${lostPassion}`, positive: false });
           } else if (roll < 0.65) {
             // 代理私吞货款：扣掉部分收入（通过降低event salesBoost）
             const skimRate = 0.15 + Math.random() * 0.15; // 15-30%
             state.attendingEvent = { ...evt, salesBoost: (evt.salesBoost || 1) * (1 - skimRate) };
             const skimPassion = Math.round(3 * _im);
-            result.deltas.push({ icon: '💸', label: '代理疑似私吞部分货款', value: `预计损失${Math.round(skimRate * 100)}%收入`, positive: false });
+            result.deltas.push({ icon: 'money', label: '代理疑似私吞部分货款', value: `预计损失${Math.round(skimRate * 100)}%收入`, positive: false });
             state.passion = Math.max(0, state.passion - skimPassion);
           } else {
             // 和代理吵架：热情大幅下降 + 声誉损失
@@ -1430,13 +1482,13 @@ export function executeTurn(state, actionId) {
             const repLoss = Math.min(0.5, state.reputation * 0.05 * _im);
             state.passion = Math.max(0, state.passion - fightPassion);
             state.reputation = Math.max(0, state.reputation - repLoss);
-            result.deltas.push({ icon: '😤', label: '和寄售代理大吵一架！', value: `热情-${fightPassion} 声誉受损`, positive: false });
-            result.deltas.push({ icon: '⭐', label: '争吵传出去了...', value: `-${repLoss.toFixed(2)}`, positive: false });
+            result.deltas.push({ icon: 'smiley-angry', label: '和寄售代理大吵一架！', value: `热情-${fightPassion} 声誉受损`, positive: false });
+            result.deltas.push({ icon: 'star', label: '争吵传出去了...', value: `-${repLoss.toFixed(2)}`, positive: false });
           }
-          if (_im > 1.1) result.deltas.push({ icon: '🛡️', label: '心理韧性低，人际冲突打击更大', value: `×${_im.toFixed(1)}`, positive: false });
+          if (_im > 1.1) result.deltas.push({ icon: 'shield', label: '心理韧性低，人际冲突打击更大', value: `×${_im.toFixed(1)}`, positive: false });
         }
         if (state.consecutiveConsigns >= 3) {
-          result.deltas.push({ icon: '⚠️', label: `已连续寄售${state.consecutiveConsigns}次`, value: '代理风险上升中', positive: false });
+          result.deltas.push({ icon: 'warning', label: `已连续寄售${state.consecutiveConsigns}次`, value: '代理风险上升中', positive: false });
         }
       }
 
@@ -1462,7 +1514,7 @@ export function executeTurn(state, actionId) {
             eventRevenue += hvpRev;
             totalEventSold += hvpSold;
             state.totalSales += hvpSold;
-            result.deltas.push({ icon: '📖', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
+            result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
             const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
             state.reputation += repGain;
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
@@ -1474,7 +1526,7 @@ export function executeTurn(state, actionId) {
             eventRevenue += lvpRev;
             totalEventSold += lvpSold;
             state.totalSales += lvpSold;
-            result.deltas.push({ icon: '🔑', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
+            result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
             const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
             state.reputation += repGain;
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
@@ -1494,8 +1546,8 @@ export function executeTurn(state, actionId) {
           state.totalSales += hvpSold;
           result.salesInfo = sales;
           result.supplyDemand = getSupplyDemandData(state, sales);
-          result.deltas.push({ icon: '📖', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
-          if (sales.hvpSales > hvpSold) result.deltas.push({ icon: '🔥', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpSold}`, positive: false });
+          result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
+          if (sales.hvpSales > hvpSold) result.deltas.push({ icon: 'fire', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpSold}`, positive: false });
           const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
           state.reputation += repGain;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
@@ -1511,8 +1563,8 @@ export function executeTurn(state, actionId) {
           totalEventSold += lvpSold;
           state.totalSales += lvpSold;
           if (!result.salesInfo) { result.salesInfo = sales; result.supplyDemand = getSupplyDemandData(state, sales); }
-          result.deltas.push({ icon: '🔑', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
-          if (sales.lvpSales > lvpSold) result.deltas.push({ icon: '🔥', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpSold}`, positive: false });
+          result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
+          if (sales.lvpSales > lvpSold) result.deltas.push({ icon: 'fire', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpSold}`, positive: false });
           const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
           state.reputation += repGain;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
@@ -1523,7 +1575,7 @@ export function executeTurn(state, actionId) {
       // Show secondhand market impact on event sales
       const eventShMod = Math.min(getSecondHandModifier(state.official, 'hvp'), getSecondHandModifier(state.official, 'lvp'));
       if (eventShMod < 0.9) {
-        result.deltas.push({ icon: '📦', label: '二手市场挤压新品销量', value: `-${Math.round((1 - eventShMod) * 100)}%`, positive: false });
+        result.deltas.push({ icon: 'package', label: '二手市场挤压新品销量', value: `-${Math.round((1 - eventShMod) * 100)}%`, positive: false });
       }
 
       // Bundling bonus: selling both HVP and LVP at same event
@@ -1531,7 +1583,7 @@ export function executeTurn(state, actionId) {
         const bundleBonus = Math.round(eventRevenue * 0.1);
         if (bundleBonus > 0) {
           eventRevenue += bundleBonus;
-          result.deltas.push({ icon: '🎯', label: '本+谷联动加成', value: `+¥${bundleBonus}`, positive: true });
+          result.deltas.push({ icon: 'target', label: '本+谷联动加成', value: `+¥${bundleBonus}`, positive: true });
         }
       }
 
@@ -1541,7 +1593,7 @@ export function executeTurn(state, actionId) {
       if (eventRevenue > 0) {
         const totalEventCost = evt.travelCost + lodgingCost + (mg ? mg.moneySpent : 0);
         const profit = eventRevenue - totalEventCost;
-        result.deltas.push({ icon: '💰', label: '展会利润', value: profit >= 0 ? `+¥${profit}` : `-¥${Math.abs(profit)}`, positive: profit >= 0 });
+        result.deltas.push({ icon: 'coins', label: '展会利润', value: profit >= 0 ? `+¥${profit}` : `-¥${Math.abs(profit)}`, positive: profit >= 0 });
       }
       // Log event for dashboard
       state.eventLog.push({ turn: state.turn, name: evt.name, city: evt.city, revenue: eventRevenue, sold: totalEventSold, condition: evt.condition || 'normal' });
@@ -1550,36 +1602,36 @@ export function executeTurn(state, actionId) {
       if (totalEventSold >= 15) {
         const boost = Math.round(5 + totalEventSold * 0.3);
         state.passion = Math.min(100, state.passion + boost);
-        result.deltas.push({ icon: '🎉', label: '展会大卖！情绪高涨', value: `热情+${boost}`, positive: true });
+        result.deltas.push({ icon: 'confetti', label: '展会大卖！情绪高涨', value: `热情+${boost}`, positive: true });
       } else if (totalEventSold <= 2 && (state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0)) {
         const costRef = isAttend ? evt.travelCost : Math.round(evt.travelCost * 0.3);
         const hit = -10 - Math.round(costRef / 150);
         state.passion = Math.max(0, state.passion + hit);
-        result.deltas.push({ icon: '😞', label: isAttend ? '展会惨淡...花了路费却卖不出去' : '寄售惨淡...邮费白花了', value: `热情${hit}`, positive: false });
+        result.deltas.push({ icon: 'smiley-meh', label: isAttend ? '展会惨淡...花了路费却卖不出去' : '寄售惨淡...邮费白花了', value: `热情${hit}`, positive: false });
       }
 
       // Show remaining inventory
-      result.deltas.push({ icon: '📦', label: '剩余库存', value: `本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}`, positive: state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0 });
+      result.deltas.push({ icon: 'package', label: '剩余库存', value: `本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}`, positive: state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0 });
 
       // Community feedback
       if (isAttend) {
         // 亲参: face-to-face interaction
         const feedback = calculateFeedback(state);
         state.passion = Math.min(100, state.passion + feedback);
-        if (feedback > 0.5) result.deltas.push({ icon: '💬', label: '现场交流反馈', value: `热情+${feedback.toFixed(1)}`, positive: true });
+        if (feedback > 0.5) result.deltas.push({ icon: 'chat-circle', label: '现场交流反馈', value: `热情+${feedback.toFixed(1)}`, positive: true });
       } else {
         // 寄售: online feedback — smaller but reliable
         if (totalEventSold > 0) {
           const onlineFeedback = Math.min(5, Math.round(totalEventSold * 0.3));
           state.passion = Math.min(100, state.passion + onlineFeedback);
-          result.deltas.push({ icon: '📱', label: '线上反馈', value: `热情+${onlineFeedback}`, positive: true });
+          result.deltas.push({ icon: 'phone', label: '线上反馈', value: `热情+${onlineFeedback}`, positive: true });
         }
         // 买家晒图 chance (scaled by reputation)
         const shareChance = Math.min(0.5, 0.15 + state.reputation * 0.05);
         if (totalEventSold > 0 && Math.random() < shareChance) {
           const sharePassion = 3 + Math.min(5, Math.round(state.reputation));
           state.passion = Math.min(100, state.passion + sharePassion);
-          result.deltas.push({ icon: '📸', label: '买家晒图！', value: `热情+${sharePassion}`, positive: true });
+          result.deltas.push({ icon: 'camera', label: '买家晒图！', value: `热情+${sharePassion}`, positive: true });
         }
       }
 
@@ -1596,19 +1648,19 @@ export function executeTurn(state, actionId) {
     // === UNEMPLOYMENT: looking for work ===
     state.passion -= 10;
     state.jobSearchTurns++;
-    result.deltas.push({ icon: '❤️', label: '面试奔波消耗', value: '-10', positive: false });
+    result.deltas.push({ icon: 'heart', label: '面试奔波消耗', value: '-10', positive: false });
     // Base find probability: 30%, +10% per month searching, recession halves it
     const baseProb = 0.3 + state.jobSearchTurns * 0.1;
     const findProb = Math.min(0.85, state.recessionTurnsLeft > 0 ? baseProb * 0.5 : baseProb);
     if (Math.random() < findProb) {
       state.unemployed = false;
       state.jobSearchTurns = 0;
-      result.deltas.push({ icon: '🎉', label: '找到工作了！', value: '恢复正常生活', positive: true });
+      result.deltas.push({ icon: 'confetti', label: '找到工作了！', value: '恢复正常生活', positive: true });
       result.tip = TIPS.jobFound;
     } else {
-      result.deltas.push({ icon: '😰', label: '还没找到工作...', value: `已找${state.jobSearchTurns}个月`, positive: false });
+      result.deltas.push({ icon: 'smiley-nervous', label: '还没找到工作...', value: `已找${state.jobSearchTurns}个月`, positive: false });
       if (state.recessionTurnsLeft > 0) {
-        result.deltas.push({ icon: '📉', label: '经济下行增加求职难度', value: `成功率${Math.round(findProb * 100)}%`, positive: false });
+        result.deltas.push({ icon: 'trend-down', label: '经济下行增加求职难度', value: `成功率${Math.round(findProb * 100)}%`, positive: false });
       }
       result.tip = TIPS.jobSearching;
     }
@@ -1618,8 +1670,8 @@ export function executeTurn(state, actionId) {
     const hvpBaseCost = Math.max(8, 15 - (state.endowments.stamina || 0) - state.equipmentLevel);
     const fatigueCost = state.creativeFatigue >= 2 ? (state.creativeFatigue - 1) * 3 : 0;
     state.passion -= hvpBaseCost + fatigueCost;
-    result.deltas.push({ icon: '❤️', label: '本月创作消耗', value: `-${hvpBaseCost + fatigueCost}`, positive: false });
-    if (fatigueCost > 0) result.deltas.push({ icon: '🔋', label: '创作疲劳加重消耗', value: `额外-${fatigueCost}`, positive: false });
+    result.deltas.push({ icon: 'heart', label: '本月创作消耗', value: `-${hvpBaseCost + fatigueCost}`, positive: false });
+    if (fatigueCost > 0) result.deltas.push({ icon: 'battery-medium', label: '创作疲劳加重消耗', value: `额外-${fatigueCost}`, positive: false });
 
     if (!state.hvpProject) {
       // Start new project with subtype
@@ -1642,10 +1694,10 @@ export function executeTurn(state, actionId) {
       }
 
       result.deltas.push({ icon: sub.emoji, label: `开始创作${sub.name}！`, value: `进度 1/${needed}`, positive: true });
-      if (state.hvpProject.styleTag) result.deltas.push({ icon: '🎭', label: `风格：${state.hvpProject.styleTag}`, value: '', positive: true });
+      if (state.hvpProject.styleTag) result.deltas.push({ icon: 'mask-happy', label: `风格：${state.hvpProject.styleTag}`, value: '', positive: true });
       if (state.hasPartner) {
-        result.deltas.push({ icon: '🤝', label: '搭档协作', value: `${needed}个月完成`, positive: true });
-        if (state.partnerFee > 0) result.deltas.push({ icon: '💰', label: '预计搭档稿费', value: `¥${state.partnerFee}（完成时付）`, positive: false });
+        result.deltas.push({ icon: 'handshake', label: '搭档协作', value: `${needed}个月完成`, positive: true });
+        if (state.partnerFee > 0) result.deltas.push({ icon: 'coins', label: '预计搭档稿费', value: `¥${state.partnerFee}（完成时付）`, positive: false });
       }
       result.tip = TIPS.hvpStart;
     } else {
@@ -1656,7 +1708,7 @@ export function executeTurn(state, actionId) {
         // Extra passion cost from "polish" choice
         if (state.hvpProject._extraPassionCost) {
           state.passion -= state.hvpProject._extraPassionCost;
-          result.deltas.push({ icon: '✨', label: '精雕细琢的额外消耗', value: `-${state.hvpProject._extraPassionCost}`, positive: false });
+          result.deltas.push({ icon: 'sparkle', label: '精雕细琢的额外消耗', value: `-${state.hvpProject._extraPassionCost}`, positive: false });
           state.hvpProject._extraPassionCost = 0;
         }
         state._pendingChoices = null;
@@ -1666,11 +1718,11 @@ export function executeTurn(state, actionId) {
       // Creative fatigue efficiency penalty
       if (state.creativeFatigue >= 3) {
         progressEff *= 0.85;
-        result.deltas.push({ icon: '🔋', label: '创作疲劳拖慢进度', value: `效率×0.85`, positive: false });
+        result.deltas.push({ icon: 'battery-medium', label: '创作疲劳拖慢进度', value: `效率×0.85`, positive: false });
       }
       state.hvpProject.progress += progressEff;
       if (getLifeStage(state.turn) === 'work' && !state.unemployed) {
-        result.deltas.push({ icon: '😮‍💨', label: '下班后创作效率降低', value: '进度×0.7', positive: false });
+        result.deltas.push({ icon: 'smiley-sad', label: '下班后创作效率降低', value: '进度×0.7', positive: false });
       }
       const p = state.hvpProject;
       if (p.progress >= p.needed) {
@@ -1680,7 +1732,7 @@ export function executeTurn(state, actionId) {
         // Quality penalty from fatigue
         if (state.creativeFatigue >= 5) {
           p.workQuality *= 0.85;
-          result.deltas.push({ icon: '🔋', label: '创作疲劳影响作品质量', value: '质量×0.85', positive: false });
+          result.deltas.push({ icon: 'battery-medium', label: '创作疲劳影响作品质量', value: '质量×0.85', positive: false });
         }
         // Equipment quality bonus
         if (state.equipmentLevel > 0) {
@@ -1689,7 +1741,7 @@ export function executeTurn(state, actionId) {
         // Time debuff from fatigue
         if (state.creativeFatigue >= 4) {
           state.timeDebuffs.push({ id: 'creative_exhaust_' + state.turn, reason: '创作透支', turnsLeft: 2, delta: -1 });
-          result.deltas.push({ icon: '🔋', label: '连续创作身体吃不消', value: '时间-1h(2回合)', positive: false });
+          result.deltas.push({ icon: 'battery-medium', label: '连续创作身体吃不消', value: '时间-1h(2回合)', positive: false });
         }
         // Clear project FIRST to prevent stuck state if anything below errors
         const savedProject = { ...p };
@@ -1729,9 +1781,9 @@ export function executeTurn(state, actionId) {
         const costLabels = [];
         if (costMult > 1) costLabels.push('下行+20%');
         if (fx.costReduction > 0.01) costLabels.push(`熟练-${Math.round(fx.costReduction * 100)}%`);
-        result.deltas.push({ icon: '🖨️', label: `印刷成本${costLabels.length ? '(' + costLabels.join(' ') + ')' : ''}`, value: `-¥${printCost}`, positive: false });
-        if (partnerCost > 0) result.deltas.push({ icon: '🤝', label: '搭档稿费', value: `-¥${partnerCost}`, positive: false });
-        result.deltas.push({ icon: '📦', label: `印刷${batchQty}本入库`, value: `库存${state.inventory.hvpStock}本 定价¥${state.inventory.hvpPrice}`, positive: true });
+        result.deltas.push({ icon: 'printer', label: `印刷成本${costLabels.length ? '(' + costLabels.join(' ') + ')' : ''}`, value: `-¥${printCost}`, positive: false });
+        if (partnerCost > 0) result.deltas.push({ icon: 'handshake', label: '搭档稿费', value: `-¥${partnerCost}`, positive: false });
+        result.deltas.push({ icon: 'package', label: `印刷${batchQty}本入库`, value: `库存${state.inventory.hvpStock}本 定价¥${state.inventory.hvpPrice}`, positive: true });
 
         // Anti-speculator strategy (frmn.md: creator countermeasures)
         const strategy = state._antiSpecStrategy || 'normal';
@@ -1739,30 +1791,30 @@ export function executeTurn(state, actionId) {
         if (strategy === 'unlimited') {
           // 不限量：投机客无法预估存量，泡沫项趋近于零
           if (state.official) state.official.secondHandPool.hvp = Math.floor(state.official.secondHandPool.hvp * 0.7);
-          result.deltas.push({ icon: '♾️', label: '不限量发售·抑制投机', value: '同人本二手市场压力下降', positive: true });
+          result.deltas.push({ icon: 'infinity', label: '不限量发售·抑制投机', value: '同人本二手市场压力下降', positive: true });
         } else if (strategy === 'signed') {
           // To签定制：流通因子降低，二手转售价值断崖
           if (state.official) state.official.secondHandPool.hvp = Math.max(0, state.official.secondHandPool.hvp - 3);
-          result.deltas.push({ icon: '✍️', label: 'To签限定·切断二手流通', value: '同人本二手市场压力下降 声誉+', positive: true });
+          result.deltas.push({ icon: 'pencil', label: 'To签限定·切断二手流通', value: '同人本二手市场压力下降 声誉+', positive: true });
           state.reputation += 0.1;
         } else if (strategy === 'digital') {
           // 同时发电子版：内容效用被低成本满足，投机买家减少
           if (state.official) state.official.secondHandPool.hvp = Math.floor(state.official.secondHandPool.hvp * 0.8);
           const digiRev = Math.round(batchQty * state.inventory.hvpPrice * 0.3);
           state.money += digiRev;
-          result.deltas.push({ icon: '📱', label: '同步电子版', value: `电子版收入+¥${digiRev}`, positive: true });
+          result.deltas.push({ icon: 'phone', label: '同步电子版', value: `电子版收入+¥${digiRev}`, positive: true });
         }
 
         // Reputation gain — skill boosts quality → more reputation
         const repGain = 0.15 * state.infoDisclosure * (1 + (state.endowments.talent || 0) * 0.15) * fx.repBonus;
         state.reputation += repGain;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
-        result.deltas.push({ icon: '⭐', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: true });
+        result.deltas.push({ icon: 'star', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: true });
 
         // Community feedback (people know you released something new)
         const feedback = calculateFeedback(state);
         state.passion = Math.min(100, state.passion + feedback);
-        result.deltas.push({ icon: '💬', label: '社群反馈', value: `热情+${feedback.toFixed(1)}`, positive: feedback > 0 });
+        result.deltas.push({ icon: 'chat-circle', label: '社群反馈', value: `热情+${feedback.toFixed(1)}`, positive: feedback > 0 });
 
         state.totalHVP++;
 
@@ -1773,14 +1825,14 @@ export function executeTurn(state, actionId) {
           state.reputation += bkRep;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           state.passion = Math.min(100, state.passion + bkPassion);
-          result.deltas.push({ icon: '✨', label: '突破之作！质量超出预期', value: `声誉+${bkRep.toFixed(1)} 热情+${bkPassion}`, positive: true });
-          result.tip = { label: '✨ 学习曲线突破', text: `累计创作${state.totalHVP}本同人志，你的技艺已达到${getSkillLabel(skill)}级（${skill.toFixed(1)}）。学习曲线理论预测：累计产出越多，生产效率越高、品质越稳定。偶尔的突破之作是量变引发质变的证明——这就是为什么"坚持创作"比"等灵感来"更靠谱。` };
+          result.deltas.push({ icon: 'sparkle', label: '突破之作！质量超出预期', value: `声誉+${bkRep.toFixed(1)} 热情+${bkPassion}`, positive: true });
+          result.tip = { label: `${ic('sparkle')} 学习曲线突破`, text: `累计创作${state.totalHVP}本同人志，你的技艺已达到${getSkillLabel(skill)}级（${skill.toFixed(1)}）。学习曲线理论预测：累计产出越多，生产效率越高、品质越稳定。偶尔的突破之作是量变引发质变的证明——这就是为什么"坚持创作"比"等灵感来"更靠谱。` };
         } else {
           result.tip = TIPS.hvpComplete;
         }
         if (state.passion < 30) result.tip = TIPS.burnout;
       } else {
-        result.deltas.push({ icon: '📖', label: '继续创作中...', value: `进度 ${Math.floor(p.progress)}/${p.needed}`, positive: true });
+        result.deltas.push({ icon: 'book-open-text', label: '继续创作中...', value: `进度 ${Math.floor(p.progress)}/${p.needed}`, positive: true });
         result.tip = TIPS.hvpContinue;
       }
     }
@@ -1802,11 +1854,11 @@ export function executeTurn(state, actionId) {
     state.creativeFatigue += 1;
     const lvpFatigueCost = state.creativeFatigue >= 2 ? (state.creativeFatigue - 1) * 3 : 0;
     state.passion -= Math.max(3, 8 - state.equipmentLevel) + lvpFatigueCost;
-    if (lvpFatigueCost > 0) result.deltas.push({ icon: '🔋', label: '创作疲劳加重消耗', value: `额外-${lvpFatigueCost}`, positive: false });
+    if (lvpFatigueCost > 0) result.deltas.push({ icon: 'battery-medium', label: '创作疲劳加重消耗', value: `额外-${lvpFatigueCost}`, positive: false });
     // Fatigue quality penalty
     if (state.creativeFatigue >= 5) {
       lvpQuality *= 0.85;
-      result.deltas.push({ icon: '🔋', label: '疲劳影响谷子质量', value: '质量×0.85', positive: false });
+      result.deltas.push({ icon: 'battery-medium', label: '疲劳影响谷子质量', value: '质量×0.85', positive: false });
     }
     // Equipment quality bonus
     if (state.equipmentLevel > 0) lvpQuality += state.equipmentLevel * 0.08;
@@ -1814,12 +1866,12 @@ export function executeTurn(state, actionId) {
     const skillDiscount = 1 - fx.costReduction;
     const actualCost = Math.round(sub.cost * (pfx.costMod || 1.0) * costMult * skillDiscount);
     state.money -= actualCost;
-    result.deltas.push({ icon: '❤️', label: '创作消耗', value: '-8', positive: false });
+    result.deltas.push({ icon: 'heart', label: '创作消耗', value: '-8', positive: false });
     const lvpCostLabels = [];
     if (costMult > 1) lvpCostLabels.push('下行+20%');
     if (fx.costReduction > 0.01) lvpCostLabels.push(`熟练-${Math.round(fx.costReduction * 100)}%`);
     if ((pfx.costMod || 1) !== 1) lvpCostLabels.push(pfx.costMod > 1 ? '精装' : '简装');
-    result.deltas.push({ icon: '💰', label: `制作成本${lvpCostLabels.length ? '(' + lvpCostLabels.join(' ') + ')' : ''}`, value: `-¥${actualCost}`, positive: false });
+    result.deltas.push({ icon: 'coins', label: `制作成本${lvpCostLabels.length ? '(' + lvpCostLabels.join(' ') + ')' : ''}`, value: `-¥${actualCost}`, positive: false });
 
     // Calculate batch size with subtype + process modifier
     const batchQty = Math.max(5, Math.round(sub.batchSize * (pfx.batchMod || 1.0)));
@@ -1846,12 +1898,12 @@ export function executeTurn(state, actionId) {
     const repGain = 0.04 * state.infoDisclosure * (1 + (state.endowments.talent || 0) * 0.15) * fx.repBonus;
     state.reputation += repGain;
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
-    result.deltas.push({ icon: '⭐', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: true });
+    result.deltas.push({ icon: 'star', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: true });
 
     // Community feedback
     const feedback = calculateFeedback(state);
     state.passion = Math.min(100, state.passion + feedback);
-    result.deltas.push({ icon: '💬', label: '社群反馈', value: `热情+${feedback.toFixed(1)}`, positive: feedback > 0 });
+    result.deltas.push({ icon: 'chat-circle', label: '社群反馈', value: `热情+${feedback.toFixed(1)}`, positive: feedback > 0 });
 
     // LVP breakthrough (rarer than HVP, half chance)
     if (Math.random() < fx.breakthroughChance * 0.5) {
@@ -1860,14 +1912,14 @@ export function executeTurn(state, actionId) {
       state.reputation += bkRep;
       state.maxReputation = Math.max(state.maxReputation, state.reputation);
       state.passion = Math.min(100, state.passion + bkPassion);
-      result.deltas.push({ icon: '✨', label: '精品谷子！超出预期的品质', value: `声誉+${bkRep.toFixed(1)} 热情+${bkPassion}`, positive: true });
+      result.deltas.push({ icon: 'sparkle', label: '精品谷子！超出预期的品质', value: `声誉+${bkRep.toFixed(1)} 热情+${bkPassion}`, positive: true });
     }
     result.tip = TIPS.lvp;
 
   } else if (action.type === 'reprint') {
     // === REPRINT: add more copies to inventory ===
     state.passion -= 3;
-    result.deltas.push({ icon: '❤️', label: '安排印刷', value: '-3', positive: false });
+    result.deltas.push({ icon: 'heart', label: '安排印刷', value: '-3', positive: false });
 
     const reprintType = state._reprintType || (state.totalHVP > 0 ? 'hvp' : 'lvp');
     state._reprintType = null;
@@ -1878,16 +1930,16 @@ export function executeTurn(state, actionId) {
       const cost = qty * unitCost;
       state.money -= cost;
       state.inventory.hvpStock += qty;
-      result.deltas.push({ icon: '🖨️', label: `追印同人本${qty}本`, value: `-¥${cost}`, positive: false });
-      result.deltas.push({ icon: '📦', label: '库存更新', value: `同人本×${state.inventory.hvpStock} 定价¥${state.inventory.hvpPrice}`, positive: true });
+      result.deltas.push({ icon: 'printer', label: `追印同人本${qty}本`, value: `-¥${cost}`, positive: false });
+      result.deltas.push({ icon: 'package', label: '库存更新', value: `同人本×${state.inventory.hvpStock} 定价¥${state.inventory.hvpPrice}`, positive: true });
     } else if (reprintType === 'lvp' && state.totalLVP > 0) {
       const qty = 20;
       const unitCost = 6;
       const cost = qty * unitCost;
       state.money -= cost;
       state.inventory.lvpStock += qty;
-      result.deltas.push({ icon: '🖨️', label: `追加制作谷子${qty}个`, value: `-¥${cost}`, positive: false });
-      result.deltas.push({ icon: '📦', label: '库存更新', value: `谷子×${state.inventory.lvpStock} 定价¥${state.inventory.lvpPrice}`, positive: true });
+      result.deltas.push({ icon: 'printer', label: `追加制作谷子${qty}个`, value: `-¥${cost}`, positive: false });
+      result.deltas.push({ icon: 'package', label: '库存更新', value: `谷子×${state.inventory.lvpStock} 定价¥${state.inventory.lvpPrice}`, positive: true });
     }
     result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。真正的同人创作者都在学习的供应链管理。' };
 
@@ -1895,7 +1947,7 @@ export function executeTurn(state, actionId) {
     // === BUY GOODS AS CONSUMER: spend money for passion ===
     const cost = 200;
     state.money -= cost;
-    result.deltas.push({ icon: '💰', label: '购买谷子', value: `-¥${cost}`, positive: false });
+    result.deltas.push({ icon: 'coins', label: '购买谷子', value: `-¥${cost}`, positive: false });
 
     // Passion gain diminishes with: years in hobby + idle months without creating
     const yearsIn = state.turn / 12;
@@ -1906,29 +1958,29 @@ export function executeTurn(state, actionId) {
     const efficiency = yearDecay * idleDecay;
     const passionGain = Math.max(2, Math.round(12 * efficiency));
     state.passion = Math.min(100, state.passion + passionGain);
-    result.deltas.push({ icon: '❤️', label: '买到心仪的谷子！', value: `热情+${passionGain}`, positive: true });
+    result.deltas.push({ icon: 'heart', label: '买到心仪的谷子！', value: `热情+${passionGain}`, positive: true });
 
     if (yearDecay < 0.8 || idleDecay < 1) {
       const reasons = [];
       if (yearDecay < 0.8) reasons.push('年限递减');
       if (idleDecay < 1) reasons.push(`已${idleMonths}月未创作`);
-      result.deltas.push({ icon: '📉', label: reasons.join('+'), value: `效率${Math.round(efficiency * 100)}%`, positive: false });
+      result.deltas.push({ icon: 'trend-down', label: reasons.join('+'), value: `效率${Math.round(efficiency * 100)}%`, positive: false });
     }
 
     // Small info disclosure gain (you're engaging with the community)
     state.infoDisclosure = Math.min(1, state.infoDisclosure + 0.05);
-    result.deltas.push({ icon: '📢', label: '社群参与', value: `信息+5%`, positive: true });
+    result.deltas.push({ icon: 'megaphone', label: '社群参与', value: `信息+5%`, positive: true });
 
     // Add to personal collection
     state.goodsCollection++;
-    result.deltas.push({ icon: '📦', label: '加入收藏', value: `收藏品${state.goodsCollection}件`, positive: true });
+    result.deltas.push({ icon: 'package', label: '加入收藏', value: `收藏品${state.goodsCollection}件`, positive: true });
 
     result.tip = { label: '消费者身份 (双重角色)', text: '同人创作者同时也是消费者——买别人的谷子是维持热情的重要方式。但随着入坑年限增加，新鲜感递减(边际效用递减)。购入的谷子日后也可以在二手市场出售回血。' };
 
   } else if (action.type === 'sellGoods') {
     // === SELL COLLECTION TO SECONDHAND MARKET ===
     if (state.goodsCollection <= 0) {
-      result.deltas.push({ icon: '📤', label: '没有收藏品可出', value: '', positive: false });
+      result.deltas.push({ icon: 'export', label: '没有收藏品可出', value: '', positive: false });
     } else {
       // Sell up to 3 items per turn
       const sellQty = Math.min(3, state.goodsCollection);
@@ -1943,10 +1995,10 @@ export function executeTurn(state, actionId) {
       // Feeds secondhand pool
       if (state.official) state.official.secondHandPool.lvp += sellQty;
 
-      result.deltas.push({ icon: '📤', label: `出售${sellQty}件收藏品`, value: `+¥${revenue}（¥${unitPrice}/件）`, positive: true });
-      result.deltas.push({ icon: '❤️', label: '割爱之痛', value: '-3', positive: false });
+      result.deltas.push({ icon: 'export', label: `出售${sellQty}件收藏品`, value: `+¥${revenue}（¥${unitPrice}/件）`, positive: true });
+      result.deltas.push({ icon: 'heart', label: '割爱之痛', value: '-3', positive: false });
       if (state.goodsCollection > 0) {
-        result.deltas.push({ icon: '📦', label: '剩余收藏', value: `${state.goodsCollection}件`, positive: true });
+        result.deltas.push({ icon: 'package', label: '剩余收藏', value: `${state.goodsCollection}件`, positive: true });
       }
       result.tip = { label: '二手回血 (frmn.md)', text: `二手市场是跨期预算调节器。大部分会转化为对A类新作的购买力。二手价格受市场压力影响：当前同人谷二手压力${Math.round(shPressure * 100)}%，压力越大价格越低。` };
     }
@@ -1959,9 +2011,9 @@ export function executeTurn(state, actionId) {
     state.hvpProject.progress += 0.5;
     state.hvpProject._assistantCount = (state.hvpProject._assistantCount || 0) + 1;
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 1);
-    result.deltas.push({ icon: '🧑‍💼', label: '外包助手加速创作', value: `-¥${assistCost}`, positive: false });
-    result.deltas.push({ icon: '📖', label: '同人本进度推进', value: `+0.5 → ${Math.floor(state.hvpProject.progress)}/${state.hvpProject.needed}`, positive: true });
-    result.deltas.push({ icon: '🔋', label: '创作疲劳缓解', value: '-1', positive: true });
+    result.deltas.push({ icon: 'user', label: '外包助手加速创作', value: `-¥${assistCost}`, positive: false });
+    result.deltas.push({ icon: 'book-open-text', label: '同人本进度推进', value: `+0.5 → ${Math.floor(state.hvpProject.progress)}/${state.hvpProject.needed}`, positive: true });
+    result.deltas.push({ icon: 'battery-medium', label: '创作疲劳缓解', value: '-1', positive: true });
     result.tip = { label: '外包协作', text: '外包上色、排版、贴网点等工作可以加速项目进度，同时减轻创作疲劳。但费用不低，且同一项目最多请2次。' };
   }
 
@@ -1971,9 +2023,9 @@ export function executeTurn(state, actionId) {
     const cost = costs[state.equipmentLevel];
     state.money -= cost;
     state.equipmentLevel++;
-    result.deltas.push({ icon: '🖥️', label: `设备升级到Lv${state.equipmentLevel}！`, value: `-¥${cost}`, positive: false });
-    result.deltas.push({ icon: '✨', label: '作品质量永久提升', value: `+${(state.equipmentLevel * 0.08 * 100).toFixed(0)}%`, positive: true });
-    result.deltas.push({ icon: '❤️', label: '创作消耗永久降低', value: `-${state.equipmentLevel}/月`, positive: true });
+    result.deltas.push({ icon: 'desktop', label: `设备升级到Lv${state.equipmentLevel}！`, value: `-¥${cost}`, positive: false });
+    result.deltas.push({ icon: 'sparkle', label: '作品质量永久提升', value: `+${(state.equipmentLevel * 0.08 * 100).toFixed(0)}%`, positive: true });
+    result.deltas.push({ icon: 'heart', label: '创作消耗永久降低', value: `-${state.equipmentLevel}/月`, positive: true });
     result.tip = { label: '设备投资', text: `更好的设备意味着更高的作品质量和更低的创作消耗。当前Lv${state.equipmentLevel}，最高Lv3。` };
   }
 
@@ -1988,10 +2040,10 @@ export function executeTurn(state, actionId) {
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
     state.passion = Math.min(100, state.passion + 8);
     state.infoDisclosure = Math.min(1, state.infoDisclosure + 0.15);
-    result.deltas.push({ icon: '🎗️', label: '赞助社区活动', value: `-¥${cost}`, positive: false });
-    result.deltas.push({ icon: '⭐', label: '社区好感', value: `声誉+${repGain.toFixed(2)}`, positive: true });
-    result.deltas.push({ icon: '❤️', label: '回馈的满足感', value: '热情+8', positive: true });
-    result.deltas.push({ icon: '📢', label: '曝光度提升', value: '+15%', positive: true });
+    result.deltas.push({ icon: 'hand-heart', label: '赞助社区活动', value: `-¥${cost}`, positive: false });
+    result.deltas.push({ icon: 'star', label: '社区好感', value: `声誉+${repGain.toFixed(2)}`, positive: true });
+    result.deltas.push({ icon: 'heart', label: '回馈的满足感', value: '热情+8', positive: true });
+    result.deltas.push({ icon: 'megaphone', label: '曝光度提升', value: '+15%', positive: true });
     result.tip = { label: '社区赞助', text: '赞助同人展或社区活动是建立口碑的有效方式。不仅提升声誉和曝光度，回馈圈子本身也会带来热情回复。冷却6个月。' };
   }
 
@@ -2002,7 +2054,7 @@ export function executeTurn(state, actionId) {
     state.passion = 0;
     state.phase = 'gameover';
     state.gameOverReason = generateCommercialEnding(state);
-    result.deltas.push({ icon: '🌟', label: '商业出道！', value: '告别同人，踏入商业创作', positive: true });
+    result.deltas.push({ icon: 'star', label: '商业出道！', value: '告别同人，踏入商业创作', positive: true });
     result.tip = { label: '从同人到商业', text: '许多传奇创作者都走过这条路——从Comiket的小摊位到出版社的签约作者。同人创作培养的技能、积累的粉丝、锻炼的市场嗅觉，都是商业化最好的基础。你不是在"离开"同人圈，而是在"毕业"。' };
     state.lastResult = result;
     return result;
@@ -2017,9 +2069,9 @@ export function executeTurn(state, actionId) {
     if (pt.passionPerTurn !== 0) {
       const ppt = pt.passionPerTurn < 0 ? Math.round(pt.passionPerTurn * interpersonalMult) : pt.passionPerTurn;
       state.passion = Math.min(100, state.passion + ppt);
-      result.deltas.push({ icon: '🤝', label: ppt > 0 ? '搭档正面影响' : '搭档带来压力', value: `热情${ppt > 0 ? '+' : ''}${ppt}`, positive: ppt > 0 });
+      result.deltas.push({ icon: 'handshake', label: ppt > 0 ? '搭档正面影响' : '搭档带来压力', value: `热情${ppt > 0 ? '+' : ''}${ppt}`, positive: ppt > 0 });
       if (ppt < pt.passionPerTurn && interpersonalMult > 1.1) {
-        result.deltas.push({ icon: '🛡️', label: '心理韧性不足，人际冲突更伤人', value: `×${interpersonalMult.toFixed(1)}`, positive: false });
+        result.deltas.push({ icon: 'shield', label: '心理韧性不足，人际冲突更伤人', value: `×${interpersonalMult.toFixed(1)}`, positive: false });
       }
     }
     // Drama chance also higher for low resilience
@@ -2030,13 +2082,13 @@ export function executeTurn(state, actionId) {
       const ampRep = drama.reputationDelta * (interpersonalMult > 1 ? interpersonalMult : 1);
       state.passion = Math.max(0, state.passion + ampPassion);
       state.reputation = Math.max(0, state.reputation + ampRep);
-      result.deltas.push({ icon: '⚠️', label: drama.desc, value: `热情${ampPassion} 声誉${ampRep < 0 ? ampRep.toFixed(1) : ''}`, positive: false });
+      result.deltas.push({ icon: 'warning', label: drama.desc, value: `热情${ampPassion} 声誉${ampRep < 0 ? ampRep.toFixed(1) : ''}`, positive: false });
     }
     state.partnerTurns--;
     if (state.partnerTurns <= 0) {
       const wasType = state.partnerType;
       state.hasPartner = false; state.partnerType = null;
-      result.deltas.push({ icon: '🤝', label: wasType === 'toxic' ? '终于摆脱了有毒搭档...' : '搭档合作期结束', value: '', positive: wasType === 'toxic' });
+      result.deltas.push({ icon: 'handshake', label: wasType === 'toxic' ? '终于摆脱了有毒搭档...' : '搭档合作期结束', value: '', positive: wasType === 'toxic' });
     }
   }
 
@@ -2058,12 +2110,12 @@ export function executeTurn(state, actionId) {
     const totalBuffer = Math.min(0.5, incomeBuffer + savingsBuffer);
     drain = drain * (1 - totalBuffer);
     if (totalBuffer > 0.05) {
-      result.deltas.push({ icon: '💰', label: '经济稳定缓冲现实压力', value: `-${Math.round(totalBuffer * 100)}%`, positive: true });
+      result.deltas.push({ icon: 'coins', label: '经济稳定缓冲现实压力', value: `-${Math.round(totalBuffer * 100)}%`, positive: true });
     }
   }
   if (drain > 0) {
     state.passion = Math.max(0, state.passion - drain);
-    result.deltas.push({ icon: '🌍', label: '现实消耗', value: `热情-${drain.toFixed(1)}`, positive: false });
+    result.deltas.push({ icon: 'globe', label: '现实消耗', value: `热情-${drain.toFixed(1)}`, positive: false });
   }
 
   // --- Inactivity drain: the longer you stop creating, the faster passion fades ---
@@ -2071,7 +2123,7 @@ export function executeTurn(state, actionId) {
   if (idleMonths >= 3) {
     const idleDrain = Math.min(8, Math.floor((idleMonths - 2) * 1.5));
     state.passion = Math.max(0, state.passion - idleDrain);
-    result.deltas.push({ icon: '🕸️', label: '活动停滞', value: `热情-${idleDrain}（已${idleMonths}月未活动）`, positive: false });
+    result.deltas.push({ icon: 'hourglass', label: '活动停滞', value: `热情-${idleDrain}（已${idleMonths}月未活动）`, positive: false });
   }
 
   // --- Secondhand market frustration: seeing your works sold cheap ---
@@ -2080,7 +2132,7 @@ export function executeTurn(state, actionId) {
     const shPassionHit = Math.min(4, Math.round((shLvpPressure - 0.3) * 8));
     if (shPassionHit > 0) {
       state.passion = Math.max(0, state.passion - shPassionHit);
-      result.deltas.push({ icon: '📦', label: '二手泛滥挫败感', value: `热情-${shPassionHit}`, positive: false });
+      result.deltas.push({ icon: 'package', label: '二手泛滥挫败感', value: `热情-${shPassionHit}`, positive: false });
     }
   }
 
@@ -2092,7 +2144,7 @@ export function executeTurn(state, actionId) {
     const debtDrain = Math.min(10, Math.floor(debtLevel / 500) * 2);
     if (debtDrain > 0) {
       state.passion = Math.max(0, state.passion - debtDrain);
-      result.deltas.push({ icon: '💸', label: '亏损焦虑', value: `热情-${debtDrain}`, positive: false });
+      result.deltas.push({ icon: 'money', label: '亏损焦虑', value: `热情-${debtDrain}`, positive: false });
     }
   }
 
@@ -2137,11 +2189,11 @@ export function executeTurn(state, actionId) {
     if (dip > 0) state.money -= dip;
 
     if (spending > 0 || dip > 0) {
-      result.deltas.push({ icon: '🏠', label: '生活费结余', value: `+¥${baseAllowance}`, positive: true });
-      if (spending > 0) result.deltas.push({ icon: '🛒', label: spendLabel, value: `-¥${spending}`, positive: false });
-      if (dip > 0) result.deltas.push({ icon: '💸', label: '顺手挪用了同人存款', value: `-¥${dip}`, positive: false });
+      result.deltas.push({ icon: 'house', label: '生活费结余', value: `+¥${baseAllowance}`, positive: true });
+      if (spending > 0) result.deltas.push({ icon: 'shopping-cart', label: spendLabel, value: `-¥${spending}`, positive: false });
+      if (dip > 0) result.deltas.push({ icon: 'money', label: '顺手挪用了同人存款', value: `-¥${dip}`, positive: false });
     } else {
-      result.deltas.push({ icon: '🏠', label: '生活费结余', value: `+¥${allowance}`, positive: true });
+      result.deltas.push({ icon: 'house', label: '生活费结余', value: `+¥${allowance}`, positive: true });
     }
   } else if (stage === 'work') {
     if (state.unemployed) {
@@ -2156,26 +2208,26 @@ export function executeTurn(state, actionId) {
       }
       const anxietyDrain = Math.max(2, Math.round(baseAnxiety * (1 - moneyMod)));
       state.passion = Math.max(0, state.passion - anxietyDrain);
-      result.deltas.push({ icon: '😰', label: '失业焦虑', value: `热情-${anxietyDrain}`, positive: false });
+      result.deltas.push({ icon: 'smiley-nervous', label: '失业焦虑', value: `热情-${anxietyDrain}`, positive: false });
       if (moneyMod > 0.1) {
-        result.deltas.push({ icon: '💰', label: `存款¥${state.money.toLocaleString()}缓冲焦虑`, value: `-${Math.round(moneyMod * 100)}%`, positive: true });
+        result.deltas.push({ icon: 'coins', label: `存款¥${state.money.toLocaleString()}缓冲焦虑`, value: `-${Math.round(moneyMod * 100)}%`, positive: true });
       } else if (moneyMod < -0.1) {
-        result.deltas.push({ icon: '💸', label: `负债¥${Math.abs(state.money).toLocaleString()}加剧焦虑`, value: `+${Math.round(-moneyMod * 100)}%`, positive: false });
+        result.deltas.push({ icon: 'money', label: `负债¥${Math.abs(state.money).toLocaleString()}加剧焦虑`, value: `+${Math.round(-moneyMod * 100)}%`, positive: false });
       }
-      result.deltas.push({ icon: '💼', label: '无工资收入', value: '¥0', positive: false });
+      result.deltas.push({ icon: 'briefcase', label: '无工资收入', value: '¥0', positive: false });
       // Unemployment living cost erosion: general savings cover most, but pressure leaks into doujin fund
       const impliedLiving = (state.lastSalary || 800) * 2; // implied full living cost ≈ surplus × 2
       const erosionRate = Math.min(0.6, 0.15 + state.jobSearchTurns * 0.08); // 15%→60% over months
       const unemployedExpense = Math.round(impliedLiving * erosionRate);
       state.money -= unemployedExpense;
-      result.deltas.push({ icon: '🏠', label: `生活费侵蚀同人资金(${Math.round(erosionRate * 100)}%)`, value: `-¥${unemployedExpense}`, positive: false });
+      result.deltas.push({ icon: 'house', label: `生活费侵蚀同人资金(${Math.round(erosionRate * 100)}%)`, value: `-¥${unemployedExpense}`, positive: false });
     } else {
       const bgSalaryMult = BACKGROUNDS[state.background]?.salaryMult || 1.0;
       const baseSalary = Math.round((800 + Math.floor((state.turn - 50) / 12) * 200) * bgSalaryMult);
       const salary = state.recessionTurnsLeft > 0 ? Math.floor(baseSalary * 0.8) : baseSalary; // recession cuts salary
       state.money += salary;
       state.monthlyIncome = salary;
-      result.deltas.push({ icon: '💼', label: `工资${state.recessionTurnsLeft > 0 ? '(下行-20%)' : ''}`, value: `+¥${salary}`, positive: true });
+      result.deltas.push({ icon: 'briefcase', label: `工资${state.recessionTurnsLeft > 0 ? '(下行-20%)' : ''}`, value: `+¥${salary}`, positive: true });
 
       // Recession: risk of losing job each month
       const fireChance = Math.max(0.005, 0.06 - (BACKGROUNDS[state.background]?.fireResist || 0));
@@ -2184,8 +2236,8 @@ export function executeTurn(state, actionId) {
         state.jobSearchTurns = 0;
         state.monthlyIncome = 0;
         state.time = 7; // lots of free time (no job) but anxiety drains passion
-        result.deltas.push({ icon: '🚨', label: '被裁员了！', value: '失业', positive: false });
-        result.deltas.push({ icon: '📝', label: '失业后时间充裕，但焦虑会快速消耗热情', value: '', positive: false });
+        result.deltas.push({ icon: 'warning-circle', label: '被裁员了！', value: '失业', positive: false });
+        result.deltas.push({ icon: 'note-pencil', label: '失业后时间充裕，但焦虑会快速消耗热情', value: '', positive: false });
       }
     }
   }
@@ -2202,7 +2254,7 @@ export function executeTurn(state, actionId) {
         : Math.round(salaryRef * spendRate);
       if (lifestyleCost > 0) {
         state.money -= lifestyleCost;
-        result.deltas.push({ icon: '🛒', label: `消费升级${state.unemployed ? '(惯性)' : ''}`, value: `-¥${lifestyleCost}`, positive: false });
+        result.deltas.push({ icon: 'shopping-cart', label: `消费升级${state.unemployed ? '(惯性)' : ''}`, value: `-¥${lifestyleCost}`, positive: false });
       }
     }
   }
@@ -2214,7 +2266,7 @@ export function executeTurn(state, actionId) {
   }
   if (actionId === 'rest' && state.creativeFatigue > 0) {
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 1); // extra recovery on rest
-    result.deltas.push({ icon: '🔋', label: '创作疲劳缓解', value: `疲劳${state.creativeFatigue.toFixed(1)}`, positive: true });
+    result.deltas.push({ icon: 'battery-medium', label: '创作疲劳缓解', value: `疲劳${state.creativeFatigue.toFixed(1)}`, positive: true });
   }
 
   // --- Info disclosure: rapid decay (information flood drowns everything fast) ---
@@ -2246,7 +2298,7 @@ export function executeTurn(state, actionId) {
         state.totalSales += sold;
         const repGain = 0.35 * state.infoDisclosure * sold * 0.05;
         state.reputation += repGain;
-        result.deltas.push({ icon: '🌐', label: `网上售出同人本×${sold}`, value: `+¥${rev}`, positive: true });
+        result.deltas.push({ icon: 'globe-simple', label: `网上售出同人本×${sold}`, value: `+¥${rev}`, positive: true });
       }
     }
 
@@ -2262,14 +2314,14 @@ export function executeTurn(state, actionId) {
         state.money += rev;
         state.totalRevenue += rev;
         state.totalSales += sold;
-        result.deltas.push({ icon: '🌐', label: `网上售出谷子×${sold}`, value: `+¥${rev}`, positive: true });
+        result.deltas.push({ icon: 'globe-simple', label: `网上售出谷子×${sold}`, value: `+¥${rev}`, positive: true });
       }
     }
 
     // Show secondhand impact on online sales
     const worstShMod = Math.min(onlineShModHVP, onlineShModLVP);
     if (worstShMod < 0.9) {
-      result.deltas.push({ icon: '📦', label: '二手市场挤压网上销量', value: `-${Math.round((1 - worstShMod) * 100)}%`, positive: false });
+      result.deltas.push({ icon: 'package', label: '二手市场挤压网上销量', value: `-${Math.round((1 - worstShMod) * 100)}%`, positive: false });
     }
   }
 
@@ -2283,7 +2335,7 @@ export function executeTurn(state, actionId) {
   if (state.recessionTurnsLeft > 0) {
     state.recessionTurnsLeft--;
     if (state.recessionTurnsLeft === 0) {
-      result.deltas.push({ icon: '📈', label: '经济复苏', value: '下行周期结束', positive: true });
+      result.deltas.push({ icon: 'trend-up', label: '经济复苏', value: '下行周期结束', positive: true });
     }
   }
 
@@ -2423,6 +2475,18 @@ function rollPartnerDrama(type) {
 
 // === Achievements ===
 function checkAchievements(state) {
+  // --- Update tracking counters ---
+  // Debt + passion streak
+  if (state.money < 0 && state.passion >= 60) {
+    state._debtPassionStreak = (state._debtPassionStreak || 0) + 1;
+  } else {
+    state._debtPassionStreak = 0;
+  }
+  // Phoenix tracking: passion nadir → recovery
+  if (state.passion <= 15) state._lowPassionHit = true;
+  if (state._lowPassionHit && state.passion >= 80) state._passionRecovered = true;
+
+  const age = getAge(state.turn);
   const checks = [
     { id: 'first_hvp', cond: state.totalHVP >= 1 }, { id: 'first_lvp', cond: state.totalLVP >= 1 },
     { id: 'rep3', cond: state.reputation >= 3 }, { id: 'rep5', cond: state.reputation >= 5 }, { id: 'rep8', cond: state.reputation >= 8 },
@@ -2438,6 +2502,19 @@ function checkAchievements(state) {
     { id: 'veblen', cond: (state.eventCounts['veblen_hype'] || 0) > 0 },
     { id: 'collector', cond: state.goodsCollection >= 10 && state.totalHVP === 0 && state.totalLVP === 0 },
     { id: 'commercial_debut', cond: state.commercialTransition },
+    // --- Hard achievements ---
+    { id: 'survive180', cond: state.turn >= 180 },                          // 15 years, age 33
+    { id: 'survive240', cond: state.turn >= 240 },                          // 20 years, age 38
+    { id: 'survive360', cond: state.turn >= 360 },                          // 30 years, age 48
+    { id: 'rep10', cond: state.reputation >= 10 },                          // legendary reputation
+    { id: 'hvp10', cond: state.totalHVP >= 10 },                            // prolific creator
+    { id: 'hvp20', cond: state.totalHVP >= 20 },                            // insane output
+    { id: 'debt_warrior', cond: (state._debtPassionStreak || 0) >= 6 },     // 6 months debt + high passion
+    { id: 'debt_abyss', cond: state.money <= -10000 && state.passion > 0 }, // deep in debt, still alive
+    { id: 'phoenix', cond: state._passionRecovered },                       // recover from near-death
+    { id: 'elder_creator', cond: age >= 35 && state.totalHVP > 0 && state.passion > 0 }, // still creating at 35+
+    { id: 'rich_mogul', cond: state.money >= 30000 },                       // extremely wealthy
+    { id: 'triple_threat', cond: (state.eventCounts['recession'] || 0) >= 2 && state.passion > 20 }, // survived 2+ recessions
   ];
   for (const c of checks) if (c.cond && !state.achievements.includes(c.id)) state.achievements.push(c.id);
   if (state.partnerType === 'toxic' && !state.achievements.includes('toxic_encounter')) state.achievements.push('toxic_encounter');
@@ -2445,37 +2522,49 @@ function checkAchievements(state) {
 
 export function getAchievementInfo(id) {
   const map = {
-    first_hvp: { name: '初出茅庐', desc: '完成第一本同人志', emoji: '📖' },
-    first_lvp: { name: '小试牛刀', desc: '制作了第一批谷子', emoji: '🔑' },
-    rep3: { name: '小有名气', desc: '声誉达到3', emoji: '⭐' },
-    rep5: { name: '圈内知名', desc: '声誉达到5', emoji: '🌟' },
-    rep8: { name: '传说大手', desc: '声誉达到8', emoji: '👑' },
-    survive12: { name: '一年坚持', desc: '持续创作满一年', emoji: '📅' },
-    survive24: { name: '两年老兵', desc: '持续创作满两年', emoji: '🏆' },
-    survive_work: { name: '社畜创作者', desc: '进入工作后仍在创作', emoji: '💼' },
-    rich: { name: '同人致富', desc: '资金超过10000元', emoji: '💰' },
-    hvp5: { name: '高产创作者', desc: '完成5本同人志', emoji: '📚' },
-    toxic_encounter: { name: '遇人不淑', desc: '遭遇了有毒搭档', emoji: '😈' },
-    recession_survivor: { name: '穿越周期', desc: '经历经济下行后仍在创作', emoji: '📈' },
-    diversity_savior: { name: '多样性守护者', desc: '在市场HVP为零时开始创作同人本', emoji: '🌟' },
-    market_veteran: { name: '寒冬幸存者', desc: '在市场多样性极低时仍保持热情', emoji: '🏔️' },
-    niche_hunter: { name: '需求猎人', desc: '发现3个以上细分需求缺口', emoji: '🔍' },
-    ai_survivor: { name: 'AI时代的人类', desc: '在AI革命后仍坚持人工创作', emoji: '🤖' },
-    stagflation_survivor: { name: '滞胀幸存者', desc: '经历滞胀后仍在创作', emoji: '🔥' },
-    veblen: { name: '圣遗物制造者', desc: '作品成为韦伯仑商品', emoji: '💎' },
-    collector: { name: '纯粹的消费者', desc: '收藏了10件谷子却从未创作过', emoji: '🛒' },
-    survive120: { name: '十年老兵', desc: '在同人创作之路上坚持了十年', emoji: '🎖️' },
-    commercial_debut: { name: '商业出道', desc: '从同人创作者成功转型为商业创作者', emoji: '🌟' },
+    first_hvp: { name: '初出茅庐', desc: '完成第一本同人志', emoji: 'book-open-text' },
+    first_lvp: { name: '小试牛刀', desc: '制作了第一批谷子', emoji: 'key' },
+    rep3: { name: '小有名气', desc: '声誉达到3', emoji: 'star' },
+    rep5: { name: '圈内知名', desc: '声誉达到5', emoji: 'star-four' },
+    rep8: { name: '传说大手', desc: '声誉达到8', emoji: 'crown' },
+    survive12: { name: '一年坚持', desc: '持续创作满一年', emoji: 'calendar' },
+    survive24: { name: '两年老兵', desc: '持续创作满两年', emoji: 'trophy' },
+    survive_work: { name: '社畜创作者', desc: '进入工作后仍在创作', emoji: 'briefcase' },
+    rich: { name: '同人致富', desc: '资金超过10000元', emoji: 'coins' },
+    hvp5: { name: '高产创作者', desc: '完成5本同人志', emoji: 'books' },
+    toxic_encounter: { name: '遇人不淑', desc: '遭遇了有毒搭档', emoji: 'skull' },
+    recession_survivor: { name: '穿越周期', desc: '经历经济下行后仍在创作', emoji: 'trend-up' },
+    diversity_savior: { name: '多样性守护者', desc: '在市场同人本数量为零时开始创作同人本', emoji: 'star-four' },
+    market_veteran: { name: '寒冬幸存者', desc: '在市场多样性极低时仍保持热情', emoji: 'mountains' },
+    niche_hunter: { name: '需求猎人', desc: '发现3个以上细分需求缺口', emoji: 'magnifying-glass' },
+    ai_survivor: { name: 'AI时代的人类', desc: '在AI革命后仍坚持人工创作', emoji: 'robot' },
+    stagflation_survivor: { name: '滞胀幸存者', desc: '经历滞胀后仍在创作', emoji: 'fire' },
+    veblen: { name: '圣遗物制造者', desc: '作品成为二手奢侈品', emoji: 'diamond' },
+    collector: { name: '纯粹的消费者', desc: '收藏了10件谷子却从未创作过', emoji: 'shopping-cart' },
+    survive120: { name: '十年老兵', desc: '在同人创作之路上坚持了十年', emoji: 'medal' },
+    survive180: { name: '十五年传奇', desc: '同人之路走了十五年，热情犹在', emoji: 'medal-military' },
+    survive240: { name: '二十年不灭', desc: '二十年如一日，你就是同人圈的活化石', emoji: 'flame' },
+    survive360: { name: '永恒之火', desc: '三十年...从少年到中年，热情从未熄灭', emoji: 'seal' },
+    rep10: { name: '活着的传说', desc: '声誉达到10，你的名字就是品牌', emoji: 'crown' },
+    hvp10: { name: '十本成就', desc: '完成10本同人志，量变引起质变', emoji: 'books' },
+    hvp20: { name: '创作机器', desc: '完成20本同人志，前无古人', emoji: 'building-office' },
+    debt_warrior: { name: '用爱发电', desc: '连续6个月负债但热情始终高涨', emoji: 'fire' },
+    debt_abyss: { name: '深渊行者', desc: '负债超过¥10000仍在坚持创作', emoji: 'arrow-circle-down' },
+    phoenix: { name: '涅槃重生', desc: '热情跌到谷底后重新燃起', emoji: 'bird' },
+    elder_creator: { name: '老骥伏枥', desc: '35岁之后仍在创作同人本', emoji: 'sun-horizon' },
+    rich_mogul: { name: '同人大亨', desc: '资金超过¥30000，富可敌国', emoji: 'diamond' },
+    triple_threat: { name: '经济周期收割者', desc: '经历两次以上经济下行仍保持热情', emoji: 'waves' },
+    commercial_debut: { name: '商业出道', desc: '从同人创作者成功转型为商业创作者', emoji: 'star-four' },
   };
-  return map[id] || { name: id, desc: '', emoji: '🎖️' };
+  return map[id] || { name: id, desc: '', emoji: 'medal' };
 }
 
 // === Tips ===
 const TIPS = {
   hvpStart: { label: '长期项目', text: '同人本是多月项目——独自需要3个月，有搭档可缩短到2个月。印刷成本¥800-1000在完成时支付。搭档有稿费成本，但可以加速进度。' },
   hvpContinue: { label: '坚持创作', text: '同人本创作需要持续投入。每个月都在消耗热情，但完成后的声誉积累远高于谷子。中途放弃意味着前期投入全部沉没。' },
-  hvpComplete: { label: '🎉 作品完成·入库', text: '同人本完成并入库！现在去参加同人展售卖，或等待网上零售慢慢出货。同时携带同人本和谷子参展会触发联动加成。记得关注库存——卖光了要追加印刷！' },
-  lvp: { label: '谷子入库', text: 'LVP一个月就能完成并入库，低门槛低风险。去同人展售卖可以一次卖出大量库存。网上也会有少量零售。注意库存管理——制作太多会积压资金，太少则展会上供不应求。' },
+  hvpComplete: { label: `${ic('confetti')} 作品完成·入库`, text: '同人本完成并入库！现在去参加同人展售卖，或等待网上零售慢慢出货。同时携带同人本和谷子参展会触发联动加成。记得关注库存——卖光了要追加印刷！' },
+  lvp: { label: '谷子入库', text: '同人谷一个月就能完成并入库，低门槛低风险。去同人展售卖可以一次卖出大量库存。网上也会有少量零售。注意库存管理——制作太多会积压资金，太少则展会上供不应求。' },
   rest: { label: '热情预算理论', text: '休息恢复热情的效率随入坑年限递减。长期疲惫是不可逆的。同时注意：停滞创作超过3个月后，热情会加速衰减——"不用就会生锈"。' },
   doujinEvent: { label: '同人展经济学 (Stigler)', text: '同人展是"搜寻成本→0"的极端场景：消费者直接翻阅实物，面对面交易消除信息不对称。路费是参展的机会成本，大社群有更多展会选择（规模经济）。' },
   promoteLight: { label: '轻度宣发', text: '低成本维持曝光。信号通胀越严重效果越差。适合资源紧张时维持存在感。信息透明度每月快速衰减，注意节奏。' },
