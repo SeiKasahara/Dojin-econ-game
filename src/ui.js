@@ -1274,12 +1274,19 @@ export function renderGameOver(state, onRestart) {
   const survived = state.turn;
   const age = getAge(state.turn);
   const stage = getLifeStage(state.turn);
-  const title = survived >= 48 ? '传奇落幕' : survived >= 24 ? '旅程结束' : survived >= 12 ? '一段经历' : '遗憾退场';
-  const emoji = survived >= 48 ? '🏆' : survived >= 24 ? '📖' : survived >= 12 ? '🌟' : '😢';
+  const isCommercial = state.commercialTransition;
+  const title = isCommercial ? '商业出道' : survived >= 48 ? '传奇落幕' : survived >= 24 ? '旅程结束' : survived >= 12 ? '一段经历' : '遗憾退场';
+  const emoji = isCommercial ? '🌟' : survived >= 48 ? '🏆' : survived >= 24 ? '📖' : survived >= 12 ? '🌟' : '😢';
 
   const stageText = stage === 'work' ? '工作后' : stage === 'university' ? '大学期间' : '暑假';
 
-  const shareText = `我在「同人社团物语」中从18岁的暑假开始创作，` +
+  const shareText = isCommercial
+    ? `我在「同人社团物语」中从18岁暑假开始创作，` +
+      `在${age}岁时成功商业出道！` +
+      `声誉最高${state.maxReputation.toFixed(1)}，` +
+      `制作了${state.totalHVP}本同人志，累计销售额¥${state.totalRevenue.toLocaleString()}。` +
+      `从同人到商业，你能做到吗？`
+    : `我在「同人社团物语」中从18岁的暑假开始创作，` +
     `坚持到了${age}岁（${stageText}），` +
     `声誉最高${state.maxReputation.toFixed(1)}，` +
     `制作了${state.totalHVP}本同人志和${state.totalLVP}批谷子。` +

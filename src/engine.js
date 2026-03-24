@@ -310,6 +310,8 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     eventLog: [],      // [{ turn, name, city, revenue, sold }]
     lastResult: null, lastEvent: null,
     achievements: [], gameOverReason: '',
+    commercialOfferReceived: false, // true after publisher scouts you
+    commercialTransition: false,    // true if player chose to go commercial (positive ending)
   };
 }
 
@@ -343,6 +345,8 @@ export const ACTIONS = {
                  costLabel: '¥200 热情↑(效果逐年递减)', requires: { time: 1 } },
   sellGoods:   { id: 'sellGoods',   name: '出售闲置',   emoji: '📤', type: 'sellGoods',
                  costLabel: '卖掉收藏品换钱 需有收藏', requires: { time: 1 } },
+  goCommercial: { id: 'goCommercial', name: '商业出道',  emoji: '🌟', type: 'goCommercial',
+                 costLabel: '接受出版社邀约，告别同人时代', requires: {} },
 };
 
 // Dynamic action info (for UI)
@@ -460,6 +464,10 @@ export function canPerformAction(state, actionId) {
   // sellGoods: need collection
   if (actionId === 'sellGoods') {
     if (state.goodsCollection <= 0) return false;
+  }
+  // goCommercial: only after receiving the offer
+  if (actionId === 'goCommercial') {
+    if (!state.commercialOfferReceived) return false;
   }
   if (r.passion && state.passion < r.passion) return false;
   // Freelance: dynamic time requirement
@@ -999,6 +1007,22 @@ const RANDOM_EVENTS = [
     },
     tip: '同人圈的社交关系随时间自然衰减。重聚可能带来温暖的回忆和重新连接，也可能让你意识到"只有自己还在坚持"的孤独感。这种身份认同的动摇比任何经济因素都更能影响热情。',
     weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) / 12 > 2, maxTotal: 3,
+  },
+  // === Commercial transition event ===
+  {
+    id: 'commercial_offer', emoji: '✉️', title: '出版社的邀约',
+    desc: '你的作品在业界引起了关注。一位出版社编辑在展会后找到你，递来了名片——"我们很看好你的创作实力，有兴趣聊聊商业出版吗？"',
+    effect: '解锁「商业出道」行动', effectClass: 'positive',
+    apply: (s) => { s.commercialOfferReceived = true; s.passion = Math.min(100, s.passion + 10); },
+    tip: '从同人到商业是许多创作者的自然进化路径。Type-Moon从Comiket走向Fate，KEY从同人走向Kanon。当声誉和销量达到临界点，商业化就不再是"卖梦想"，而是"顺势而为"。你可以选择接受，也可以继续留在同人圈。',
+    weight: 15,
+    when: (s) => {
+      if (s.commercialOfferReceived || s.reputation < 12 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
+      // Economic crisis: publishers are cautious, only 30% chance of scouting
+      if (s.recessionTurnsLeft > 0 || (s.advanced && (s.advanced.stagflationTurnsLeft > 0 || s.advanced.debtCrisisActive))) return Math.random() < 0.3;
+      return true;
+    },
+    maxTotal: 1,
   },
 ];
 
@@ -1701,6 +1725,19 @@ export function executeTurn(state, actionId) {
     }
   }
 
+  // --- Commercial transition: player accepts publisher offer ---
+  if (action.type === 'goCommercial') {
+    state.commercialTransition = true;
+    checkAchievements(state); // ensure commercial_debut achievement is recorded
+    state.passion = 0;
+    state.phase = 'gameover';
+    state.gameOverReason = generateCommercialEnding(state);
+    result.deltas.push({ icon: '🌟', label: '商业出道！', value: '告别同人，踏入商业创作', positive: true });
+    result.tip = { label: '从同人到商业', text: '许多传奇创作者都走过这条路——从Comiket的小摊位到出版社的签约作者。同人创作培养的技能、积累的粉丝、锻炼的市场嗅觉，都是商业化最好的基础。你不是在"离开"同人圈，而是在"毕业"。' };
+    state.lastResult = result;
+    return result;
+  }
+
   // --- Partner effects ---
   if (state.hasPartner && state.partnerType) {
     const pt = PARTNER_TYPES[state.partnerType];
@@ -1981,6 +2018,20 @@ function generateEnding(state) {
     : '热情耗尽——用爱发电的电量归零了。但请记住：退坑不等于失败，只是人生的优先级发生了变化。那些作品会替你记住，你曾经为热爱全力以赴过。';
 }
 
+function generateCommercialEnding(state) {
+  const rep = state.maxReputation;
+  const hvp = state.totalHVP;
+  const rev = state.totalRevenue;
+  const age = getAge(state.turn);
+  if (rep >= 8 && hvp >= 8) {
+    return `从${age - 18}岁暑假的第一本同人志，到声誉${rep.toFixed(1)}的圈内传说，再到今天签下商业出版合约——你的故事本身就是一部最好的作品。${hvp}本同人志积累的技艺、审美和粉丝，将成为你商业生涯最坚实的基础。同人圈永远欢迎你回来。`;
+  }
+  if (rev >= 50000) {
+    return `累计¥${rev.toLocaleString()}的同人销售额证明了你的商业潜力。出版社看中的不只是你的创作能力，更是你对市场的敏锐嗅觉。从"为爱发电"到"以此为业"，这不是梦想的终结，而是梦想的升级。`;
+  }
+  return `${hvp}本同人志、无数个深夜的创作、大大小小的展会——这些经历铸就了今天的你。当出版社编辑递来合约时，你知道这不是终点。同人时代教会你的一切——对作品的执着、对读者的理解、对市场的把握——将在商业舞台上绽放更耀眼的光芒。`;
+}
+
 function rollPartnerDrama(type) {
   const pool = {
     demanding: [{ desc: '搭档嫌弃你的画稿质量，要求推翻重来', summary: '热情-8', passionDelta: -8, reputationDelta: 0 }],
@@ -2014,6 +2065,7 @@ function checkAchievements(state) {
     { id: 'stagflation_survivor', cond: state.advanced && (state.eventCounts['stagflation'] || 0) > 0 && state.advanced.stagflationTurnsLeft === 0 && state.passion > 0 },
     { id: 'veblen', cond: (state.eventCounts['veblen_hype'] || 0) > 0 },
     { id: 'collector', cond: state.goodsCollection >= 10 && state.totalHVP === 0 && state.totalLVP === 0 },
+    { id: 'commercial_debut', cond: state.commercialTransition },
   ];
   for (const c of checks) if (c.cond && !state.achievements.includes(c.id)) state.achievements.push(c.id);
   if (state.partnerType === 'toxic' && !state.achievements.includes('toxic_encounter')) state.achievements.push('toxic_encounter');
@@ -2041,6 +2093,7 @@ export function getAchievementInfo(id) {
     veblen: { name: '圣遗物制造者', desc: '作品成为韦伯仑商品', emoji: '💎' },
     collector: { name: '纯粹的消费者', desc: '收藏了10件谷子却从未创作过', emoji: '🛒' },
     survive120: { name: '十年老兵', desc: '在同人创作之路上坚持了十年', emoji: '🎖️' },
+    commercial_debut: { name: '商业出道', desc: '从同人创作者成功转型为商业创作者', emoji: '🌟' },
   };
   return map[id] || { name: id, desc: '', emoji: '🎖️' };
 }
