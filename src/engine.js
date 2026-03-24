@@ -435,10 +435,8 @@ export function getFreelanceTimeCost(state) {
 export function canPerformAction(state, actionId) {
   const r = ACTIONS[actionId]?.requires;
   if (!r) return false;
-  // Unemployed: can only rest, find job, freelance, or buy goods
-  if (state.unemployed) {
-    if (!['rest', 'jobSearch', 'freelance', 'buyGoods', 'sellGoods'].includes(actionId)) return false;
-  }
+  // Unemployed: time is plentiful but anxiety drains passion fast — all actions allowed
+  // (the real constraint is passion budget, not action locks)
   // jobSearch: only when unemployed
   if (actionId === 'jobSearch' && !state.unemployed) return false;
   // partTimeJob: only students or unemployed
@@ -927,6 +925,81 @@ const RANDOM_EVENTS = [
     tip: '当一手市场关闭（绝版），无套利上限被打破，商品从消费品相变为金融资产。声誉越高，基础定价F越高。这就是"富有声誉的创作者退坑被视作看涨期权"——你的旧作因稀缺性而升值。',
     weight: 2, when: (s) => s.maxReputation >= 2 && s.totalHVP >= 2 && s.turn > 24, maxTotal: 3,
   },
+  // === Work stage difficulty events ===
+  {
+    id: 'rent_increase', emoji: '🏠', title: '房租上涨',
+    desc: '房东通知下个月开始涨租。在这个城市，住房成本是越来越重的负担...',
+    effect: '资金-300~500 热情-3', effectClass: 'negative',
+    apply: (s) => {
+      const increase = 300 + Math.floor(Math.random() * 200);
+      s.money -= increase;
+      s.passion = Math.max(0, s.passion - 3);
+    },
+    tip: '住房成本是都市创作者的隐性杀手。房租挤占的不是时间，是"心理安全感"——当生存成本上升，创作变成一种奢侈。',
+    weight: 5, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: 3,
+  },
+  {
+    id: 'work_burnout', emoji: '😩', title: '职业倦怠',
+    desc: '每天重复的工作内容让你感到麻木，回到家只想瘫着什么都不做...',
+    effect: '热情-8 时间-2h(3回合)', effectClass: 'negative',
+    apply: (s) => {
+      s.passion = Math.max(0, s.passion - 8);
+      s.timeDebuffs.push({ id: 'burnout_' + s.turn, reason: '职业倦怠', turnsLeft: 3, delta: -2 });
+      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
+    },
+    tip: '职业倦怠不是懒——是长期高强度低回报工作的心理防御机制。它同时消耗热情和有效时间，是工作阶段最常见的隐性成本。',
+    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
+  },
+  {
+    id: 'social_obligation', emoji: '🍻', title: '社交应酬',
+    desc: '公司团建、同事聚餐、客户应酬……这些"不得不去"的社交活动占据了你的创作时间。',
+    effect: '时间-2h(2回合) 资金-200 热情-2', effectClass: 'negative',
+    apply: (s) => {
+      s.timeDebuffs.push({ id: 'social_' + s.turn, reason: '社交应酬', turnsLeft: 2, delta: -2 });
+      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
+      s.money -= 200;
+      s.passion = Math.max(0, s.passion - 2);
+    },
+    tip: '职场社交是一种"强制消费"——你用时间和金钱购买的不是快乐，而是职场关系的维护成本。对创作者来说，这是最纯粹的机会成本。',
+    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
+  },
+  {
+    id: 'commute_hell', emoji: '🚇', title: '通勤地狱',
+    desc: '公司搬了办公地点，或者你不得不搬到更远的地方住。每天通勤时间大幅增加...',
+    effect: '时间-1h(永久)', effectClass: 'negative',
+    apply: (s) => {
+      s.timeDebuffs.push({ id: 'commute_' + s.turn, reason: '通勤时间增加', turnsLeft: 999, delta: -1 });
+      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
+    },
+    tip: '通勤是城市生活最大的时间黑洞。每天多一小时通勤≈每月少30小时自由时间。这是结构性的时间剥夺，无法通过"更努力"来弥补。',
+    weight: 3, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: 2,
+  },
+  {
+    id: 'life_admin', emoji: '📋', title: '生活琐事',
+    desc: '报税、交社保、修电器、跑银行……成年人的生活充满了琐碎但不得不做的事情。',
+    effect: '时间-2h(2回合) 热情-3', effectClass: 'negative',
+    apply: (s) => {
+      s.timeDebuffs.push({ id: 'admin_' + s.turn, reason: '生活琐事', turnsLeft: 2, delta: -2 });
+      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
+      s.passion = Math.max(0, s.passion - 3);
+    },
+    tip: '生活管理成本是成年后的隐性税——学生时代由父母承担的一切，现在都需要你自己的时间和精力。这是"长大"的真实代价。',
+    weight: 7, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: Infinity,
+  },
+  {
+    id: 'old_friend_reunion', emoji: '🍺', title: '老友重聚',
+    desc: '大学时一起搞同人的朋友约你出来聚聚。几年不见，大家的生活都变了很多...',
+    effect: '热情+5 或 -5（看情况）', effectClass: 'neutral',
+    apply: (s) => {
+      if (Math.random() < 0.5) {
+        s.passion = Math.min(100, s.passion + 5);
+      } else {
+        s.passion = Math.max(0, s.passion - 5);
+      }
+    },
+    tip: '同人圈的社交关系随时间自然衰减。重聚可能带来温暖的回忆和重新连接，也可能让你意识到"只有自己还在坚持"的孤独感。这种身份认同的动摇比任何经济因素都更能影响热情。',
+    weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) / 12 > 2, maxTotal: 3,
+  },
 ];
 
 // === Roll Events ===
@@ -1015,7 +1088,17 @@ export function executeTurn(state, actionId) {
   } else if (action.type === 'social') {
     state.passion -= 3;
     result.deltas.push({ icon: '❤️', label: '精力消耗', value: '-3', positive: false });
-    const prob = Math.min(0.9, state.reputation / (state.reputation + 3) + (state.endowments.social || 0) * 0.08);
+    let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + (state.endowments.social || 0) * 0.08);
+    // Work stage: smaller social circle → harder to find partners
+    if (getLifeStage(state.turn) === 'work') {
+      prob *= 0.6;
+      // 老炮加成: long-time active workers get a bonus
+      const workYears = (state.turn - 50) / 12;
+      if (workYears > 3 && (state.turn - state.lastCreativeTurn) <= 6) {
+        prob += 0.1;
+        result.deltas.push({ icon: '🎖️', label: '老炮加成', value: '长期活跃+10%', positive: true });
+      }
+    }
     if (Math.random() < prob) {
       const pType = rollPartnerType(state.endowments.social || 0);
       const pt = PARTNER_TYPES[pType];
@@ -1038,6 +1121,9 @@ export function executeTurn(state, actionId) {
       result.tip = pType === 'toxic' ? TIPS.partnerToxic : pType === 'supportive' ? TIPS.partnerFound : TIPS.partnerRisk;
     } else {
       result.deltas.push({ icon: '🤝', label: '没找到合适搭档', value: '', positive: false });
+      if (getLifeStage(state.turn) === 'work') {
+        result.deltas.push({ icon: '💼', label: '工作后同人圈子变小，找搭档更难了', value: '', positive: false });
+      }
       result.tip = TIPS.partnerFail;
     }
 
@@ -1250,18 +1336,36 @@ export function executeTurn(state, actionId) {
         state.passion = Math.min(100, state.passion + boost);
         result.deltas.push({ icon: '🎉', label: '展会大卖！情绪高涨', value: `热情+${boost}`, positive: true });
       } else if (totalEventSold <= 2 && (state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0)) {
-        const hit = -10 - Math.round(evt.travelCost / 150);
+        const costRef = isAttend ? evt.travelCost : Math.round(evt.travelCost * 0.3);
+        const hit = -10 - Math.round(costRef / 150);
         state.passion = Math.max(0, state.passion + hit);
-        result.deltas.push({ icon: '😞', label: '展会惨淡...花了路费却卖不出去', value: `热情${hit}`, positive: false });
+        result.deltas.push({ icon: '😞', label: isAttend ? '展会惨淡...花了路费却卖不出去' : '寄售惨淡...邮费白花了', value: `热情${hit}`, positive: false });
       }
 
       // Show remaining inventory
       result.deltas.push({ icon: '📦', label: '剩余库存', value: `本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}`, positive: state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0 });
 
-      // Community feedback from face-to-face interaction
-      const feedback = calculateFeedback(state);
-      state.passion = Math.min(100, state.passion + feedback);
-      if (feedback > 0.5) result.deltas.push({ icon: '💬', label: '现场交流反馈', value: `热情+${feedback.toFixed(1)}`, positive: true });
+      // Community feedback
+      if (isAttend) {
+        // 亲参: face-to-face interaction
+        const feedback = calculateFeedback(state);
+        state.passion = Math.min(100, state.passion + feedback);
+        if (feedback > 0.5) result.deltas.push({ icon: '💬', label: '现场交流反馈', value: `热情+${feedback.toFixed(1)}`, positive: true });
+      } else {
+        // 寄售: online feedback — smaller but reliable
+        if (totalEventSold > 0) {
+          const onlineFeedback = Math.min(5, Math.round(totalEventSold * 0.3));
+          state.passion = Math.min(100, state.passion + onlineFeedback);
+          result.deltas.push({ icon: '📱', label: '线上反馈', value: `热情+${onlineFeedback}`, positive: true });
+        }
+        // 买家晒图 chance (scaled by reputation)
+        const shareChance = Math.min(0.5, 0.15 + state.reputation * 0.05);
+        if (totalEventSold > 0 && Math.random() < shareChance) {
+          const sharePassion = 3 + Math.min(5, Math.round(state.reputation));
+          state.passion = Math.min(100, state.passion + sharePassion);
+          result.deltas.push({ icon: '📸', label: '买家晒图！', value: `热情+${sharePassion}`, positive: true });
+        }
+      }
 
       // Clear event (selling happens immediately at the event)
       state.attendingEvent = null;
@@ -1338,7 +1442,12 @@ export function executeTurn(state, actionId) {
         }
         state._pendingChoices = null;
       }
-      state.hvpProject.progress++;
+      // Work stage: creative efficiency reduced (fatigue after day job)
+      const workEfficiency = getLifeStage(state.turn) === 'work' && !state.unemployed ? 0.7 : 1.0;
+      state.hvpProject.progress += workEfficiency;
+      if (workEfficiency < 1.0) {
+        result.deltas.push({ icon: '😮‍💨', label: '下班后创作效率降低', value: '进度×0.7', positive: false });
+      }
       const p = state.hvpProject;
       if (p.progress >= p.needed) {
         // === HVP COMPLETE → ADD TO INVENTORY ===
@@ -1431,7 +1540,7 @@ export function executeTurn(state, actionId) {
         }
         if (state.passion < 30) result.tip = TIPS.burnout;
       } else {
-        result.deltas.push({ icon: '📖', label: '继续创作中...', value: `进度 ${p.progress}/${p.needed}`, positive: true });
+        result.deltas.push({ icon: '📖', label: '继续创作中...', value: `进度 ${Math.floor(p.progress)}/${p.needed}`, positive: true });
         result.tip = TIPS.hvpContinue;
       }
     }
@@ -1622,9 +1731,18 @@ export function executeTurn(state, actionId) {
     || (actionId === 'findPartner' && state.hasPartner);
   if (isCreative) state.lastCreativeTurn = state.turn;
 
-  // --- Reality drain ---
+  // --- Reality drain (with income/savings buffer during work stage) ---
   const rawDrain = getRealityDrain(state.turn);
-  const drain = Math.max(0, rawDrain - (state.endowments.resilience || 0) * 0.5); // resilience reduces drain
+  let drain = Math.max(0, rawDrain - (state.endowments.resilience || 0) * 0.5); // resilience reduces drain
+  if (drain > 0 && getLifeStage(state.turn) === 'work') {
+    const incomeBuffer = state.monthlyIncome > 0 ? Math.min(0.4, state.monthlyIncome / 5000) : 0;
+    const savingsBuffer = state.money > 3000 ? Math.min(0.2, (state.money - 3000) / 30000) : 0;
+    const totalBuffer = Math.min(0.5, incomeBuffer + savingsBuffer);
+    drain = drain * (1 - totalBuffer);
+    if (totalBuffer > 0.05) {
+      result.deltas.push({ icon: '💰', label: '经济稳定缓冲现实压力', value: `-${Math.round(totalBuffer * 100)}%`, positive: true });
+    }
+  }
   if (drain > 0) {
     state.passion = Math.max(0, state.passion - drain);
     result.deltas.push({ icon: '🌍', label: '现实消耗', value: `热情-${drain.toFixed(1)}`, positive: false });
@@ -1690,9 +1808,10 @@ export function executeTurn(state, actionId) {
       if (state.recessionTurnsLeft > 0 && Math.random() < fireChance) {
         state.unemployed = true;
         state.jobSearchTurns = 0;
-        state.time = 2; // minimal free time (all spent on survival)
+        state.monthlyIncome = 0;
+        state.time = 7; // lots of free time (no job) but anxiety drains passion
         result.deltas.push({ icon: '🚨', label: '被裁员了！', value: '失业', positive: false });
-        result.deltas.push({ icon: '📝', label: '只能"找工作"或"休息"', value: '', positive: false });
+        result.deltas.push({ icon: '📝', label: '失业后时间充裕，但焦虑会快速消耗热情', value: '', positive: false });
       }
     }
   }
@@ -1794,7 +1913,9 @@ export function executeTurn(state, actionId) {
 
   // --- Advance turn ---
   state.turn++;
-  state.time = computeEffectiveTime(state.turn, state.timeDebuffs);
+  state.time = state.unemployed
+    ? Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)))
+    : computeEffectiveTime(state.turn, state.timeDebuffs);
 
   // --- Generate available doujin events for next turn ---
   state.availableEvents = generateEvents(state);
@@ -1939,7 +2060,7 @@ const TIPS = {
   partnerRisk: { label: '搭档风险', text: '搭档类型是随机的。严格搭档虽然出品好但压力大，不靠谱搭档可能临时消失。协作引入了额外的不确定性。' },
   partnerToxic: { label: '有毒协作', text: '有毒搭档持续消耗热情，甚至公开引发争端损害声誉。一旦卷入，只能等合作期结束...' },
   burnout: { label: '倦怠风险 ', text: '创作行为本身消耗热情预算，这是"用爱发电"的真实成本。' },
-  jobSearching: { label: '失业与外生退出', text: '失业期间无法创作，只能"找工作"或"休息"。经济下行让求职更难，失业时间越长焦虑越重' },
+  jobSearching: { label: '失业与外生退出', text: '失业后有更多空闲时间，可以继续创作。但无收入的焦虑会快速侵蚀热情——存款越少，焦虑越重。找工作和创作之间需要权衡。' },
   jobFound: { label: '重返岗位', text: '找到工作了！收入恢复，但失业期间流失的热情和声誉需要时间重建。如果经济仍在下行，要警惕再次失业的风险。' },
   partTimeJob: { label: '时间-金钱权衡', text: '打工赚的钱稳定但不多(¥300~500)，且占用了本可以创作的时间。这就是经济学中的机会成本——打工的每一小时，都是放弃创作的一小时。' },
   freelanceLow: { label: '接稿与声誉', text: '声誉低时接稿收入有限。但接稿本身也是一种技能锻炼。注意：接稿消耗的热情比普通打工更大——因为你在用创作能力换钱，精神消耗更高。' },
