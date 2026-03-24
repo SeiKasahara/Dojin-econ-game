@@ -4,7 +4,7 @@
  */
 
 import './style.css';
-import { createInitialState, executeTurn, rollEvent, applyEvent, ACTIONS } from './engine.js';
+import { createInitialState, executeTurn, rollEvent, applyEvent, ACTIONS, getLifeStage } from './engine.js';
 import { renderTitle, renderEndowments, renderGame, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice } from './ui.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice } from './engine.js';
 
@@ -61,6 +61,22 @@ function handleAction(actionId) {
       // Show attend mode selector: 亲参 vs 寄售
       renderEventModeSelector(state, chosenEvent, (mode) => {
         state.attendingEvent = chosenEvent;
+
+        // Work stage leave check: need to take time off to attend in person
+        if (mode === 'attend' && getLifeStage(state.turn) === 'work' && !state.unemployed) {
+          // Base 70%, drops during active time debuffs (996, burnout, etc.)
+          const busyDebuffs = state.timeDebuffs.filter(d => d.delta < 0).length;
+          const leaveProb = Math.max(0.25, 0.70 - busyDebuffs * 0.15);
+          if (Math.random() >= leaveProb) {
+            // Leave denied → forced consignment
+            state._eventMode = 'consign';
+            state._minigameResult = null;
+            state._leaveDenied = true; // flag for result display
+            proceedWithTurn(actionId);
+            return;
+          }
+        }
+
         state._eventMode = mode;
         if (mode === 'attend') {
           // 亲参 → play minigame
@@ -209,8 +225,10 @@ function proceedWithTurn(actionId) {
     showEventChain([...officialEvts], () => {
       const event = rollEvent(state);
       if (event) {
-        state.lastEvent = event;
-        renderEvent(event, () => {
+        // Resolve dynamic effect text (some events compute effect based on player state)
+        const displayEvent = typeof event.effect === 'function' ? { ...event, effect: event.effect(state) } : event;
+        state.lastEvent = displayEvent;
+        renderEvent(displayEvent, () => {
           applyEvent(state, event);
           if (state.phase === 'gameover') { renderGameOver(state, () => renderTitle(startGame)); return; }
           state.phase = 'action';
