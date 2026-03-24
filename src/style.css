@@ -1260,6 +1260,10 @@ html, body {
   box-shadow: 0 0 0 4px rgba(255,255,255,0.85), 0 0 24px rgba(255,255,255,0.4) !important;
   border-radius: 16px !important;
   pointer-events: none;
+  /* iOS Safari: force new stacking context */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  isolation: isolate;
 }
 
 .tut-bubble {

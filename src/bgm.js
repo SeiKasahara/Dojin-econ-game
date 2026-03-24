@@ -71,14 +71,15 @@ function tryPlay(trackId) {
       oldAudio.volume = Math.max(0, oldTarget * (1 - t) * (muted ? 0 : 1));
     }
 
-    // Fade in new
-    audio.volume = Math.min(targetVol, targetVol * t);
+    // Fade in new (respect muted state in real-time)
+    const curTargetVol = muted ? 0 : TRACKS[trackId].vol;
+    audio.volume = Math.min(curTargetVol, curTargetVol * t);
 
     if (step >= steps) {
       clearInterval(fadeTimer);
       fadeTimer = null;
       if (oldAudio) { oldAudio.pause(); oldAudio.volume = 0; }
-      audio.volume = targetVol;
+      audio.volume = curTargetVol;
     }
   }, FADE_STEP);
 }
@@ -144,6 +145,8 @@ export function stopBGM() {
 /** Toggle mute */
 export function toggleMute() {
   muted = !muted;
+  // Stop any active fade so it doesn't override
+  if (fadeTimer) { clearInterval(fadeTimer); fadeTimer = null; }
   if (current && audios[current]) {
     audios[current].volume = muted ? 0 : TRACKS[current].vol;
   }

@@ -24,7 +24,7 @@ export function renderTitle(onStart, onContinue) {
       <h1>同人社团物语</h1>
       <p class="subtitle">一个关于热情、声誉与选择的<br/>同人经济学模拟游戏</p>
       <p class="tagline">
-        基于真实问卷数据构建的经济学模型<br/>
+        <br/>
         从高考后的暑假开始，经历大学、工作<br/>
         你的同人创作之路能走多远？
       </p>
@@ -51,7 +51,7 @@ export function renderTitle(onStart, onContinue) {
       <button class="btn ${save ? 'btn-secondary' : 'btn-primary'}" id="btn-start" style="width:100%;max-width:340px">${save ? '开始新游戏' : '开始创作之旅'}</button>
       <p class="tagline mt-16" style="font-size:0.7rem">
         玩法：每回合选择行动，管理热情·声誉·资金<br/>
-        热情归零 = 游戏结束 · 现实会越来越忙
+        热情归零 = 游戏结束
       </p>
       <button id="btn-mute" style="margin-top:10px;background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button>
       <p class="tagline" style="font-size:0.65rem;margin-top:8px">
@@ -224,11 +224,15 @@ export function renderGame(state, onAction, onRetire) {
       })()
     : '';
 
-  // Time debuff display
+  // Time debuff/buff display
   const debuffInfo = state.timeDebuffs.length > 0
-    ? state.timeDebuffs.filter(d => d.turnsLeft < 900).map(d =>
-        `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger)">${ic('hourglass')} ${d.reason} ${d.turnsLeft}月</span>`
-      ).join(' ')
+    ? state.timeDebuffs.filter(d => d.turnsLeft < 900).map(d => {
+        const isPositive = d.delta > 0;
+        const bg = isPositive ? '#E8F8F0' : '#FDE8E8';
+        const color = isPositive ? 'var(--success)' : 'var(--danger)';
+        const icon = isPositive ? 'sun' : 'hourglass';
+        return `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:${bg};color:${color}">${ic(icon)} ${d.reason} ${d.turnsLeft}月</span>`;
+      }).join(' ')
     : '';
 
   const recessionInfo = state.recessionTurnsLeft > 0
@@ -1583,8 +1587,8 @@ export function renderStrategySelector(state, onSelect) {
 
   const strategies = [
     { id: 'normal', emoji: 'package', name: '普通发售', desc: '按正常流程印刷发售', detail: '不做特殊处理。二手市场自由流通。' },
-    { id: 'unlimited', emoji: 'infinity', name: '不限量发售', desc: '承诺持续接受预订再版', detail: '投机客无法预估存量，泡沫项趋近于零。压制二手HVP炒价。' },
-    { id: 'signed', emoji: 'pencil', name: 'To签/定制化', desc: '每本附赠买家专属签绘', detail: '大幅降低二手流通价值（个人签名难以转售）。粉丝好感↑声誉+0.1。' },
+    { id: 'unlimited', emoji: 'infinity', name: '不限量发售', desc: '承诺持续接受预订再版', detail: '投机客无法预估存量，泡沫项趋近于零。压制二手同人本炒价。' },
+    { id: 'signed', emoji: 'pencil', name: 'To签/定制化', desc: '每本附赠买家专属签绘', detail: '大幅降低二手流通价值（个人签名难以转售）。粉丝好感上升声誉+0.1。' },
     { id: 'digital', emoji: 'phone', name: '同步发行电子版', desc: '实体+电子同步发售', detail: '用低成本满足内容消费需求，减少投机买家。额外获得约30%电子版收入。' },
   ];
 
@@ -1609,7 +1613,7 @@ export function renderStrategySelector(state, onSelect) {
       </div>
       <button class="btn btn-primary btn-block" id="btn-strat-confirm" disabled style="opacity:0.5">请选择策略</button>
       <div class="tip-box" style="text-align:left;margin-top:8px;margin-bottom:0">
-        <div class="tip-label">创作者反制 (frmn.md)</div>
+        <div class="tip-label">创作者反制</div>
         <div class="tip-text">投机客的利益建立在稀缺性之上。创作者可以通过干预供给预期(不限量)、降低流通属性(To签)或分离内容效用(电子版)来抑制投机。每种策略有不同的收益与取舍。</div>
       </div>
     </div>
@@ -1935,8 +1939,9 @@ function buildNarrativeSections(state) {
     alerts.push({ icon: 'trend-down', text: `经济下行持续中（约${yrs}年），销量-30%，成本+20%。`, severity: 'warning' });
   }
 
-  if (state.timeDebuffs.length > 0) {
-    const reasons = state.timeDebuffs.map(d => d.reason).join('、');
+  const negDebuffs = state.timeDebuffs.filter(d => d.delta < 0);
+  if (negDebuffs.length > 0) {
+    const reasons = negDebuffs.map(d => d.reason).join('、');
     alerts.push({ icon: 'hourglass', text: `受"${reasons}"影响，可用时间减少。`, severity: 'warning' });
   }
 

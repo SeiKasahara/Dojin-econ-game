@@ -211,61 +211,11 @@ function generalChatter() {
   return r() < 0.35 ? [{ text: pool[Math.floor(r() * pool.length)], type: 'flavor' }] : [];
 }
 
-// === Comment pools by feed type ===
-const COMMENTS = {
-  npc: [
-    '加油！期待新作！', '什么时候出通贩啊', '大大好高产', '封面太好看了吧', '已预定！',
-    '画风好绝', '终于等到了！', '求repo！', '什么时候开预售', '啊啊啊期待',
-    '这个配色绝了', '太太永远的神', '冲了冲了', '这也太好看了', '收藏了！',
-    '天天蹲更新', '好想去现场买', '求通贩链接！', '画力又进步了', '这质量也太高了',
-    '等了好久终于出了', '直接all in', '封面杀我', '这次的特典是什么', '通贩什么时候开',
-    '上次的本子还没看完', '一出必买系列', '太太辛苦了', '期待实物！', '又要吃土了',
-    '求返图！', '希望这次能抢到', '每次都秒没', '活捉太太', '印量能多点吗',
-    '啊好想去展会', '远程粉丝哭泣', '线上能买吗', '质量永远在线', '太香了',
-  ],
-  drama: [
-    '吃瓜.jpg', '有人总结一下前因后果吗', '又来了...', '圈子好乱', '不想掺和但是好好奇',
-    '双方都有问题吧', '别吵了行不行', '退坑保平安', '这瓜比本子好看', '每天都有新瓜',
-    '当事人能出来说两句吗', '截图都看了，离谱', '建议双方冷静一下', '圈子太小了',
-    '吃完这个瓜就去画画', '好累啊天天吵', '感觉要分裂了', '两边都关注了好尴尬',
-    '有没有不吵架的一天', '我就看看不说话', '这件事说来话长', '保持围观不站队',
-    '好想回到只画画的日子', '别上升到真人吧', '论坛已经炸了', '热搜第一名',
-    '大家冷静冷静', '原来是这么回事', '背后的故事更精彩', '这下圈外人都知道了',
-  ],
-  trend: [
-    '这波我要跟！', '好多人在画这个', '确实最近刷屏了', '终于轮到这个tag火了',
-    '我也想画但是画不出来', '这种风格好难但是好好看', '已经开坑了', '赶紧上车',
-    '再不画就过气了', '这个trend真的很有感觉', '但愿不是三分钟热度', '画了一半了',
-    '感觉什么都在跟这个', '确实好看', '很适合出本', '这波热度真高',
-    '有人统计了最近的排行吗', '我就不跟风了', '画自己想画的就好', '卷起来了',
-    '好多太太在画', '时间线全是这个', '这个tag太卷了', '但是真的好看啊',
-  ],
-  fan: [
-    '太太我爱你！', '每本都买了', '安利给全世界', '什么时候出下一本', '永远支持',
-    '你的作品治愈了我', '质量太稳了', '看了三遍了还想看', '是宝藏太太！', '求出续篇',
-    '我就是从这本入坑的', '推荐给同事了，她也喜欢', '实物比图片更好看', '好想认识你',
-    '悄悄表白太太', '你的画风是我最喜欢的', '每次出新作都第一时间买', '永远的神',
-    '收到本子了好开心', '质量太高了', '看完哭了', '这本太好了', '太太请继续创作',
-  ],
-  market: [
-    '市场真卷', '感觉越来越难了', '新人好多', '老人都去哪了', '钱包撑不住了',
-    '二手价格好离谱', '为什么谷子这么贵了', '以前没这么卷啊', '同人不好做了',
-    '希望市场能稳定一点', '这个月花太多了', '需要节制消费了', '好想摆摊啊',
-    '成本越来越高了', '印刷费涨价了', '邮费也涨了', '做同人真的不赚钱',
-    '但是快乐是真的', '累并快乐着', '下个月继续冲', '存钱等展会',
-  ],
-  flavor: [
-    '哈哈哈哈共鸣了', '说的就是我', '笑死', '太真实了', '每天的日常',
-    '能不能别emo了', '打工人的眼泪', '什么时候是个头', '但是还是很开心', '同感+1',
-    '这不就是我吗', '谁懂啊', '抱抱', '一起加油', '人间真实',
-    '哭了', '属于是了', '你说得对但是我选择摸鱼', '就是说', '太有道理了',
-    '每次看到这种帖子都想转发', '就是这种感觉', '有人懂我了', '今日份共鸣',
-    '写出了我想说的话', '评论区比正文好看', '收藏了', '下次还来', '日常打卡',
-  ],
-};
+// === Context-aware comment generator ===
+// Each post carries its own comment pool for relevance
+const GENERIC_REACTIONS = ['哈哈哈', '真的吗', '+1', '同感', '绝了', '收藏了', '转发了', '太真实了', '笑死'];
 
-function pickComments(type, count) {
-  const pool = COMMENTS[type] || COMMENTS.flavor;
+function pickFrom(pool, count) {
   const result = [];
   const used = new Set();
   const n = Math.min(count, pool.length);
@@ -274,6 +224,74 @@ function pickComments(type, count) {
     if (!used.has(idx)) { used.add(idx); result.push(pool[idx]); }
   }
   return result;
+}
+
+function generateComments(text, type) {
+  const count = 1 + Math.floor(r() * 3);
+  // Build a context-specific pool based on keywords in the post text
+  const pool = [...GENERIC_REACTIONS];
+
+  // NPC creator posts
+  if (text.includes('预告') || text.includes('新刊')) pool.push('期待！', '什么时候出', '已预定！', '封面好好看', '求通贩', '冲了冲了');
+  if (text.includes('展会') || text.includes('备货')) pool.push('哪个展', '几号摊', '去现场蹲', '帮我带一份', '展会见！');
+  if (text.includes('通贩') || text.includes('销量')) pool.push('链接在哪', '秒了', '手慢无', '已下单', '求补货');
+  if (text.includes('直播') || text.includes('过程')) pool.push('画得好快', '学到了', '手太稳了', '求教程', '看了两小时');
+  if (text.includes('合作') || text.includes('出本')) pool.push('强强联合！', '期待合作本', '这个组合绝了', '双厨狂喜');
+  if (text.includes('战利品') || text.includes('一袋子')) pool.push('羡慕', '花了多少', '好多好东西', '分享清单吧');
+  if (text.includes('涨价') || text.includes('印刷')) pool.push('真的涨了好多', '成本太高了', '同感', '小社团撑不住了', '换家试试');
+  if (text.includes('二手') || text.includes('炒')) pool.push('黄牛走开', '溢价太离谱', '当初怎么不多印点', '求原价出');
+  if (text.includes('停更') || text.includes('充电')) pool.push('好好休息', '不急慢慢来', '身体重要', '等你回来');
+  if (text.includes('终于画完') || text.includes('画完了')) pool.push('辛苦了！', '求看！', '速度好快', '熬夜了吧', '注意身体');
+  if (text.includes('返图')) pool.push('质量好好', '印刷不错', '颜色正吗', '好想要');
+  if (text.includes('封面') || text.includes('意见')) pool.push('A方案好看', 'B好！', '都好看选不了', '听你的', '个人偏好A');
+  if (text.includes('销售数据')) pool.push('太厉害了', '求分享经验', '羡慕', '销量好好', '什么类型的');
+  if (text.includes('接稿') || text.includes('画不动')) pool.push('注意休息', '别太拼了', '约稿排到什么时候了', '身体第一');
+  if (text.includes('新坑')) pool.push('什么坑！', '入了入了', '求安利', '终于等到了');
+  if (text.includes('草稿')) pool.push('线条好绝', '已经很好看了', '成品肯定更棒', '求上色版');
+  if (text.includes('排期') || text.includes('出货')) pool.push('终于定了', '等不及了', '印刷厂效率怎样', '什么时候发');
+  if (text.includes('手绘板坏') || text.includes('鼠标')) pool.push('心疼', '赶紧买新的', '鼠标画画太猛了', '先用手机凑合吧');
+  if (text.includes('感谢信')) pool.push('好暖', '有粉丝太幸福了', '感动', '继续加油');
+  if (text.includes('催更')) pool.push('催更大军+1', '不急不急', '慢慢来', '太太别有压力');
+  if (text.includes('画力对比') || text.includes('进步')) pool.push('进步好大！', '天赋型选手', '坚持就是胜利', '太太好厉害');
+
+  // Drama posts
+  if (text.includes('挂') || text.includes('吵架')) pool.push('吃瓜.jpg', '前因后果呢', '又吵了', '心累', '不想掺和');
+  if (text.includes('描图')) pool.push('有实锤吗', '对比图呢', '等官方回应', '如果是真的太过分了');
+  if (text.includes('收费') || text.includes('定价')) pool.push('每个人情况不同', '创作有成本的', '看质量', '自由定价吧');
+  if (text.includes('拖稿') || text.includes('跑路')) pool.push('还好我没约', '建议维权', '有截图吗', '以后先看口碑');
+  if (text.includes('CP') || text.includes('解释权')) pool.push('拉踩没意思', '各玩各的', 'CP是自由的', '别搞饭圈那套');
+  if (text.includes('盗印')) pool.push('太过分了', '举报了', '支持正版', '原作者加油');
+
+  // Trend posts
+  if (text.includes('话题') || text.includes('热度')) pool.push('跟了跟了', '这波确实火', '已经在画了', '但愿能持续');
+  if (text.includes('讨论度') || text.includes('安利')) pool.push('确实到处都是', '我也被安利了', '真的好看', '不愧是热门');
+  if (text.includes('风向') || text.includes('流行')) pool.push('嗅到商机了', '该入坑了', '观望中', '感觉要火');
+
+  // Fan posts
+  if (text.includes('二创') || text.includes('同人图')) pool.push('太可爱了', '大佬画大佬', '双向奔赴');
+  if (text.includes('安利') || text.includes('推荐')) pool.push('确实好看', '已入坑', '谢谢安利', '去看了真的好');
+  if (text.includes('收藏')) pool.push('默默关注', '有眼光', '宝藏要被发现了');
+
+  // Market posts
+  if (text.includes('二手') && text.includes('难卖')) pool.push('新品更有价值', '供大于求了', '换个思路试试');
+  if (text.includes('热闹') || text.includes('新人')) pool.push('圈子在壮大', '欢迎新朋友', '竞争也更激烈了');
+  if (text.includes('安静') || text.includes('萎缩')) pool.push('冷了', '大家都去哪了', '坚持就是胜利');
+  if (text.includes('经济不好') || text.includes('预算')) pool.push('确实要省省', '理性消费', '等打折再买');
+
+  // General chatter
+  if (text.includes('画板') || text.includes('不知道画')) pool.push('打开就是进步', '先画个圆', '摸鱼也是创作的一部分');
+  if (text.includes('快递') || text.includes('谷子')) pool.push('快乐！', '什么谷', '求开箱', '羡慕');
+  if (text.includes('赶稿') || text.includes('头发')) pool.push('同在赶稿', '头发还好吗', '保重', '一起加油');
+  if (text.includes('排版') || text.includes('软件')) pool.push('用的什么软件', '推荐Clip', '试试Affinity', '求教程链接');
+  if (text.includes('零花钱') || text.includes('扫货')) pool.push('存了多少', '理性消费', '钱包哭泣', '冲就完了');
+  if (text.includes('摸鱼')) pool.push('被说中了', '摸鱼人集合', '摸完就画', '明天再说');
+  if (text.includes('咖啡') || text.includes('稿子')) pool.push('再来一杯', '没有咖啡不行', '肝帝', '注意身体');
+  if (text.includes('逛展') || text.includes('脚')) pool.push('穿舒服的鞋！', '坐下休息会', '值得', '腿已废');
+  if (text.includes('邮费')) pool.push('邮费刺客', '包邮不香吗', '成本都在邮费上了');
+  if (text.includes('预售')) pool.push('先预售比较稳', '设个目标量', '支持', '已蹲');
+  if (text.includes('浪漫') || text.includes('感动')) pool.push('破防了', '说得太好了', '是这样的', '热泪盈眶');
+
+  return pickFrom(pool, count);
 }
 
 // === Main export ===
@@ -330,9 +348,8 @@ export function generateSocialFeed(market, official, playerState) {
     // Fake engagement numbers
     item.likes = Math.floor(r() * 50) + (item.type === 'drama' ? 30 : item.type === 'trend' ? 15 : 1);
     item.retweets = Math.floor(r() * 15) + (item.hot ? 10 : 0);
-    // Generate visible comment texts (1-3 per post)
-    const commentCount = 1 + Math.floor(r() * 3);
-    item.commentTexts = pickComments(item.type, commentCount);
+    // Generate context-aware comment texts (1-3 per post)
+    item.commentTexts = generateComments(item.text, item.type);
     item.comments = item.commentTexts.length + Math.floor(r() * 8);
   }
 
