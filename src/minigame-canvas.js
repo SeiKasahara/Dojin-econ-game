@@ -82,8 +82,32 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
     btn.addEventListener('click', () => onAction(btn.dataset.action));
   });
 
-  // Skip button
-  container.querySelector('.mg-skip').addEventListener('click', onSkip);
+  // Skip button — with confirmation
+  container.querySelector('.mg-skip').addEventListener('click', () => {
+    mg.phase = 'paused';
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    overlay.innerHTML = `
+      <div class="event-card" style="max-width:320px;text-align:center">
+        <div style="font-size:1.5rem;margin-bottom:8px">⚠️</div>
+        <div style="font-weight:700;margin-bottom:8px">确定跳过小游戏？</div>
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:16px;line-height:1.5">
+          跳过后将按当前已售出 <b>${mg.sold}件</b> 的成绩结算。<br/>剩余时间的销售机会将全部放弃。
+        </div>
+        <button class="btn btn-block" id="mg-skip-confirm" style="background:#FFF0F0;border:1px solid var(--danger);color:var(--danger);margin-bottom:8px">确认跳过</button>
+        <button class="btn btn-block" id="mg-skip-cancel" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">继续摆摊</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#mg-skip-cancel').addEventListener('click', () => {
+      overlay.remove();
+      mg.phase = 'playing';
+      mg.lastTimestamp = performance.now();
+    });
+    overlay.querySelector('#mg-skip-confirm').addEventListener('click', () => {
+      overlay.remove();
+      onSkip();
+    });
+  });
 
   // Pause button
   container.querySelector('.mg-pause').addEventListener('click', () => {

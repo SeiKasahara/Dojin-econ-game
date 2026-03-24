@@ -1024,6 +1024,21 @@ const RANDOM_EVENTS = [
     },
     maxTotal: 1,
   },
+  // === Secondhand market event ===
+  {
+    id: 'secondhand_crackdown', emoji: '🛡️', title: '平台整治二手倒卖',
+    desc: '交易平台开始打击无授权二手倒卖行为，大量违规商品被下架。正规新品的竞争环境暂时好转了。',
+    effect: '二手压力大幅下降 新品销量回升', effectClass: 'positive',
+    apply: (s) => {
+      if (s.official) {
+        s.official.secondHandPool.lvp = Math.floor(s.official.secondHandPool.lvp * 0.6);
+        s.official.secondHandPool.hvp = Math.floor(s.official.secondHandPool.hvp * 0.6);
+      }
+      s.passion = Math.min(100, s.passion + 3);
+    },
+    tip: '平台整治是外部力量对二手市场的周期性干预。每次整治后二手压力会短暂下降，但只要供需结构不变，压力终会回升。创作者应抓住窗口期加大新品推广力度。',
+    weight: 3, when: (s) => s.official && (s.official.secondHandPressure.lvp > 0.3 || s.official.secondHandPressure.hvp > 0.2), maxTotal: 2,
+  },
 ];
 
 // === Roll Events ===
@@ -1332,6 +1347,12 @@ export function executeTurn(state, actionId) {
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
         }
+      }
+
+      // Show secondhand market impact on event sales
+      const eventShMod = Math.min(getSecondHandModifier(state.official, 'hvp'), getSecondHandModifier(state.official, 'lvp'));
+      if (eventShMod < 0.9) {
+        result.deltas.push({ icon: '📦', label: '二手市场挤压新品销量', value: `-${Math.round((1 - eventShMod) * 100)}%`, positive: false });
       }
 
       // Bundling bonus: selling both HVP and LVP at same event
@@ -1793,6 +1814,16 @@ export function executeTurn(state, actionId) {
     result.deltas.push({ icon: '🕸️', label: '活动停滞', value: `热情-${idleDrain}（已${idleMonths}月未活动）`, positive: false });
   }
 
+  // --- Secondhand market frustration: seeing your works sold cheap ---
+  const shLvpPressure = state.official?.secondHandPressure?.lvp || 0;
+  if (shLvpPressure > 0.3 && (state.totalHVP > 0 || state.totalLVP > 0)) {
+    const shPassionHit = Math.min(4, Math.round((shLvpPressure - 0.3) * 8));
+    if (shPassionHit > 0) {
+      state.passion = Math.max(0, state.passion - shPassionHit);
+      result.deltas.push({ icon: '📦', label: '二手泛滥挫败感', value: `热情-${shPassionHit}`, positive: false });
+    }
+  }
+
   // --- Debt anxiety: negative money → passion drain (worry, not fun anymore) ---
   const debtThreshold = (state.endowments.resilience || 0) * 200; // resilience delays anxiety
   if (state.money < -debtThreshold) {
@@ -1857,18 +1888,20 @@ export function executeTurn(state, actionId) {
   const infoDecay = 0.07 - (state.endowments.marketing || 0) * 0.01; // marketing slows decay
   state.infoDisclosure = Math.max(0.08, state.infoDisclosure - infoDecay);
 
-  // --- Passive online sales (trickle from inventory each turn) ---
+  // --- Passive online sales (trickle from inventory each turn, affected by secondhand) ---
   if ((state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) && action.type !== 'attendEvent') {
     const cs = state.market ? state.market.communitySize : 10000;
     const nHVP = state.market?.nHVP || 9;
     const nLVP = state.market?.nLVP || 55;
     const baseConv = Math.min(0.95, 0.20 + state.infoDisclosure * 0.50);
     const onlineFactor = 0.12; // online sales are ~12% of full market demand
+    const onlineShModHVP = getSecondHandModifier(state.official, 'hvp');
+    const onlineShModLVP = getSecondHandModifier(state.official, 'lvp');
 
     if (state.inventory.hvpStock > 0) {
       const totalAlpha = nHVP * 2.0 + state.reputation;
       const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
-      const rawDemand = cs / 1000 * 5 * share * baseConv * onlineFactor;
+      const rawDemand = cs / 1000 * 5 * share * baseConv * onlineFactor * onlineShModHVP;
       // Guarantee at least 1 sale if reputation > 0 and info > 0 (long tail online)
       const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
       const sold = Math.min(demand, state.inventory.hvpStock);
@@ -1887,7 +1920,7 @@ export function executeTurn(state, actionId) {
     if (state.inventory.lvpStock > 0) {
       const totalAlpha = nLVP * 0.5 + state.reputation;
       const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
-      const rawDemand = cs / 1000 * 15 * share * baseConv * onlineFactor;
+      const rawDemand = cs / 1000 * 15 * share * baseConv * onlineFactor * onlineShModLVP;
       const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
       const sold = Math.min(demand, state.inventory.lvpStock);
       if (sold > 0) {
@@ -1898,6 +1931,12 @@ export function executeTurn(state, actionId) {
         state.totalSales += sold;
         result.deltas.push({ icon: '🌐', label: `网上售出谷子×${sold}`, value: `+¥${rev}`, positive: true });
       }
+    }
+
+    // Show secondhand impact on online sales
+    const worstShMod = Math.min(onlineShModHVP, onlineShModLVP);
+    if (worstShMod < 0.9) {
+      result.deltas.push({ icon: '📦', label: '二手市场挤压网上销量', value: `-${Math.round((1 - worstShMod) * 100)}%`, positive: false });
     }
   }
 

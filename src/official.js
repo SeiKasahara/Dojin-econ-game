@@ -124,15 +124,15 @@ export function tickOfficial(official, market, playerState) {
     official.secondHandPool.hvp += Math.floor(market.communitySize * 0.001);
   }
 
-  // Secondhand items decay (get sold or become unsellable)
-  official.secondHandPool.lvp = Math.floor(official.secondHandPool.lvp * 0.85);
-  official.secondHandPool.hvp = Math.floor(official.secondHandPool.hvp * 0.90);
+  // Secondhand items decay (get sold or become unsellable) — slower decay = items linger longer
+  official.secondHandPool.lvp = Math.floor(official.secondHandPool.lvp * 0.90);
+  official.secondHandPool.hvp = Math.floor(official.secondHandPool.hvp * 0.93);
 
   // Secondhand pressure on new sales
-  // LVP: high substitutability (ρ→1), secondhand crushes new
-  // HVP: partial protection (differentiated product)
-  const lvpPressure = Math.min(0.5, official.secondHandPool.lvp / (market.communitySize * 0.05));
-  const hvpPressure = Math.min(0.2, official.secondHandPool.hvp / (market.communitySize * 0.1));
+  // LVP: high substitutability (ρ→1), secondhand crushes new — up to 70%
+  // HVP: partial protection (differentiated product) — up to 40%
+  const lvpPressure = Math.min(0.7, official.secondHandPool.lvp / (market.communitySize * 0.05));
+  const hvpPressure = Math.min(0.4, official.secondHandPool.hvp / (market.communitySize * 0.1));
   official.secondHandPressure = { lvp: lvpPressure, hvp: hvpPressure };
 
   return events;
@@ -142,7 +142,7 @@ export function tickOfficial(official, market, playerState) {
 export function getSecondHandModifier(official, productType) {
   if (!official) return 1.0;
   const p = productType === 'hvp' ? official.secondHandPressure.hvp : official.secondHandPressure.lvp;
-  return Math.max(0.5, 1 - (p || 0));
+  return Math.max(0.3, 1 - (p || 0));
 }
 
 // === Record player's sold work for future resale value ===

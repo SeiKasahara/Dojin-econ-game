@@ -152,14 +152,14 @@ export function getSignalCost(adv) {
 export function getAdvancedNarratives(adv) {
   const phrases = [];
   const labels = { small: '小型全连接', growing: '成长期', mature: '无标度网络', fragmented: '碎片化' };
-  phrases.push(`🌐 网络: ${labels[adv.networkPhase]} · ${adv.cliques}个圈层 · 基尼${adv.networkGini.toFixed(2)}`);
+  phrases.push(`🌐 网络: ${labels[adv.networkPhase]} · ${adv.cliques}个小圈子 · 基尼系数 ${adv.networkGini.toFixed(2)}`);
 
   if (adv.networkPhase === 'mature' || adv.networkPhase === 'fragmented') {
     phrases.push(`📣 宣发成本×${adv.signalInflation.toFixed(1)}（信号通胀：圈子越大越难被看到）`);
   }
 
   if (adv.stagflationTurnsLeft > 0) {
-    phrases.push(`⚠️ 滞胀中（${adv.stagflationTurnsLeft}月）：收入↓成本↑同时发生，无避风港`);
+    phrases.push(`⚠️ 滞胀中（${adv.stagflationTurnsLeft}月）：收入下降成本上升同时发生，无避风港`);
   }
   if (adv.debtCrisisActive) {
     phrases.push(`💳 消费者债务危机：市场需求被永久性压缩(debt=${adv.consumerDebt.toFixed(0)})`);
@@ -250,7 +250,7 @@ export const ADVANCED_EVENTS = [
   // --- NETWORK PHASE TRANSITION (pk45.md) ---
   {
     id: 'network_transition', emoji: '🌐', title: '社群网络发生相变！',
-    desc: '随着社群规模扩大，网络结构发生了根本性变化。全连接图的连通性崩溃，取而代之的是由三元闭包形成的团块群。你的作品现在更难触达所有人——但在自己的圈层内更有影响力。',
+    desc: '随着社群规模扩大，网络结构发生了根本性变化。你的作品现在更难触达所有人——但在自己的圈层内更有影响力。',
     effect: '宣发成本↑ 圈层内声誉更集中', effectClass: 'neutral',
     apply: (s) => {
       s.passion += 3; // excitement of community growth

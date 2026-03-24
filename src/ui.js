@@ -582,7 +582,8 @@ function renderMarketPanel(market, official) {
         </div>
         ${market.currentTrend ? `<div style="font-size:0.75rem;padding:4px 0;color:var(--primary);font-weight:600">🔥 热门话题: ${market.currentTrend.tag} (${market.currentTrend.turnsLeft}月)</div>` : ''}
         ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.72rem;color:var(--danger);padding:4px 0">⚠ 消费者同人本偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
-        ${official && official.secondHandPressure.lvp > 0.1 ? `<div style="font-size:0.72rem;color:var(--warning);padding:2px 0">📦 二手同人谷压力: ${Math.round(official.secondHandPressure.lvp * 100)}%</div>` : ''}
+        ${official && official.secondHandPressure.lvp > 0.05 ? `<div style="font-size:0.72rem;color:${official.secondHandPressure.lvp > 0.3 ? 'var(--danger)' : 'var(--warning)'};padding:2px 0">📦 二手谷子压力: ${Math.round(official.secondHandPressure.lvp * 100)}%${official.secondHandPressure.lvp > 0.3 ? ' ⚠' : ''}</div>` : ''}
+        ${official && official.secondHandPressure.hvp > 0.05 ? `<div style="font-size:0.72rem;color:${official.secondHandPressure.hvp > 0.2 ? 'var(--danger)' : 'var(--warning)'};padding:2px 0">📦 二手同人本压力: ${Math.round(official.secondHandPressure.hvp * 100)}%${official.secondHandPressure.hvp > 0.2 ? ' ⚠' : ''}</div>` : ''}
         <div style="margin-top:6px;border-top:1px solid var(--border);padding-top:6px">
           ${npcFeed}
         </div>
@@ -1134,6 +1135,7 @@ export function renderEventModeSelector(state, event, onSelect, onCancel) {
           <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-2 · 路费¥${Math.round(event.travelCost * 0.3)}(邮费) · 无参展疲劳</div>
         </div>
       </div>
+      <div style="font-size:0.68rem;color:var(--text-muted);text-align:center;margin-bottom:8px;line-height:1.4">💡 不想玩小游戏？选择寄售可跳过，直接按市场模型结算</div>
       <button class="btn btn-primary btn-block" id="btn-mode-confirm" disabled style="opacity:0.5">请选择参展方式</button>
       <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
