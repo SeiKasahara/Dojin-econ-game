@@ -1030,16 +1030,17 @@ const RANDOM_EVENTS = [
   },
   {
     id: 'life_admin', emoji: '📋', title: '生活琐事',
-    desc: '报税、交社保、修电器、跑银行……成年人的生活充满了琐碎但不得不做的事情，还得花钱。',
-    effect: '时间-2h(2回合) 热情-3 资金-¥200~500', effectClass: 'negative',
+    desc: '交费、修电器、跑手续……生活充满了琐碎但不得不做的事情，还得花钱。',
+    effect: (s) => { const cost = getLifeStage(s.turn) === 'work' ? '200~500' : '50~150'; return `时间-2h(2回合) 热情-3 资金-¥${cost}`; }, effectClass: 'negative',
     apply: (s) => {
       s.timeDebuffs.push({ id: 'admin_' + s.turn, reason: '生活琐事', turnsLeft: 2, delta: -2 });
       s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
-      s.money -= 200 + Math.floor(Math.random() * 300);
+      const cost = getLifeStage(s.turn) === 'work' ? 200 + Math.floor(Math.random() * 300) : 50 + Math.floor(Math.random() * 100);
+      s.money -= cost;
       s.passion = Math.max(0, s.passion - 3);
     },
     tip: '生活管理成本是成年后的隐性税——学生时代由父母承担的一切，现在都需要你自己的时间和精力。这是"长大"的真实代价。',
-    weight: 7, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: Infinity,
+    weight: 7, when: () => true, maxTotal: Infinity,
   },
   {
     id: 'old_friend_reunion', emoji: '🍺', title: '老友重聚',
@@ -1090,11 +1091,11 @@ const RANDOM_EVENTS = [
   // === Financial shock events ===
   {
     id: 'unexpected_expense', emoji: '💳', title: '意外大额支出',
-    desc: '电脑突然坏了/手机摔碎了/家电故障/朋友结婚随礼……生活总会给你一些"惊喜"。',
-    effect: (s) => `资金-¥${1500 + Math.round(Math.random() * 1500)} 热情-3`, effectClass: 'negative',
-    apply: (s) => { s.money -= 1500 + Math.floor(Math.random() * 1500); s.passion = Math.max(0, s.passion - 3); },
-    tip: '意外支出是成年人生活的常态。紧急备用金的重要性在于：没有它，一次意外就可能吃掉你几个月的同人预算。',
-    weight: 5, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: Infinity,
+    desc: '手机摔碎了/电脑出问题/朋友随礼……生活总会给你一些"惊喜"。',
+    effect: (s) => { const isWork = getLifeStage(s.turn) === 'work'; const cost = isWork ? 1500 + Math.round(Math.random() * 1500) : 300 + Math.round(Math.random() * 400); return `资金-¥${cost} 热情-3`; }, effectClass: 'negative',
+    apply: (s) => { const isWork = getLifeStage(s.turn) === 'work'; const cost = isWork ? 1500 + Math.floor(Math.random() * 1500) : 300 + Math.floor(Math.random() * 400); s.money -= cost; s.passion = Math.max(0, s.passion - 3); },
+    tip: '意外支出是生活的常态。没有备用金，一次意外就可能吃掉你几个月的同人预算。',
+    weight: 5, when: (s) => s.turn > 3, maxTotal: Infinity,
   },
   {
     id: 'tax_season', emoji: '🧾', title: '年度税费清算',
@@ -2063,6 +2064,12 @@ export function executeTurn(state, actionId) {
         result.deltas.push({ icon: '💸', label: `负债¥${Math.abs(state.money).toLocaleString()}加剧焦虑`, value: `+${Math.round(-moneyMod * 100)}%`, positive: false });
       }
       result.deltas.push({ icon: '💼', label: '无工资收入', value: '¥0', positive: false });
+      // Unemployment living cost erosion: general savings cover most, but pressure leaks into doujin fund
+      const impliedLiving = (state.lastSalary || 800) * 2; // implied full living cost ≈ surplus × 2
+      const erosionRate = Math.min(0.6, 0.15 + state.jobSearchTurns * 0.08); // 15%→60% over months
+      const unemployedExpense = Math.round(impliedLiving * erosionRate);
+      state.money -= unemployedExpense;
+      result.deltas.push({ icon: '🏠', label: `生活费侵蚀同人资金(${Math.round(erosionRate * 100)}%)`, value: `-¥${unemployedExpense}`, positive: false });
     } else {
       const bgSalaryMult = BACKGROUNDS[state.background]?.salaryMult || 1.0;
       const baseSalary = Math.round((800 + Math.floor((state.turn - 50) / 12) * 200) * bgSalaryMult);
