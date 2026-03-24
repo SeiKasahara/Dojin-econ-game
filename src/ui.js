@@ -620,8 +620,9 @@ function renderActionCard(action, state) {
   let disableReason = '';
   if (disabled) {
     const r = action.requires;
-    if (r.time && state.time < r.time) disableReason = `需闲暇≥${r.time}`;
-    else if (r.passion && state.passion < r.passion) disableReason = '热情不足';
+    if (r.time && state.time < r.time) {
+      disableReason = action.id === 'hvp' ? `需闲暇≥${r.time}（有搭档≥2）` : `需闲暇≥${r.time}`;
+    } else if (r.passion && state.passion < r.passion) disableReason = '热情不足';
   }
   // Highlight if HVP in progress
   const highlight = action.id === 'hvp' && state.hvpProject ? 'border-color:var(--primary);background:#FFF5F5;' : '';
@@ -767,6 +768,7 @@ function renderSalesBreakdown(s) {
   if (s.shModPct < 95) modifiers.push({ label: '二手冲击', val: s.shModPct, icon: '📦' });
   if (s.advMod !== 100) modifiers.push({ label: '宏观/AI/niche', val: s.advMod, icon: '🌐' });
   if (s.eventBoost > 100) modifiers.push({ label: '同人展加成', val: s.eventBoost, icon: '🎪' });
+  if (s.infoHighBonus > 100) modifiers.push({ label: '口碑效应(信息≥60%)', val: s.infoHighBonus, icon: '📢' });
 
   const modHtml = modifiers.map(m => {
     const color = m.val >= 100 ? 'var(--success)' : 'var(--danger)';

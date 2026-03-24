@@ -325,7 +325,7 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
 // HVP is multi-turn: solo 3 months, with partner 2 months
 export const ACTIONS = {
   hvp:         { id: 'hvp',         name: '创作同人本', emoji: '📖', type: 'hvp',
-                 costLabel: '热情-15/月 印刷¥2500~3000 需闲暇≥4', requires: { passion: 15, time: 4 } },
+                 costLabel: '热情-15/月 印刷¥2500~3000 需闲暇≥4(有搭档≥2)', requires: { passion: 15, time: 4 } },
   lvp:         { id: 'lvp',         name: '制作谷子',   emoji: '🔑', type: 'lvp',
                  costLabel: '热情-8 资金-200 需闲暇≥2', requires: { passion: 10, time: 2 } },
   rest:        { id: 'rest',        name: '休息充电',   emoji: '☕', type: 'rest',
@@ -515,6 +515,11 @@ export function canPerformAction(state, actionId) {
     if (state.turn - state.lastSponsorTurn < 6) return false;
   }
   if (r.passion && state.passion < r.passion) return false;
+  // HVP: with partner, time requirement relaxed to 2h (partner shares workload)
+  if (actionId === 'hvp' && state.hasPartner) {
+    if (state.time < 2) return false;
+    return true;
+  }
   // Freelance: dynamic time requirement
   if (actionId === 'freelance') {
     if (state.time < getFreelanceTimeCost(state)) return false;
@@ -645,8 +650,11 @@ function calculateSales(actionId, state) {
   const wqFx = recentWork ? getWorkQualityEffects(recentWork.workQuality) : { salesMult: 1, repMult: 1, breakthroughMod: 0 };
   const trendFx = recentWork ? getTrendBonus(recentWork.styleTag, state.market?.currentTrend) : { salesMult: 1, repMult: 1 };
 
+  // --- High info bonus: word-of-mouth effect when awareness ≥ 80% ---
+  const infoHighBonus = state.infoDisclosure >= 0.6 ? 1.12 : 1.0;
+
   // --- Calculate final sales ---
-  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * wqFx.salesMult * trendFx.salesMult;
+  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * wqFx.salesMult * trendFx.salesMult * infoHighBonus;
   const sales = Math.max(1, Math.round(rawSales));
 
   // === Full breakdown for educational display ===
@@ -673,6 +681,7 @@ function calculateSales(actionId, state) {
     eventBoost: Math.round(eventBoost * 100),
     noise: Math.round(noise * 100),
     alphaMod: Math.round(alphaMod * 100),
+    infoHighBonus: Math.round(infoHighBonus * 100),
   };
 
   if (isHVP) {
