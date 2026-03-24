@@ -97,17 +97,9 @@ export function playBGM(trackId) {
 function unlock() {
   if (unlocked) return;
   unlocked = true;
-  // Touch all audio elements to satisfy autoplay policy
-  for (const id of Object.keys(TRACKS)) {
-    const a = getAudio(id);
-    a.volume = 0;
-    const p = a.play();
-    if (p) p.then(() => { if (id !== desired) a.pause(); }).catch(() => {});
-  }
-  // Now play whatever was requested
+  // Only play the desired track — do NOT play all tracks at once (iOS bug)
   if (desired) {
-    // Small delay to let unlock settle
-    setTimeout(() => tryPlay(desired), 100);
+    tryPlay(desired);
   }
 }
 
