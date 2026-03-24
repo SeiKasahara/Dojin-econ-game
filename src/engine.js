@@ -89,8 +89,8 @@ export function getSkillLabel(skill) {
 function getRealityDrain(turn) {
   const stage = getLifeStage(turn);
   if (stage === 'summer') return 0;
-  if (stage === 'university') return 0.8 + Math.floor((turn - 2) / 12) * 0.25;
-  return 2.5 + ((turn - 50) / 12) * 0.4;
+  if (stage === 'university') return 0.6 + Math.floor((turn - 2) / 12) * 0.2;
+  return 2.0 + ((turn - 50) / 12) * 0.3;
 }
 
 // === Partner Types ===
@@ -115,16 +115,16 @@ function rollPartnerType(social = 0) {
 
 // === Work Subtypes ===
 export const HVP_SUBTYPES = {
-  manga:    { id: 'manga',    name: '漫画本',       emoji: '📕', monthsSolo: 3, monthsPartner: 2, costRange: [2500, 3000], repMult: 1.0,  audienceMult: 1.0,  requiredRep: 0, desc: '标准同人本' },
-  novel:    { id: 'novel',    name: '小说本',       emoji: '📗', monthsSolo: 2, monthsPartner: 1, costRange: [1500, 2000], repMult: 0.8,  audienceMult: 0.75, requiredRep: 0, desc: '成本低周期短，受众略小' },
-  artbook:  { id: 'artbook',  name: '创意绘本',     emoji: '🎨', monthsSolo: 3, monthsPartner: 2, costRange: [3500, 4500], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
-  lorebook: { id: 'lorebook', name: '设定集',       emoji: '📜', monthsSolo: 2, monthsPartner: 1, costRange: [2000, 2800], repMult: 1.2,  audienceMult: 0.6,  requiredRep: 2, desc: '小众高价值，需声誉≥2' },
+  manga:    { id: 'manga',    name: '漫画本',       emoji: '📕', monthsSolo: 3, monthsPartner: 2, costRange: [3500, 5000], repMult: 1.0,  audienceMult: 1.0,  requiredRep: 0, desc: '标准同人本，全彩小批量印刷贵' },
+  novel:    { id: 'novel',    name: '小说本',       emoji: '📗', monthsSolo: 2, monthsPartner: 1, costRange: [1500, 2500], repMult: 0.8,  audienceMult: 0.75, requiredRep: 0, desc: '成本低周期短，受众略小' },
+  artbook:  { id: 'artbook',  name: '创意绘本',     emoji: '🎨', monthsSolo: 3, monthsPartner: 2, costRange: [4500, 6000], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
+  lorebook: { id: 'lorebook', name: '设定集',       emoji: '📜', monthsSolo: 2, monthsPartner: 1, costRange: [2500, 3500], repMult: 1.2,  audienceMult: 0.6,  requiredRep: 2, desc: '小众高价值，需声誉≥2' },
   music:    { id: 'music',    name: '同人音乐专辑', emoji: '🎵', monthsSolo: 4, monthsPartner: 3, costRange: [4000, 5000], repMult: 1.3,  audienceMult: 0.7,  requiredRep: 0, desc: '独特受众，周期长' },
 };
 export const LVP_SUBTYPES = {
-  acrylic:  { id: 'acrylic',  name: '亚克力',     emoji: '💠', cost: 200, batchSize: 28, marginMult: 1.0, desc: '标准谷子' },
+  acrylic:  { id: 'acrylic',  name: '亚克力',     emoji: '💠', cost: 400, batchSize: 28, marginMult: 1.0, desc: '标准谷子，开模费较贵' },
   badge:    { id: 'badge',    name: '吧唧',       emoji: '🔘', cost: 100, batchSize: 40, marginMult: 0.7, desc: '便宜量大走量型' },
-  shikishi: { id: 'shikishi', name: '色纸',       emoji: '🖼️', cost: 150, batchSize: 25, marginMult: 1.1, desc: '利润率较高' },
+  shikishi: { id: 'shikishi', name: '色纸',       emoji: '🖼️', cost: 250, batchSize: 25, marginMult: 1.1, desc: '利润率较高' },
   postcard: { id: 'postcard', name: '明信片套组', emoji: '💌', cost: 120, batchSize: 50, marginMult: 0.8, desc: '成本低量大' },
 };
 
@@ -1099,11 +1099,11 @@ const RANDOM_EVENTS = [
   },
   {
     id: 'tax_season', emoji: '🧾', title: '年度税费清算',
-    desc: '年底了，个税汇算、社保补缴、各种年度账单一起到……钱包大出血。',
+    desc: '工作满一年，个税汇算、社保补缴、各种年度账单一起到……钱包大出血。',
     effect: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.5 + Math.random() * 0.5)); return `资金-¥${cost}`; }, effectClass: 'negative',
     apply: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.5 + Math.random() * 0.5)); s.money -= cost; },
     tip: '年度税费是不可避免的制度性支出。收入越高，税费越多。这笔钱完全不可能流向同人创作。',
-    weight: 12, when: (s) => getLifeStage(s.turn) === 'work' && getCalendarMonth(s.turn) === 12, maxTotal: Infinity,
+    weight: 20, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) > 0 && (s.turn - 50) % 12 === 0, maxTotal: Infinity,
   },
 ];
 
@@ -1135,10 +1135,38 @@ export function rollEvent(state) {
   return eligible[0];
 }
 
+// Event urgency tiers for savings dip
+const EVENT_URGENCY = {
+  family_emergency: 'high', unexpected_expense: 'high', tax_season: 'high',
+  health_issue: 'mid', work_burnout: 'mid', social_obligation: 'mid', life_admin: 'mid', rent_increase: 'mid',
+  overtime: 'low', harsh_review: 'low', commute_hell: 'low', old_friend_reunion: 'low',
+  inflation: 'low', creative_block: 'low', uni_breakup: 'mid',
+};
+const DIP_CONFIG = {
+  high: { chance: 0.55, rateMin: 0.03, rateMax: 0.06 },
+  mid:  { chance: 0.35, rateMin: 0.02, rateMax: 0.04 },
+  low:  { chance: 0.15, rateMin: 0.01, rateMax: 0.02 },
+};
+
 export function applyEvent(state, event) {
   event.apply(state);
   // Track frequency
   if (event.id) state.eventCounts[event.id] = (state.eventCounts[event.id] || 0) + 1;
+
+  // Negative events may cause savings dip (random — "surplus depleted, dip into doujin fund")
+  if (event.effectClass === 'negative' && state.money > 300) {
+    const urgency = EVENT_URGENCY[event.id] || 'low';
+    const cfg = DIP_CONFIG[urgency];
+    if (Math.random() < cfg.chance) {
+      const rate = cfg.rateMin + Math.random() * (cfg.rateMax - cfg.rateMin);
+      const dip = Math.round(state.money * rate);
+      if (dip > 0) {
+        state.money -= dip;
+        state._pendingEventDip = { label: event.title, amount: dip }; // picked up by next executeTurn
+      }
+    }
+  }
+
   state.reputation = Math.max(0, state.reputation);
   state.passion = Math.max(0, Math.min(100, state.passion));
   if (state.passion <= 0) {
@@ -1151,6 +1179,13 @@ export function applyEvent(state, event) {
 export function executeTurn(state, actionId) {
   const action = ACTIONS[actionId];
   const result = { action: actionId, actionName: action.name, actionEmoji: action.emoji, deltas: [], salesInfo: null, supplyDemand: null, feedback: 0, tip: null, partnerDrama: null };
+
+  // --- Show savings dip from last turn's event (if any) ---
+  if (state._pendingEventDip) {
+    const d = state._pendingEventDip;
+    result.deltas.push({ icon: '💸', label: `上月"${d.label}"导致挪用同人存款`, value: `-¥${d.amount}`, positive: false });
+    state._pendingEventDip = null;
+  }
 
   // --- Process action ---
   if (action.type === 'rest') {
@@ -1175,14 +1210,14 @@ export function executeTurn(state, actionId) {
     state.passion -= passionCost;
     // Base gain by intensity
     const rawGain = intensity === 'heavy'
-      ? 0.35 + Math.random() * 0.15   // heavy: 35%~50% base
-      : 0.12 + Math.random() * 0.08;  // light: 12%~20% base
+      ? 0.45 + Math.random() * 0.20   // heavy: 45%~65% base (boosted to match faster decay)
+      : 0.18 + Math.random() * 0.12;  // light: 18%~30% base
     // Signal inflation (Spence): diminishes gain but never below a floor
     const sigCost = state.advanced ? getSignalCost(state.advanced) : 1.0;
     const mktBonus = 1 + (state.endowments.marketing || 0) * 0.12; // marketing endowment
     const scaledGain = rawGain * mktBonus / sigCost;
     // Guaranteed minimum: even in max signal inflation, you always get SOME visibility
-    const minGain = intensity === 'heavy' ? 0.08 : 0.03;
+    const minGain = intensity === 'heavy' ? 0.12 : 0.05;
     const gain = Math.max(minGain, scaledGain);
     state.infoDisclosure = Math.min(1, state.infoDisclosure + gain);
     result.deltas.push({ icon: '❤️', label: '精力消耗', value: `-${passionCost}`, positive: false });
@@ -1270,11 +1305,22 @@ export function executeTurn(state, actionId) {
 
       // --- Event cancelled (流展) ---
       if (evt.condition === 'cancelled') {
-        state.money -= evt.travelCost;
-        state.passion = Math.max(0, state.passion - 5);
-        result.deltas.push({ icon: '😱', label: `${evt.name}@${evt.city} 流展！`, value: '白跑一趟', positive: false });
-        result.deltas.push({ icon: '💰', label: '路费（沉没成本）', value: `-¥${evt.travelCost}`, positive: false });
-        result.deltas.push({ icon: '❤️', label: '白忙一场的沮丧', value: '-5', positive: false });
+        if (isAttend) {
+          const cancelLodging = Math.round(evt.travelCost * 1.2 + 200);
+          state.money -= evt.travelCost + cancelLodging;
+          state.passion = Math.max(0, state.passion - 5);
+          result.deltas.push({ icon: '😱', label: `${evt.name}@${evt.city} 流展！`, value: '白跑一趟', positive: false });
+          result.deltas.push({ icon: '💰', label: '路费+住宿（沉没成本）', value: `-¥${evt.travelCost + cancelLodging}`, positive: false });
+          result.deltas.push({ icon: '❤️', label: '白忙一场的沮丧', value: '-5', positive: false });
+        } else {
+          // 寄售流展：货还在手里，只损失邮费
+          const shipCost = Math.round(evt.travelCost * 0.3);
+          state.money -= shipCost;
+          state.passion = Math.max(0, state.passion - 1);
+          result.deltas.push({ icon: '📦', label: `${evt.name}@${evt.city} 流展！`, value: '寄售取消，货物退回', positive: false });
+          result.deltas.push({ icon: '💰', label: '邮费（沉没成本）', value: `-¥${shipCost}`, positive: false });
+          result.deltas.push({ icon: '❤️', label: '小遗憾', value: '-1', positive: false });
+        }
         state.attendingEvent = null;
         result.tip = { label: '流展风险', text: '展会因故取消是同人创作者面临的真实风险。路费变成沉没成本，无法追回。经济学告诉我们：不要因为已经花了路费就做出非理性决策——关键是接下来怎么安排。' };
         // Skip all selling logic below
@@ -1285,6 +1331,10 @@ export function executeTurn(state, actionId) {
       const isAttend = mode === 'attend';
       const mg = isAttend ? state._minigameResult : null;
       state._minigameResult = null;
+
+      // Lodging + meals + booth fee for 亲参 (scales with travel distance)
+      // Local: minimal, distant: 2 nights hotel + meals + booth
+      const lodgingCost = isAttend ? Math.round(evt.travelCost * 1.2 + 200) : 0; // ~¥260(本市) to ~¥1640(异地)
 
       // Fatigue only applies to 亲参
       let eventFatigue = 1.0;
@@ -1298,7 +1348,7 @@ export function executeTurn(state, actionId) {
         // === 亲参 with minigame ===
         state.consecutiveConsigns = 0; // reset on attend
         state.passion -= 5;
-        state.money -= evt.travelCost + mg.moneySpent;
+        state.money -= evt.travelCost + lodgingCost + mg.moneySpent;
         const fatiguePassion = Math.round(mg.passionDelta * eventFatigue);
         state.passion = Math.min(100, state.passion + fatiguePassion);
         state.reputation += mg.reputationDelta;
@@ -1306,7 +1356,7 @@ export function executeTurn(state, actionId) {
         state.attendingEvent = { ...evt, salesBoost: mg.salesMultiplier };
 
         result.deltas.push({ icon: '🏪', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
-        result.deltas.push({ icon: '💰', label: '路费' + (mg.moneySpent > 0 ? '+无料费' : ''), value: `-¥${evt.travelCost + mg.moneySpent}`, positive: false });
+        result.deltas.push({ icon: '💰', label: '路费+住宿餐饮+摊位' + (mg.moneySpent > 0 ? '+无料' : ''), value: `-¥${evt.travelCost + lodgingCost + mg.moneySpent}`, positive: false });
         result.deltas.push({ icon: '❤️', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
         if (eventFatigue < 1) {
           const rc = state.recentEventTurns.filter(t => state.turn - t < 6).length;
@@ -1319,14 +1369,14 @@ export function executeTurn(state, actionId) {
         // === 亲参 but skipped minigame ===
         state.consecutiveConsigns = 0; // reset on attend
         state.passion -= 5;
-        state.money -= evt.travelCost;
+        state.money -= evt.travelCost + lodgingCost;
         const fatigueBoost = Math.round(evt.passionBoost * eventFatigue);
         state.passion = Math.min(100, state.passion + fatigueBoost);
         state.reputation += evt.reputationBoost;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = evt;
         result.deltas.push({ icon: '🏪', label: `亲参 ${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
-        result.deltas.push({ icon: '💰', label: '路费', value: `-¥${evt.travelCost}`, positive: false });
+        result.deltas.push({ icon: '💰', label: '路费+住宿餐饮+摊位', value: `-¥${evt.travelCost + lodgingCost}`, positive: false });
       } else {
         // === 寄售 (consignment) ===
         if (state._leaveDenied) {
@@ -1480,8 +1530,8 @@ export function executeTurn(state, actionId) {
       state.totalRevenue += eventRevenue;
 
       if (eventRevenue > 0) {
-        const travelCost = evt.travelCost + (mg ? mg.moneySpent : 0);
-        const profit = eventRevenue - travelCost;
+        const totalEventCost = evt.travelCost + lodgingCost + (mg ? mg.moneySpent : 0);
+        const profit = eventRevenue - totalEventCost;
         result.deltas.push({ icon: '💰', label: '展会利润', value: profit >= 0 ? `+¥${profit}` : `-¥${Math.abs(profit)}`, positive: profit >= 0 });
       }
       // Log event for dashboard
@@ -2041,9 +2091,49 @@ export function executeTurn(state, actionId) {
   const stage = getLifeStage(state.turn);
   if (stage === 'university') {
     const bgMult = BACKGROUNDS[state.background]?.allowanceMult || 1.0;
-    const allowance = Math.round((150 + Math.floor(Math.random() * 100)) * bgMult);
+    const baseAllowance = Math.round((150 + Math.floor(Math.random() * 100)) * bgMult);
+    // Random spending that eats into allowance + may dip into doujin savings
+    // Each event type has: probability, allowance consumption ratio, savings dip ratio (urgency-based)
+    const spendRoll = Math.random();
+    let spending = 0;
+    let dip = 0; // amount taken from doujin savings
+    let spendLabel = '';
+    const savingsDipBase = state.money > 200 ? state.money : 0; // only dip if there's something to take
+
+    if (spendRoll < 0.15) {
+      // 15%: 聚餐/社交 — 紧急社交，花超+挪用多
+      spending = Math.round(baseAllowance * (0.7 + Math.random() * 0.3));
+      dip = savingsDipBase > 0 ? Math.round(savingsDipBase * (0.04 + Math.random() * 0.03)) : 0; // 4-7%
+      spendLabel = '聚餐社交花超了';
+    } else if (spendRoll < 0.25) {
+      // 10%: 换季买衣服/日用品 — 半紧急
+      spending = Math.round(baseAllowance * (0.5 + Math.random() * 0.3));
+      dip = savingsDipBase > 0 ? Math.round(savingsDipBase * (0.02 + Math.random() * 0.02)) : 0; // 2-4%
+      spendLabel = '换季添置/日用品';
+    } else if (spendRoll < 0.35) {
+      // 10%: 冲动消费 — "反正有存款"心态，挪用较多
+      spending = Math.round(baseAllowance * (0.4 + Math.random() * 0.4));
+      dip = savingsDipBase > 0 ? Math.round(savingsDipBase * (0.05 + Math.random() * 0.04)) : 0; // 5-9%
+      spendLabel = '冲动消费';
+    } else if (spendRoll < 0.50) {
+      // 15%: 零碎支出 — 不紧急，小额挪用
+      spending = Math.round(baseAllowance * (0.2 + Math.random() * 0.2));
+      dip = savingsDipBase > 0 ? Math.round(savingsDipBase * (0.01 + Math.random() * 0.01)) : 0; // 1-2%
+      spendLabel = '零碎支出';
+    }
+    // else 50%: no extra spending
+
+    const allowance = Math.max(0, baseAllowance - spending);
     state.money += allowance;
-    result.deltas.push({ icon: '🏠', label: '生活费结余', value: `+¥${allowance}`, positive: true });
+    if (dip > 0) state.money -= dip;
+
+    if (spending > 0 || dip > 0) {
+      result.deltas.push({ icon: '🏠', label: '生活费结余', value: `+¥${baseAllowance}`, positive: true });
+      if (spending > 0) result.deltas.push({ icon: '🛒', label: spendLabel, value: `-¥${spending}`, positive: false });
+      if (dip > 0) result.deltas.push({ icon: '💸', label: '顺手挪用了同人存款', value: `-¥${dip}`, positive: false });
+    } else {
+      result.deltas.push({ icon: '🏠', label: '生活费结余', value: `+¥${allowance}`, positive: true });
+    }
   } else if (stage === 'work') {
     if (state.unemployed) {
       // No salary — anxiety scales with search duration but savings provide buffer
@@ -2118,9 +2208,9 @@ export function executeTurn(state, actionId) {
     result.deltas.push({ icon: '🔋', label: '创作疲劳缓解', value: `疲劳${state.creativeFatigue.toFixed(1)}`, positive: true });
   }
 
-  // --- Info disclosure: fast decay ---
-  const infoDecay = 0.07 - (state.endowments.marketing || 0) * 0.01; // marketing slows decay
-  state.infoDisclosure = Math.max(0.08, state.infoDisclosure - infoDecay);
+  // --- Info disclosure: rapid decay (information flood drowns everything fast) ---
+  const infoDecay = 0.12 - (state.endowments.marketing || 0) * 0.015; // base 12%/month, marketing slows
+  state.infoDisclosure = Math.max(0.05, state.infoDisclosure - infoDecay);
 
   // --- Passive online sales (trickle from inventory each turn, affected by secondhand) ---
   if ((state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) && action.type !== 'attendEvent') {

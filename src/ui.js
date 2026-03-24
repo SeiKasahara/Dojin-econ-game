@@ -1127,7 +1127,7 @@ export function renderEventModeSelector(state, event, onSelect, onCancel) {
         <div class="price-btn mode-btn${state.time < 3 ? ' disabled' : ''}" data-mode="attend" style="padding:12px;cursor:${state.time < 3 ? 'not-allowed' : 'pointer'};${state.time < 3 ? 'opacity:0.5;' : ''}">
           <div style="font-weight:700;font-size:0.9rem">🏪 亲自摆摊</div>
           <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">进入展会迷你游戏，亲手招揽客人售卖。销量取决于你的操作表现。</div>
-          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-5 · 闲暇≥3h · 路费¥${event.travelCost} · 连续参展有疲劳</div>
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-5 · 闲暇≥3h · 路费+住宿餐饮+摊位≈¥${event.travelCost + Math.round(event.travelCost * 1.2 + 200)} · 连续参展有疲劳</div>
           ${state.time < 3 ? `<div style="font-size:0.65rem;color:var(--danger);margin-top:2px">⚠ 闲暇不足（当前${state.time}h），无法亲参</div>` : ''}
         </div>
         <div class="price-btn mode-btn" data-mode="consign" style="padding:12px;cursor:pointer">
