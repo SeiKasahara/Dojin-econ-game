@@ -28,10 +28,12 @@ export function tickOfficial(official, market, playerState) {
   const ipType = market.ipType || 'normal';
 
   // --- 1. IP Heat decay: dK/dt = I_official + θ·N_D - λ·K ---
-  // Cold IP decays faster (less organic interest)
-  const lambda = ipType === 'cold' ? 0.05 : ipType === 'hot' ? 0.02 : 0.03;
+  // Lambda increases with IP age (older IPs decay faster)
+  const ipAge = playerState.turn / 12; // years since game start
+  const baseLambda = ipType === 'cold' ? 0.05 : ipType === 'hot' ? 0.02 : 0.03;
+  const lambda = baseLambda + ipAge * 0.003; // +0.003/year: Y5=+0.015, Y10=+0.03
   const totalCreators = market.nHVP + market.nLVP + 1;
-  const doujinContrib = totalCreators * 0.15;
+  const doujinContrib = totalCreators * 0.03; // doujin can slow decay but not prevent it
   let officialInput = 0;
 
   // Official release cycle — IP type determines how often official bothers
@@ -108,9 +110,15 @@ export function tickOfficial(official, market, playerState) {
   // Shadow price decays back to 0 over time
   official.shadowPrice *= 0.9;
 
-  // IP Heat affects community: if heat drops too low, fans leave faster
-  if (official.ipHeat < 20) {
-    market.communitySize = Math.round(market.communitySize * 0.97); // extra 3% churn
+  // IP Heat affects community: lower heat = faster fan exodus
+  if (official.ipHeat < 10) {
+    // IP effectively dead — community collapses toward ~1000
+    const collapseRate = market.communitySize > 1500 ? 0.08 : 0.02;
+    market.communitySize = Math.max(500, Math.round(market.communitySize * (1 - collapseRate)));
+  } else if (official.ipHeat < 20) {
+    market.communitySize = Math.round(market.communitySize * 0.95); // 5% churn
+  } else if (official.ipHeat < 40) {
+    market.communitySize = Math.round(market.communitySize * 0.98); // 2% churn
   }
 
   // --- 2. Second-Hand Market (frmn.md) ---

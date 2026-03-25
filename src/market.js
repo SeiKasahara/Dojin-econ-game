@@ -166,7 +166,7 @@ export function tickMarket(market, playerState) {
   const recessionDrain = isRecession ? market.communitySize * 0.015 : 0;
   const diversityPenalty = market.nHVP === 0 ? market.communitySize * 0.03 : 0;
   const netGrowth = hvpPull + lvpPull - churn - recessionDrain - diversityPenalty;
-  market.communitySize = Math.max(200, Math.round(market.communitySize + netGrowth));
+  market.communitySize = Math.max(500, Math.round(market.communitySize + netGrowth));
 
   // --- 8. Diversity health ---
   market.diversityHealth = Math.min(1, market.nHVP / EQ_HVP);
