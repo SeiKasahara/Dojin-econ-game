@@ -1943,7 +1943,14 @@ export function executeTurn(state, actionId) {
         state.unemployed = true;
         state.jobSearchTurns = 0;
         state.monthlyIncome = 0;
-        state.time = 7; // lots of free time (no job) but anxiety drains passion
+        // Clear work-related debuffs (no longer employed)
+        state.timeDebuffs = state.timeDebuffs.filter(d =>
+          !['promotion', '996'].includes(d.id) &&
+          !d.id.startsWith('commute_') &&
+          !d.id.startsWith('social_') &&
+          !d.id.startsWith('burnout_')
+        );
+        state.time = Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)));
         result.deltas.push({ icon: 'warning-circle', label: '被裁员了！', value: '失业', positive: false });
         result.deltas.push({ icon: 'note-pencil', label: '失业后时间充裕，但焦虑会快速消耗热情', value: '', positive: false });
       }
