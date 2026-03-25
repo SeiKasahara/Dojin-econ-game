@@ -72,7 +72,7 @@ ${stateContext}`;
 
   if (character === 'goddess') {
     const topic = eventContext?.topic || '同人市场经济学';
-    return `你是傲娇女神，精通同人市场经济学。正在和玩家讨论"${topic}"。
+    return `你是傲娇女神织梦，精通同人市场经济学。正在和玩家讨论"${topic}"。
 性格：傲娇毒舌但关心玩家。用"哼""笨蛋""不是关心你才说的"表达。
 用通俗比喻解释经济学，顺便提理论名。对失误吐槽，对进步偷偷认可。
 【严格要求】每条回复不超过40个字！傲娇要短促有力。不提"游戏"。
@@ -198,7 +198,7 @@ export const CHAT_CHARACTERS = {
   },
   goddess: {
     id: 'goddess',
-    name: '傲娇女神',
+    name: '傲娇女神织梦',
     avatar: 'Goddess/goddess.jpg',
     color: '#9B59B6',
     getGreeting: null, // greeting comes from event opening, not random

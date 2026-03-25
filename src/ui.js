@@ -1291,9 +1291,9 @@ export function renderMessageApp(state, onAction, onBack) {
       { id: 'bestie', name: '小柚', subtitle: bestieSubtitle, color: '#E84393', avatar: 'Goddess/Guimi.jpg', disabled: bestieRemain <= 0 },
     ];
     if (goddessState) {
-      contacts.push({ id: 'goddess', name: '傲娇女神', subtitle: goddessState.remaining > 0 ? `${goddessState.topic} · 剩${goddessState.remaining}条` : '已离开', color: '#9B59B6', avatar: 'Goddess/goddess.jpg', badge: goddessState.remaining > 0, disabled: goddessState.remaining <= 0 });
+      contacts.push({ id: 'goddess', name: '傲娇女神织梦', subtitle: goddessState.remaining > 0 ? `${goddessState.topic} · 剩${goddessState.remaining}条` : '已离开', color: '#9B59B6', avatar: 'Goddess/goddess.jpg', badge: goddessState.remaining > 0, disabled: goddessState.remaining <= 0 });
     } else {
-      contacts.push({ id: 'goddess', name: '傲娇女神', subtitle: '不在线', color: '#9B59B6', avatar: 'Goddess/goddess.jpg', disabled: true });
+      contacts.push({ id: 'goddess', name: '傲娇女神织梦', subtitle: '不在线', color: '#9B59B6', avatar: 'Goddess/goddess.jpg', disabled: true });
     }
     if (state.commercialOfferReceived) {
       contacts.push({ id: 'publisher', name: '某出版社编辑', subtitle: '新消息！', color: '#2ECC71', icon: 'building-office', badge: true });
