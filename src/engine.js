@@ -2044,7 +2044,7 @@ export function executeTurn(state, actionId) {
   }
 
   // --- Student debt bailout: family intervenes at -¥15000 ---
-  if (getLifeStage(state.turn) === 'university' && state.money <= -15000 && !state._debtBailoutDone) {
+  if (getLifeStage(state.turn) === 'university' && state.money <= -10000 && !state._debtBailoutDone) {
     state._debtBailoutDone = true; // only triggers once
     const bg = state.background;
     const debt = Math.abs(state.money);
@@ -2094,7 +2094,7 @@ export function executeTurn(state, actionId) {
     }
   }
   // Reset bailout flag if debt recovered (allow re-trigger if they go back into deep debt)
-  if (state.money > -10000) state._debtBailoutDone = false;
+  if (state.money > -7000) state._debtBailoutDone = false;
 
   // --- Passive income ---
   const stage = getLifeStage(state.turn);
