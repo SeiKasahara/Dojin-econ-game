@@ -5,7 +5,7 @@
 
 import './style.css';
 import { createInitialState, executeTurn, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates } from './engine.js';
-import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp } from './ui.js';
+import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp } from './ui.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice } from './engine.js';
 import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
 import { ic } from './icons.js';
@@ -67,6 +67,8 @@ function handleAction(actionId) {
       renderMessageApp(state, handleAction, cancelBack);
     } else if (appId === 'nyaner') {
       openSNSPanel(state);
+    } else if (appId === 'browser') {
+      openBrowserApp();
     } else if (appId === 'market') {
       openMarketApp(state);
     } else if (appId === 'rest') {

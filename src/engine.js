@@ -392,7 +392,7 @@ export const ACTIONS = {
   reprint:     { id: 'reprint',     name: '追加印刷',   emoji: 'printer', type: 'reprint',
                  costLabel: '补印库存 需有旧作', requires: { passion: 3, time: 2 } },
   buyGoods:    { id: 'buyGoods',    name: '购买谷子',   emoji: 'shopping-bag', type: 'buyGoods',
-                 costLabel: '¥200 热情↑(效果逐年递减)', requires: { time: 1 } },
+                 costLabel: '¥200 热情↑(效果逐年递减)', requires: {} },
   sellGoods:   { id: 'sellGoods',   name: '出售闲置',   emoji: 'export', type: 'sellGoods',
                  costLabel: '卖掉收藏品换钱 需有收藏', requires: { time: 1 } },
   goCommercial: { id: 'goCommercial', name: '商业出道',  emoji: 'star', type: 'goCommercial',
@@ -402,7 +402,7 @@ export const ACTIONS = {
   upgradeEquipment: { id: 'upgradeEquipment', name: '升级设备', emoji: 'desktop', type: 'upgradeEquipment',
                  costLabel: '一次性大额投入 永久提升创作质量', requires: {} },
   sponsorCommunity: { id: 'sponsorCommunity', name: '赞助社区', emoji: 'hand-heart', type: 'sponsorCommunity',
-                 costLabel: '¥1500~3000 声誉↑热情↑ 冷却6月', requires: { time: 1 } },
+                 costLabel: '¥1500~3000 声誉↑热情↑ 冷却6月', requires: {} },
 };
 
 // Dynamic action info (for UI)
@@ -595,7 +595,7 @@ export function generateEvents(state) {
       city,
       travelCost: EVENT_TRAVEL_COST[city],
       salesBoost: 3.0,  // face-to-face: I→1, huge conversion boost
-      reputationBoost: 0.15,
+      reputationBoost: 0.25,
       passionBoost: 8,
       size: 'big',
     });
@@ -611,7 +611,7 @@ export function generateEvents(state) {
       city,
       travelCost: EVENT_TRAVEL_COST[city],
       salesBoost: 1.8,
-      reputationBoost: 0.06,
+      reputationBoost: 0.12,
       passionBoost: 3,
       size: 'small',
     });
@@ -624,7 +624,7 @@ export function generateEvents(state) {
       city: '异地',
       travelCost: EVENT_TRAVEL_COST['异地'],
       salesBoost: 5.0,
-      reputationBoost: 0.25,
+      reputationBoost: 0.40,
       passionBoost: 12,
       size: 'mega',
     });
@@ -1397,12 +1397,15 @@ export function executeTurn(state, actionId) {
       // Local: minimal, distant: 2 nights hotel + meals + booth
       const lodgingCost = isAttend ? Math.round(evt.travelCost * 1.2 + 200) : 0; // ~¥260(本市) to ~¥1640(异地)
 
-      // Fatigue only applies to 亲参
+      // Fatigue only applies to 亲参 — consecutive attending drains harder
       let eventFatigue = 1.0;
+      let fatigueDrain = 0;
       if (isAttend) {
         state.recentEventTurns.push(state.turn);
         const recentCount = state.recentEventTurns.filter(t => state.turn - t < 6).length;
-        eventFatigue = recentCount <= 2 ? 1.0 : Math.max(0.4, 1.0 - (recentCount - 2) * 0.2);
+        eventFatigue = recentCount <= 1 ? 1.0 : Math.max(0.25, 1.0 - (recentCount - 1) * 0.25);
+        // Extra passion drain for frequent attending
+        if (recentCount >= 3) fatigueDrain = (recentCount - 2) * 5; // 3rd→-5, 4th→-10, 5th→-15
       }
 
       if (isAttend && mg) {
@@ -1419,6 +1422,10 @@ export function executeTurn(state, actionId) {
         result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
         result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位' + (mg.moneySpent > 0 ? '+无料' : ''), value: `-¥${evt.travelCost + lodgingCost + mg.moneySpent}`, positive: false });
         result.deltas.push({ icon: 'heart', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
+        if (fatigueDrain > 0) {
+          state.passion -= fatigueDrain;
+          result.deltas.push({ icon: 'battery-medium', label: '连续参展身心俱疲', value: `热情-${fatigueDrain}`, positive: false });
+        }
         if (eventFatigue < 1) {
           const rc = state.recentEventTurns.filter(t => state.turn - t < 6).length;
           result.deltas.push({ icon: 'smiley-sad', label: `连续亲参疲劳(近6月第${rc}次)`, value: `热情效率${Math.round(eventFatigue * 100)}%`, positive: false });
@@ -1438,6 +1445,10 @@ export function executeTurn(state, actionId) {
         state.attendingEvent = evt;
         result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
         result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位', value: `-¥${evt.travelCost + lodgingCost}`, positive: false });
+        if (fatigueDrain > 0) {
+          state.passion -= fatigueDrain;
+          result.deltas.push({ icon: 'battery-medium', label: '连续参展身心俱疲', value: `热情-${fatigueDrain}`, positive: false });
+        }
       } else {
         // === 寄售 (consignment) ===
         if (state._leaveDenied) {
