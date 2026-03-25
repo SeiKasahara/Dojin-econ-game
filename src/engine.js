@@ -595,7 +595,7 @@ export function generateEvents(state) {
       city,
       travelCost: EVENT_TRAVEL_COST[city],
       salesBoost: 3.0,  // face-to-face: I→1, huge conversion boost
-      reputationBoost: 0.3,
+      reputationBoost: 0.15,
       passionBoost: 8,
       size: 'big',
     });
@@ -611,7 +611,7 @@ export function generateEvents(state) {
       city,
       travelCost: EVENT_TRAVEL_COST[city],
       salesBoost: 1.8,
-      reputationBoost: 0.1,
+      reputationBoost: 0.06,
       passionBoost: 3,
       size: 'small',
     });
@@ -624,7 +624,7 @@ export function generateEvents(state) {
       city: '异地',
       travelCost: EVENT_TRAVEL_COST['异地'],
       salesBoost: 5.0,
-      reputationBoost: 0.5,
+      reputationBoost: 0.25,
       passionBoost: 12,
       size: 'mega',
     });
@@ -1349,7 +1349,7 @@ export function executeTurn(state, actionId) {
     const recessionCut = state.recessionTurnsLeft > 0 ? 0.5 : 1.0;
     const income = Math.floor(rawIncome * recessionCut);
     state.money += income;
-    const repGain = 0.02 + state.reputation * 0.01;
+    const repGain = 0.02 + state.reputation * 0.005;
     state.reputation += repGain;
     state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: -2 });
     result.deltas.push({ icon: 'heart', label: '创作精力', value: '-4', positive: false });
@@ -1515,7 +1515,7 @@ export function executeTurn(state, actionId) {
             totalEventSold += hvpSold;
             state.totalSales += hvpSold;
             result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
-            const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
+            const repGain = 0.08 * state.infoDisclosure * hvpSold * 0.05;
             state.reputation += repGain;
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
             if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
@@ -1527,7 +1527,7 @@ export function executeTurn(state, actionId) {
             totalEventSold += lvpSold;
             state.totalSales += lvpSold;
             result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
-            const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
+            const repGain = 0.01 * state.infoDisclosure * lvpSold * 0.05;
             state.reputation += repGain;
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
             if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
@@ -1548,7 +1548,7 @@ export function executeTurn(state, actionId) {
           result.supplyDemand = getSupplyDemandData(state, sales);
           result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
           if (sales.hvpSales > hvpSold) result.deltas.push({ icon: 'fire', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpSold}`, positive: false });
-          const repGain = 0.35 * state.infoDisclosure * hvpSold * 0.1;
+          const repGain = 0.08 * state.infoDisclosure * hvpSold * 0.05;
           state.reputation += repGain;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
@@ -1565,7 +1565,7 @@ export function executeTurn(state, actionId) {
           if (!result.salesInfo) { result.salesInfo = sales; result.supplyDemand = getSupplyDemandData(state, sales); }
           result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
           if (sales.lvpSales > lvpSold) result.deltas.push({ icon: 'fire', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpSold}`, positive: false });
-          const repGain = 0.04 * state.infoDisclosure * lvpSold * 0.1;
+          const repGain = 0.01 * state.infoDisclosure * lvpSold * 0.05;
           state.reputation += repGain;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
@@ -1805,8 +1805,8 @@ export function executeTurn(state, actionId) {
           result.deltas.push({ icon: 'phone', label: '同步电子版', value: `电子版收入+¥${digiRev}`, positive: true });
         }
 
-        // Reputation gain — skill boosts quality → more reputation
-        const repGain = 0.15 * state.infoDisclosure * (1 + (state.endowments.talent || 0) * 0.15) * fx.repBonus;
+        // Reputation gain — base floor + info-scaled + skill
+        const repGain = (0.04 + 0.08 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus;
         state.reputation += repGain;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         result.deltas.push({ icon: 'star', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: true });
@@ -1894,8 +1894,8 @@ export function executeTurn(state, actionId) {
     state.totalLVP++;
     state.recentLVP = 1;
 
-    // Reputation gain — skill boosts quality
-    const repGain = 0.04 * state.infoDisclosure * (1 + (state.endowments.talent || 0) * 0.15) * fx.repBonus;
+    // Reputation gain — base floor + info-scaled + skill
+    const repGain = (0.01 + 0.02 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus;
     state.reputation += repGain;
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
     result.deltas.push({ icon: 'star', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: true });
@@ -2035,7 +2035,7 @@ export function executeTurn(state, actionId) {
     const cost = Math.round(1500 + cs / 10000 * 1500);
     state.money -= cost;
     state.lastSponsorTurn = state.turn;
-    const repGain = 0.3 + Math.min(0.2, state.reputation * 0.02);
+    const repGain = 0.12 + Math.min(0.08, state.reputation * 0.01);
     state.reputation += repGain;
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
     state.passion = Math.min(100, state.passion + 8);
@@ -2296,7 +2296,7 @@ export function executeTurn(state, actionId) {
         state.money += rev;
         state.totalRevenue += rev;
         state.totalSales += sold;
-        const repGain = 0.35 * state.infoDisclosure * sold * 0.05;
+        const repGain = (0.02 + 0.06 * state.infoDisclosure) * sold * 0.03;
         state.reputation += repGain;
         result.deltas.push({ icon: 'globe-simple', label: `网上售出同人本×${sold}`, value: `+¥${rev}`, positive: true });
       }

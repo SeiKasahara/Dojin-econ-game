@@ -20,6 +20,17 @@ const ACTIONS = {
   exchange: { id: 'exchange', name: '交换名片', emoji: '📇', icon: 'address-book',    cooldown: 4000, energyCost: 5 },
 };
 
+// === Neighbor reputation based on network structure ===
+function rollNeighborRep(mainState) {
+  const playerRep = mainState.reputation || 1;
+  const gini = mainState.advanced?.networkGini || 0.5;
+  // Higher gini = more variance (scale-free network: some big, some tiny)
+  // Lower gini = closer to player (fully connected: everyone similar)
+  const variance = gini * 3; // 0.3 gini → ±0.9, 0.9 gini → ±2.7
+  const offset = (Math.random() * 2 - 1) * variance;
+  return Math.max(0.2, playerRep + offset);
+}
+
 // === Create Mini-Game State ===
 function createState(mainState, event) {
   const cs = mainState.market?.communitySize || 10000;
@@ -58,9 +69,9 @@ function createState(mainState, event) {
     passionBonus: 0,
     // Info disclosure affects how many fans come directly
     playerInfoDisclosure: mainState.infoDisclosure || 0.2,
-    // Neighbor booth activity (competitors with their own reputation)
-    neighborLeft:  { nextAction: 3000 + Math.random() * 5000, reputation: 0.5 + Math.random() * 4 },
-    neighborRight: { nextAction: 5000 + Math.random() * 5000, reputation: 0.5 + Math.random() * 4 },
+    // Neighbor booth activity — reputation based on network structure
+    neighborLeft:  { nextAction: 3000 + Math.random() * 5000, reputation: rollNeighborRep(mainState) },
+    neighborRight: { nextAction: 5000 + Math.random() * 5000, reputation: rollNeighborRep(mainState) },
     // Random background
     _bgKey: Math.random() < 0.5 ? 'bg1' : 'bg2',
     // Neighbor pixel sprites (random 2 from 5, no duplicates)
@@ -589,7 +600,8 @@ function calculateResult(mg, event) {
   else if (performance < 0.8) salesMultiplier = 1.5 + (performance - 0.5) * 3.33;
   else salesMultiplier = 2.5 + (performance - 0.8) * 2.5;
 
-  const reputationDelta = event.reputationBoost + freebiesGiven * 0.05 + cardsExchanged * 0.03;
+  const perfRepBonus = performance > 0.6 ? (performance - 0.6) * 0.3 : 0; // up to +0.12 for perfect play
+  const reputationDelta = event.reputationBoost + freebiesGiven * 0.02 + cardsExchanged * 0.01 + perfRepBonus;
   const passionDelta = event.passionBoost + mg.passionBonus +
     (performance > 0.5 ? Math.round((performance - 0.5) * 20) : performance < 0.2 ? -Math.round((0.2 - performance) * 30) : 0);
 
