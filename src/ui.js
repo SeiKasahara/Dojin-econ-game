@@ -386,6 +386,7 @@ const TUTORIAL_STEPS = [
   { target: '.app-icon[data-app="ciyuanbi"]', title: '打破次元墙', body: `<b>人脉与协作</b>中心：<br/>· <b>寻找搭档</b>：从人脉池中选人合作，搭档能加速创作、提升销量<br/>· <b>外包助手</b>：花钱加速同人本进度<br/>· <b>赞助社区</b>：花钱提升声誉和曝光，同时认识新朋友<br/><br/>人脉通过<b>展会交换名片、赞助社区、线上宣发</b>积累。关系越深，搭档越靠谱！` },
   { target: '.app-icon[data-app="nyaner"]', title: 'Nyaner', body: '查看<b>圈内动态</b>（创作者们在干什么）和<b>今日新闻</b>（宏观经济、社会热点、文化现象）。同人市场数据请去「同人市场观察」App查看。' },
   { target: '.app-icon[data-app="market"]', title: '同人市场观察', body: '查看详细的<b>市场数据</b>（社群人数、多样性、IP热度）和你的<b>创作者数据面板</b>（收入、销量、趋势图）。' },
+  { target: '.app-icon[data-app="message"]', title: '短信', body: `<b>和朋友聊天：</b><br/>· <b>小柚</b>（闺蜜）：每月聊3条，关心你的近况，给生活建议<br/>· <b>傲娇女神</b>（织梦）：当宏观经济事件发生时上线，用傲娇的方式解释同人经济学原理。抓住机会请教！<br/><br/>此外，如果有出版社看上你的作品，也会通过短信联系你。` },
   { target: '.phone-stats-panel', title: '叙事信息', body: '下拉展开可以查看<b>当前状态提示和叙事文本</b>。包括人生阶段描述、创作建议、状态徽章（搭档、HVP进度、经济下行等）。', expand: '#phone-stats-panel' },
   { target: null, title: '开始你的创作之旅', body: `<div style="text-align:left;line-height:1.8">· 先<b>创作</b>积累库存，再<b>宣发</b>让人知道你<br/>· 参加<b>同人展</b>卖出去，库存也有通贩收入<br/>· 关注<b>资金</b>，印刷和生活都要花钱<br/>· 上班后闲暇骤降，要<b>取舍</b><br/>· 热情低于30要及时<b>休息</b>！<br/>· 通过展会和社区活动积累<b>人脉</b>，找到好搭档</div>` },
 ];
@@ -1163,7 +1164,13 @@ function renderAppDesktop(state) {
     if (app.id === 'manzhan' && state.availableEvents?.length) badge = `<span class="app-badge">${state.availableEvents.length}</span>`;
     if (app.id === 'ciyuanbi' && state.hasPartner) badge = `<span class="app-badge">${ic('check', '0.6rem')}</span>`;
     if (app.id === 'nyaner' && feedCount > 0) badge = `<span class="app-badge">${feedCount}</span>`;
-    if (app.id === 'message' && state.commercialOfferReceived) badge = `<span class="app-badge">1</span>`;
+    if (app.id === 'message') {
+      const hasPublisher = state.commercialOfferReceived;
+      const hasGoddess = !!state._goddessEvent;
+      const hasWelcome = state._welcomeMessagesSent && ((state._chatUsage?.bestie || 0) === 0);
+      const msgCount = (hasPublisher ? 1 : 0) + (hasGoddess ? 1 : 0) + (hasWelcome ? 1 : 0);
+      if (msgCount > 0) badge = `<span class="app-badge">${msgCount}</span>`;
+    }
 
     const iconContent = app.logo
       ? `<div class="app-icon-bg app-icon-logo"><img src="${app.logo}" alt="${app.name}"></div>`
@@ -1269,48 +1276,63 @@ export function renderMessageApp(state, onAction, onBack) {
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
 
-  // Contact list view
-  const contacts = [
-    { id: 'bestie', name: '小柚', subtitle: '闺蜜', color: '#E84393', avatar: 'Goddess/Guimi.jpg' },
-    { id: 'goddess', name: '傲娇女神', subtitle: '织梦', color: '#9B59B6', avatar: 'Goddess/goddess.jpg' },
-  ];
-  if (state.commercialOfferReceived) {
-    contacts.push({ id: 'publisher', name: '某出版社编辑', subtitle: '新消息！', color: '#2ECC71', icon: 'building-office', badge: true });
-  }
+  // Dynamically import to check goddess state
+  import('./chat-npc.js').then(({ getBestieRemaining, getBestieCooldown, getGoddessState, CHAT_CHARACTERS }) => {
+    const bestieRemain = getBestieRemaining(state);
+    const bestieCd = getBestieCooldown(state);
+    const goddessState = getGoddessState(state);
 
-  overlay.innerHTML = `
-    <div class="app-page">
-      <div class="app-titlebar" style="border-bottom-color:#2ECC71">
-        <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
-        <span class="app-title">${ic('envelope')} 短信</span>
-        <span style="width:60px"></span>
-      </div>
-      <div class="app-page-body">
-        ${contacts.map(c => `
-          <div class="app-action-card" data-contact="${c.id}" style="cursor:pointer">
-            ${c.avatar
-              ? `<img src="${c.avatar}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid ${c.color}">`
-              : `<div style="width:40px;height:40px;border-radius:50%;background:${c.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">${ic(c.icon || 'user', '1.1rem')}</div>`
-            }
-            <div class="app-action-body">
-              <div class="app-action-name">${c.name} ${c.badge ? `<span style="background:var(--danger);color:#fff;font-size:0.55rem;padding:1px 5px;border-radius:8px;margin-left:4px">新</span>` : ''}</div>
-              <div class="app-action-cost">${c.subtitle}</div>
-            </div>
-          </div>`).join('')}
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
+    let bestieSubtitle;
+    if (bestieRemain > 0) bestieSubtitle = '闺蜜 · 有空聊天';
+    else if (bestieCd > 0) bestieSubtitle = `闺蜜 · ${bestieCd}个月后再聊`;
+    else bestieSubtitle = '闺蜜 · 忙去了';
 
-  overlay.querySelectorAll('.app-action-card[data-contact]').forEach(el => {
-    el.addEventListener('click', () => {
-      const contactId = el.dataset.contact;
-      overlay.remove();
-      if (contactId === 'publisher') {
-        renderPublisherMessage(state, onAction, onBack);
-      } else {
-        renderChatView(state, contactId, onAction, onBack);
-      }
+    const contacts = [
+      { id: 'bestie', name: '小柚', subtitle: bestieSubtitle, color: '#E84393', avatar: 'Goddess/Guimi.jpg', disabled: bestieRemain <= 0 },
+    ];
+    if (goddessState) {
+      contacts.push({ id: 'goddess', name: '傲娇女神', subtitle: goddessState.remaining > 0 ? `${goddessState.topic} · 剩${goddessState.remaining}条` : '已离开', color: '#9B59B6', avatar: 'Goddess/goddess.jpg', badge: goddessState.remaining > 0, disabled: goddessState.remaining <= 0 });
+    } else {
+      contacts.push({ id: 'goddess', name: '傲娇女神', subtitle: '不在线', color: '#9B59B6', avatar: 'Goddess/goddess.jpg', disabled: true });
+    }
+    if (state.commercialOfferReceived) {
+      contacts.push({ id: 'publisher', name: '某出版社编辑', subtitle: '新消息！', color: '#2ECC71', icon: 'building-office', badge: true });
+    }
+
+    overlay.innerHTML = `
+      <div class="app-page">
+        <div class="app-titlebar" style="border-bottom-color:#2ECC71">
+          <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
+          <span class="app-title">${ic('envelope')} 短信</span>
+          <span style="width:60px"></span>
+        </div>
+        <div class="app-page-body">
+          ${contacts.map(c => `
+            <div class="app-action-card ${c.disabled ? 'disabled' : ''}" data-contact="${c.id}" style="cursor:${c.disabled ? 'default' : 'pointer'};${c.disabled ? 'opacity:0.5;' : ''}">
+              ${c.avatar
+                ? `<img src="${c.avatar}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid ${c.color}">`
+                : `<div style="width:40px;height:40px;border-radius:50%;background:${c.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">${ic(c.icon || 'user', '1.1rem')}</div>`
+              }
+              <div class="app-action-body">
+                <div class="app-action-name">${c.name} ${c.badge ? `<span style="background:var(--danger);color:#fff;font-size:0.55rem;padding:1px 5px;border-radius:8px;margin-left:4px">新</span>` : ''}</div>
+                <div class="app-action-cost">${c.subtitle}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
+
+    overlay.querySelectorAll('.app-action-card:not(.disabled)[data-contact]').forEach(el => {
+      el.addEventListener('click', () => {
+        const contactId = el.dataset.contact;
+        overlay.remove();
+        if (contactId === 'publisher') {
+          renderPublisherMessage(state, onAction, onBack);
+        } else {
+          renderChatView(state, contactId, onAction, onBack);
+        }
+      });
     });
   });
 }
@@ -1328,12 +1350,12 @@ function renderPublisherMessage(state, onAction, onBack) {
       <div class="app-page-body" style="padding:16px">
         <div style="background:#F0FAF0;border-radius:var(--radius);padding:14px;font-size:0.82rem;line-height:1.6;color:var(--text);margin-bottom:16px">
           你好！我是XX出版社的编辑。在上次展会后一直在关注你的作品——我们很看好你的创作实力。<br><br>
-          不知道你有没有兴趣聊聊商业出版？从同人到商业是许多优秀创作者的自然进化路径。
+          不知道你有没有兴趣聊聊商业出版？
         </div>
         <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
           ${ic('lightbulb')} 接受后将告别同人创作，开启商业出道结局。
         </div>
-        <button class="btn btn-primary btn-block" id="msg-accept" style="margin-bottom:8px">${ic('star')} 接受邀约，商业出道</button>
+        <button class="btn btn-primary btn-block" id="msg-accept" style="margin-bottom:8px">${ic('star')} 接受邀约</button>
         <button class="btn btn-block" id="msg-decline" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">暂时不考虑</button>
       </div>
     </div>`;
@@ -1344,36 +1366,64 @@ function renderPublisherMessage(state, onAction, onBack) {
 }
 
 async function renderChatView(state, characterId, onAction, onBack) {
-  const { chatWithNPC, CHAT_CHARACTERS } = await import('./chat-npc.js');
-  const char = CHAT_CHARACTERS[characterId];
-  if (!char) return;
+  if (characterId === 'bestie') {
+    return renderBestieChat(state, onAction, onBack);
+  }
+  return renderGoddessChat(state, onAction, onBack);
+}
 
-  // Init chat history on state (persists during session)
+// === Bestie: preset dialog with choices ===
+async function renderBestieChat(state, onAction, onBack) {
+  const { CHAT_CHARACTERS, getBestieRemaining } = await import('./chat-npc.js');
+  const { pickBestieDialog } = await import('./bestie-dialogs.js');
+  const char = CHAT_CHARACTERS.bestie;
+
   if (!state._chatHistory) state._chatHistory = {};
-  if (!state._chatHistory[characterId]) state._chatHistory[characterId] = [];
-  const history = state._chatHistory[characterId];
+  if (!state._chatHistory.bestie) state._chatHistory.bestie = [];
+  const history = state._chatHistory.bestie;
 
-  // Inject greeting as first bubble if history is empty
+  // First open: inject greeting
   if (history.length === 0) {
-    history.push({ role: 'assistant', content: char.getGreeting() });
+    history.push({ role: 'assistant', content: char.getGreeting(state) });
   }
 
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
 
-  function renderMessages() {
-    const msgsHtml = history.map(m => `
-        <div style="display:flex;margin-bottom:8px;${m.role === 'user' ? 'flex-direction:row-reverse' : ''}">
-          <div style="max-width:75%;padding:8px 12px;border-radius:12px;font-size:0.8rem;line-height:1.5;${
-            m.role === 'user'
-              ? 'background:var(--primary);color:#fff;border-bottom-right-radius:4px'
-              : `background:var(--bg);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:4px`
-          }">${m.content}</div>
-        </div>`).join('');
-    return msgsHtml;
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   function render() {
+    const remaining = getBestieRemaining(state);
+    const gone = remaining <= 0;
+    // Pick a new dialog if we need to show choices
+    const needsDialog = !gone && !history._pendingDialog && history[history.length - 1]?.role === 'assistant';
+    if (needsDialog) {
+      history._pendingDialog = pickBestieDialog(state);
+      // If last message is greeting, show the dialog npc message too
+      if (history.length === 1 || history[history.length - 1]?.content !== history._pendingDialog.npc) {
+        history.push({ role: 'assistant', content: history._pendingDialog.npc });
+      }
+    }
+
+    const msgsHtml = history.filter(m => typeof m === 'object' && m.role).map(m => `
+      <div style="display:flex;margin-bottom:8px;${m.role === 'user' ? 'flex-direction:row-reverse' : ''}">
+        <div style="max-width:80%;padding:8px 12px;border-radius:12px;font-size:0.8rem;line-height:1.5;${
+          m.role === 'user'
+            ? 'background:var(--primary);color:#fff;border-bottom-right-radius:4px'
+            : 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:4px'
+        }">${escapeHtml(m.content)}</div>
+      </div>`).join('');
+
+    const dialog = history._pendingDialog;
+    const choicesHtml = (!gone && dialog) ? `
+      <div style="display:flex;flex-direction:column;gap:6px;padding:8px 12px">
+        ${dialog.replies.map((r, i) => `
+          <button class="btn bestie-reply" data-idx="${i}" style="text-align:left;padding:8px 12px;font-size:0.78rem;background:var(--bg-card);border:1.5px solid var(--border);border-radius:12px;cursor:pointer">${escapeHtml(r.text)}</button>
+        `).join('')}
+      </div>` : '';
+
     overlay.innerHTML = `
       <div class="app-page" style="display:flex;flex-direction:column;height:80vh">
         <div class="app-titlebar" style="border-bottom-color:${char.color};flex-shrink:0">
@@ -1385,52 +1435,136 @@ async function renderChatView(state, characterId, onAction, onBack) {
           <span style="width:60px"></span>
         </div>
         <div id="chat-messages" style="flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch">
-          ${renderMessages()}
+          ${msgsHtml}
+          ${gone ? `<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:0.78rem">${char.goneMessage}</div>` : ''}
+        </div>
+        ${!gone ? choicesHtml : '<div style="padding:12px;text-align:center;font-size:0.75rem;color:var(--text-muted)">小柚可能去忙别的了~</div>'}
+      </div>`;
+
+    if (!document.body.contains(overlay)) document.body.appendChild(overlay);
+
+    const msgBox = overlay.querySelector('#chat-messages');
+    msgBox.scrollTop = msgBox.scrollHeight;
+
+    overlay.querySelector('#chat-back').addEventListener('click', () => { overlay.remove(); renderMessageApp(state, onAction, onBack); });
+
+    // Bind reply choices
+    overlay.querySelectorAll('.bestie-reply').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        const reply = dialog.replies[idx];
+        // Player chose
+        history.push({ role: 'user', content: reply.text });
+        // Bestie responds
+        history.push({ role: 'assistant', content: reply.response });
+        history._pendingDialog = null;
+        // Track usage + mark cooldown start
+        if (!state._chatUsage) state._chatUsage = {};
+        state._chatUsage.bestie = (state._chatUsage.bestie || 0) + 1;
+        state._bestieLastChatTurn = state.turn; // start 3-month cooldown
+        render();
+      });
+    });
+  }
+
+  render();
+}
+
+// === Goddess: AI-powered free-input chat ===
+async function renderGoddessChat(state, onAction, onBack) {
+  const { chatWithNPC, CHAT_CHARACTERS, getGoddessState } = await import('./chat-npc.js');
+  const char = CHAT_CHARACTERS.goddess;
+
+  if (!state._chatHistory) state._chatHistory = {};
+  if (!state._chatHistory.goddess) {
+    state._chatHistory.goddess = [];
+    const gs = getGoddessState(state);
+    if (gs?.opening) state._chatHistory.goddess.push({ role: 'assistant', content: gs.opening });
+  }
+  const history = state._chatHistory.goddess;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function render() {
+    const gs = getGoddessState(state);
+    const remaining = gs ? gs.remaining : 0;
+    const gone = remaining <= 0;
+
+    const msgsHtml = history.map(m => `
+      <div style="display:flex;margin-bottom:8px;${m.role === 'user' ? 'flex-direction:row-reverse' : ''}">
+        <div style="max-width:75%;padding:8px 12px;border-radius:12px;font-size:0.8rem;line-height:1.5;${
+          m.role === 'user'
+            ? 'background:var(--primary);color:#fff;border-bottom-right-radius:4px'
+            : 'background:var(--bg);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:4px'
+        }">${escapeHtml(m.content)}</div>
+      </div>`).join('');
+
+    overlay.innerHTML = `
+      <div class="app-page" style="display:flex;flex-direction:column;height:80vh">
+        <div class="app-titlebar" style="border-bottom-color:${char.color};flex-shrink:0">
+          <button class="app-back" id="chat-back">${ic('arrow-left')} 返回</button>
+          <span class="app-title" style="display:flex;align-items:center;gap:6px">
+            <img src="${char.avatar}" style="width:24px;height:24px;border-radius:50%;object-fit:cover">
+            ${char.name}
+          </span>
+          <span style="width:60px"></span>
+        </div>
+        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch">
+          ${msgsHtml}
+          ${gone ? `<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:0.78rem">${char.goneMessage}</div>` : ''}
         </div>
         <div style="padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;background:var(--bg-card)">
-          <input id="chat-input" type="text" placeholder="说点什么…" style="flex:1;border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:0.8rem;outline:none;background:var(--bg)">
-          <button id="chat-send" class="btn btn-primary" style="padding:8px 14px;border-radius:20px;font-size:0.8rem">${ic('paper-plane-right')}</button>
+          <input id="chat-input" type="text" placeholder="${gone ? '女神已离开' : `说点什么…（剩${remaining}条）`}" ${gone ? 'disabled' : ''} style="flex:1;border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:0.8rem;outline:none;background:var(--bg)">
+          <button id="chat-send" class="btn btn-primary" style="padding:8px 14px;border-radius:20px;font-size:0.8rem" ${gone ? 'disabled' : ''}>${ic('paper-plane-right')}</button>
         </div>
       </div>`;
 
     if (!document.body.contains(overlay)) document.body.appendChild(overlay);
 
-    // Scroll to bottom
     const msgBox = overlay.querySelector('#chat-messages');
     msgBox.scrollTop = msgBox.scrollHeight;
 
-    // Bind
     overlay.querySelector('#chat-back').addEventListener('click', () => { overlay.remove(); renderMessageApp(state, onAction, onBack); });
 
-    const input = overlay.querySelector('#chat-input');
-    const sendBtn = overlay.querySelector('#chat-send');
+    if (!gone) {
+      const input = overlay.querySelector('#chat-input');
+      const sendBtn = overlay.querySelector('#chat-send');
 
-    async function send() {
-      const text = input.value.trim();
-      if (!text) return;
-      input.value = '';
+      async function send() {
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
 
-      history.push({ role: 'user', content: text });
-      render();
+        history.push({ role: 'user', content: text });
+        render();
 
-      // Show typing indicator
-      const msgBox2 = overlay.querySelector('#chat-messages');
-      const typing = document.createElement('div');
-      typing.style.cssText = 'text-align:left;padding:4px 0;font-size:0.75rem;color:var(--text-muted)';
-      typing.textContent = `${char.name}正在输入...`;
-      msgBox2.appendChild(typing);
-      msgBox2.scrollTop = msgBox2.scrollHeight;
+        const msgBox2 = overlay.querySelector('#chat-messages');
+        const typing = document.createElement('div');
+        typing.style.cssText = 'text-align:left;padding:4px 0;font-size:0.75rem;color:var(--text-muted)';
+        typing.textContent = `${char.name}正在输入...`;
+        msgBox2.appendChild(typing);
+        msgBox2.scrollTop = msgBox2.scrollHeight;
 
-      const reply = await chatWithNPC(characterId, history, state);
-      typing.remove();
+        const reply = await chatWithNPC('goddess', history, state);
+        typing.remove();
 
-      history.push({ role: 'assistant', content: reply });
-      render();
+        if (reply === null) {
+          render();
+        } else {
+          history.push({ role: 'assistant', content: reply });
+          render();
+        }
+      }
+
+      sendBtn.addEventListener('click', send);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) send(); });
+      input.focus();
     }
-
-    sendBtn.addEventListener('click', send);
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) send(); });
-    input.focus();
   }
 
   render();

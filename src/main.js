@@ -47,7 +47,14 @@ function startGame(communityPreset, ipType) {
     renderGame(state, handleAction, handleRetire);
     syncBGM('game');
     // Show tutorial on first game start
-    renderTutorial(() => {});
+    renderTutorial(() => {
+      // First month: bestie & goddess send welcome messages
+      import('./chat-npc.js').then(({ triggerWelcomeMessages }) => {
+        triggerWelcomeMessages(state);
+        // Re-render to show message badge
+        renderGame(state, handleAction, handleRetire);
+      });
+    });
   });
 }
 
@@ -523,6 +530,11 @@ function afterMonthTransition(monthResult) {
       state.lastEvent = displayEvent;
       renderEvent(displayEvent, () => {
         applyEvent(state, event);
+        // Trigger goddess chat for macro economic events
+        const macroIds = ['recession', 'stagflation', 'debt_crisis', 'ai_revolution'];
+        if (macroIds.includes(event.id)) {
+          import('./chat-npc.js').then(({ triggerGoddessEvent }) => triggerGoddessEvent(state, event.id));
+        }
         if (state.phase === 'gameover') { deleteSave(); syncBGM('gameover'); renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
         state.phase = 'action';
         syncBGM('game');
@@ -560,6 +572,11 @@ function showEventChain(events, done) {
   if (events.length === 0) { done(); return; }
   const evt = events.shift();
   if (evt.apply) evt.apply(state);
+  // Trigger goddess for advanced macro events too
+  const macroIds = ['recession', 'stagflation', 'debt_crisis', 'ai_revolution'];
+  if (evt.id && macroIds.includes(evt.id)) {
+    import('./chat-npc.js').then(({ triggerGoddessEvent }) => triggerGoddessEvent(state, evt.id));
+  }
   renderEvent(evt, () => {
     if (state.phase === 'gameover') { deleteSave(); syncBGM('gameover'); renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
     showEventChain(events, done);

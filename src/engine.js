@@ -2491,6 +2491,15 @@ export function endMonth(state) {
   state.lvpWorkedThisMonth = false;
   state.eventsAttendedThisMonth = [];
   state.monthHadCreativeAction = false;
+  // Reset chat usage (monthly cooldowns)
+  if (state._chatUsage) state._chatUsage.bestie = 0; // reset bestie round count (cooldown checked separately)
+  // Don't reset goddess usage — it persists per event until new event triggers
+
+  // Bestie history: clear after 3 months from last chat
+  if (state._chatHistory?.bestie && state._bestieLastChatTurn && state.turn - state._bestieLastChatTurn >= 3) {
+    delete state._chatHistory.bestie;
+  }
+  // Goddess history: never cleared (persists until game end)
 
   // --- Generate available doujin events for next turn ---
   state.availableEvents = generateEvents(state);
