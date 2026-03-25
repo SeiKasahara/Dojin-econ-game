@@ -13,6 +13,20 @@ import { saveGame, loadGame, deleteSave } from './save.js';
 
 let state = null;
 
+// Loading overlay to block interaction during async imports (iOS tap-through fix)
+function showLoadingOverlay(text = '加载中…') {
+  const el = document.createElement('div');
+  el.className = 'event-overlay';
+  el.id = 'loading-overlay';
+  el.style.cssText = 'z-index:999;display:flex;align-items:center;justify-content:center;';
+  el.innerHTML = `<div style="background:var(--bg-card);padding:20px 32px;border-radius:var(--radius);box-shadow:var(--shadow-lg);font-size:0.85rem;font-weight:600;color:var(--text-light)">${text}</div>`;
+  document.body.appendChild(el);
+  return el;
+}
+function removeLoadingOverlay() {
+  document.getElementById('loading-overlay')?.remove();
+}
+
 let selectedPreset = 'mid';
 let selectedIpType = 'normal';
 
@@ -126,7 +140,9 @@ function handleAction(actionId) {
         if (mode === 'attend') {
           // 亲参 → play minigame
           syncBGM('minigame');
+          showLoadingOverlay('准备展会中…');
           import('./minigame.js').then(({ startMinigame }) => {
+            removeLoadingOverlay();
             startMinigame(state, chosenEvent, (mgResult) => {
               state._minigameResult = mgResult || null;
               proceedWithTurn(actionId);
@@ -281,6 +297,21 @@ function handleAction(actionId) {
         const idx = parseInt(el.dataset.idx);
         state._selectedPartnerCandidate = candidates[idx];
         overlay.remove();
+        proceedWithTurn(actionId);
+      });
+    });
+    return;
+  }
+
+  // === Promote Heavy: launch social media mini-game ===
+  if (actionId === 'promote_heavy') {
+    syncBGM('minigame');
+    showLoadingOverlay('启动宣发机…');
+    import('./promote-minigame.js').then(({ startPromoteMinigame }) => {
+      removeLoadingOverlay();
+      startPromoteMinigame(state, (mgResult) => {
+        state._promoteMinigameResult = mgResult || null;
+        syncBGM('game');
         proceedWithTurn(actionId);
       });
     });

@@ -811,6 +811,176 @@ html, body {
 
 .mg-chat-btn { animation: pulse 1.5s infinite; }
 
+/* === Promote Mini-Game (Social Media) === */
+.promo-titlebar {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  gap: 8px;
+  border-bottom: 1.5px solid var(--border);
+  background: var(--bg-card);
+}
+.promo-title { font-weight: 700; font-size: 0.85rem; flex: 1; color: var(--secondary); }
+.promo-timer { font-size: 0.85rem; font-weight: 700; color: var(--text); min-width: 32px; text-align: right; }
+
+.promo-heat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: #F5F0EA;
+}
+.promo-heat-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.promo-heat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.promo-heat-fill.low { background: #3498DB; }
+.promo-heat-fill.mid { background: #F39C12; }
+.promo-heat-fill.high { background: #E74C3C; }
+.promo-heat-label {
+  min-width: 36px;
+  text-align: right;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+.promo-trend-banner {
+  padding: 7px 16px;
+  background: linear-gradient(135deg, #FDE8E8 0%, #FFF0E0 100%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--danger);
+  border-bottom: 1px solid #F0D0C0;
+  animation: slideDown 0.3s ease;
+}
+.promo-trend-timer { margin-left: auto; font-size: 0.65rem; font-weight: 400; color: var(--text-muted); }
+
+.promo-feed {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.promo-post {
+  transition: opacity 0.35s ease;
+}
+.promo-post.player-post {
+  border-left: 3px solid var(--primary);
+  background: #FFFBF5;
+}
+.promo-post.player-post.work {
+  border-left-color: var(--accent);
+  background: #FFFDF5;
+}
+.promo-post.noise-post {
+  opacity: 0.5;
+}
+
+.promo-hud {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 16px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-light);
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.promo-actions .mg-action-btn.disabled { opacity: 0.3; pointer-events: none; }
+.promo-actions .mg-action-btn.highlight {
+  border-color: var(--danger);
+  box-shadow: 0 0 8px rgba(231,76,60,0.25);
+  animation: pulse 1s infinite;
+}
+
+.promo-ammo-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.55rem;
+  background: var(--accent);
+  color: #fff;
+  padding: 0 5px;
+  border-radius: 8px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.promo-stickiness { display: flex; gap: 2px; margin-top: 1px; }
+.promo-stickiness-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s;
+}
+.promo-stickiness-dot.active { background: var(--accent); }
+
+.promo-toast {
+  background: rgba(231,76,60,0.9);
+  color: #fff;
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  animation: fadeIn 0.2s ease;
+}
+.promo-toast.positive { background: rgba(39,174,96,0.9); }
+
+.promo-scoring {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,248,240,0.96);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 30;
+  animation: fadeIn 0.4s ease;
+}
+.promo-grade { font-size: 2.8rem; font-weight: 900; color: var(--primary); }
+.promo-score-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+  color: var(--text);
+}
+
+.comment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  animation: pulse 0.8s infinite;
+  margin-right: 6px;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 /* === Utility === */
 .text-center { text-align: center; }
 .mt-8 { margin-top: 8px; }

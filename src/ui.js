@@ -957,15 +957,17 @@ export function openSNSPanel(state) {
     ? `<div style="text-align:center;padding:40px 20px;color:var(--text-muted);font-size:0.82rem">${ic('chat-circle-dots', '2rem')}<br><br>暂时没有新动态</div>`
     : feedItems.map((f, i) => {
       const authorName = f.author || '匿名';
-      const authorInitial = authorName.charAt(0);
-      const color = avatarColor[f.type] || '#2C3E50';
       const time = timeLabels[Math.min(i, timeLabels.length - 1)];
       const handle = typeHandle[f.type] || '动态';
       const hotTag = f.hot ? `<span class="sns-hot-tag">${ic('fire', '0.6rem')} 热门</span>` : '';
+      // Stable avatar from prop-npc based on author name hash
+      let nameHash = 0;
+      for (let c = 0; c < authorName.length; c++) nameHash = ((nameHash << 5) - nameHash + authorName.charCodeAt(c)) | 0;
+      const avatarIdx = (Math.abs(nameHash) % 30) + 1;
 
       return `
       <div class="sns-feed-item">
-        <div class="sns-feed-avatar" style="background:${color}">${authorInitial}</div>
+        <img class="sns-feed-avatar" src="prop-npc/${avatarIdx}.webp" style="object-fit:cover" alt="">
         <div class="sns-feed-body">
           <div class="sns-feed-meta">
             <span class="sns-feed-author">${authorName}</span>

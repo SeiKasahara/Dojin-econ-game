@@ -235,30 +235,94 @@ const CHOICE_EFFECTS = {
   budget:    { qualityMod: -0.15, costMod: 0.7, batchMod: 1.3 },
 };
 
-// Apply a creative choice to an HVP project, returns flavor text for display
+// === Creative Journal Entries (flavor text for non-choice months) ===
+const CREATIVE_JOURNAL = {
+  early: [ // progress < 50%
+    '今天画到了关键场景，情绪完全投入了',
+    '找参考资料找了一整天，总算理清思路',
+    '草稿改了三版，第三版终于满意了',
+    '灵感来得很突然——半夜爬起来记了满满一页',
+    '人设细节越画越多，控制不住自己',
+    '今天的BGM完美配合了创作节奏',
+    '看了一堆同类作品找感觉，信心满满',
+    '分镜卡了半天，散步回来突然通了',
+    '手感超好的一天，进度飞速推进',
+    '重新审视了大纲，做了一些微调',
+  ],
+  late: [ // progress >= 50%
+    '能看到完成的轮廓了，越来越兴奋',
+    '开始收尾工作了，细节打磨中',
+    '通读了一遍已完成的部分，比想象的好',
+    '最后几页总是最难的…但快了',
+    '检查了一遍排版，修了几个小问题',
+    '润色了几段对白，更流畅了',
+    '试着从读者角度审视，调整了节奏',
+    '进入了心流状态，一口气推了很多',
+    '越接近完成越焦虑，但也越期待',
+    '感觉这次的作品比上次有进步',
+  ],
+  partner: [ // has partner
+    '搭档交来的部分比预想的好，信心大增',
+    '和搭档讨论了半天细节，方向更清晰了',
+    '搭档提了个好建议，改了一段关键情节',
+    '配合越来越默契了，效率在提高',
+    '搭档催进度了…我得加把劲',
+  ],
+  milestone: '创作过半！回头看看已完成的部分，还不错。接下来继续加油！',
+};
+
+function getCreativeJournal(project, hasPartner) {
+  const ratio = project.progress / project.needed;
+  const pool = ratio < 0.5 ? CREATIVE_JOURNAL.early : CREATIVE_JOURNAL.late;
+  const entries = [pool[Math.floor(Math.random() * pool.length)]];
+  if (hasPartner && Math.random() < 0.4) {
+    entries.push(CREATIVE_JOURNAL.partner[Math.floor(Math.random() * CREATIVE_JOURNAL.partner.length)]);
+  }
+  return entries;
+}
+
+// Quality star rating (0.5-1.8 → ★☆ display)
+function getQualityStars(quality) {
+  const stars = Math.max(1, Math.min(5, Math.round((quality - 0.5) / 0.26)));
+  return '★'.repeat(stars) + '☆'.repeat(5 - stars);
+}
+
+// Apply a creative choice to an HVP project, returns quality delta
 export function applyCreativeChoice(project, choiceCategory, optionId) {
   const fx = CHOICE_EFFECTS[optionId];
   if (!fx) return '';
+  if (!project._qualityLog) project._qualityLog = [];
+  const qBefore = project.workQuality;
+
   if (choiceCategory === 'theme') {
     const opt = CREATIVE_CHOICES.theme.options.find(o => o.id === optionId);
     project.styleTag = opt?.tag || null;
     project.workQuality += fx.qualityMod;
+    if (fx.qualityMod) project._qualityLog.push({ label: opt?.name || optionId, delta: fx.qualityMod });
   } else if (choiceCategory === 'execution') {
     project.workQuality += fx.qualityMod;
     if (fx.speedMod) project.needed = Math.max(1, project.needed + fx.speedMod);
     if (fx.passionExtra) project._extraPassionCost = fx.passionExtra;
+    const choiceName = CREATIVE_CHOICES.execution.options.find(o => o.id === optionId)?.name || optionId;
+    if (fx.qualityMod) project._qualityLog.push({ label: choiceName, delta: fx.qualityMod });
   } else if (choiceCategory === 'finalPolish') {
     project.workQuality += fx.qualityMod;
+    if (fx.qualityMod) project._qualityLog.push({ label: '最终打磨', delta: fx.qualityMod });
     if (fx.riskMod && Math.random() < fx.riskMod) {
-      // Overhaul gamble: 50/50 great or terrible
-      project.workQuality += Math.random() < 0.5 ? 0.2 : -0.2;
+      const overhaulResult = Math.random() < 0.5 ? 0.2 : -0.2;
+      project.workQuality += overhaulResult;
+      project._qualityLog.push({ label: overhaulResult > 0 ? '大改赌赢！' : '大改翻车…', delta: overhaulResult });
     }
     if (fx.cultChance && Math.random() < fx.cultChance) {
       project.isCultHit = true;
+      project._qualityLog.push({ label: 'Cult经典诞生！', delta: 0, special: true });
     }
   }
   project.workQuality = Math.max(0.5, Math.min(1.8, project.workQuality));
   project.choices.push(optionId);
+
+  // Return quality delta for UI feedback
+  return project.workQuality - qBefore;
 }
 
 // Work quality effects on sales/reputation (hidden multipliers)
@@ -383,12 +447,16 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     achievements: [], gameOverReason: '',
     commercialOfferReceived: false, // true after publisher scouts you
     commercialTransition: false,    // true if player chose to go commercial (positive ending)
+    consecutiveRestTurns: 0,         // consecutive rest-only months (triggers exit at 12-16)
+    _restExitThreshold: 12 + Math.floor(Math.random() * 5), // random 12-16
     consecutiveConsigns: 0,         // tracks consecutive consignment events (resets on 亲参)
     creativeFatigue: 0,             // cumulative creative exhaustion (decays naturally, amplified by consecutive creation)
     equipmentLevel: 0,              // 0/1/2/3 — upgraded equipment improves quality & reduces passion cost
     lastSponsorTurn: -12,           // turn of last community sponsorship (cooldown)
     lastSalary: 0,                  // last salary received (for unemployment spending inertia)
     // Achievement tracking counters
+    _debtBailoutDone: false,        // family debt bailout triggered this cycle
+    _debtFinalWarning: false,       // poor family: first warning given (next time = gameover)
     _debtPassionStreak: 0,          // consecutive months with money<0 and passion>=60
     _lowPassionHit: false,          // ever had passion<=15
     _passionRecovered: false,       // recovered from <=15 to >=80
@@ -411,7 +479,7 @@ export const ACTIONS = {
   promote_light: { id: 'promote_light', name: '轻度宣发', emoji: 'megaphone', type: 'promote',
                    costLabel: '热情-3 小幅提升信息', requires: { passion: 3, time: 1 }, promoteIntensity: 'light' },
   promote_heavy: { id: 'promote_heavy', name: '全力宣发', emoji: 'megaphone-simple', type: 'promote',
-                   costLabel: '热情-12 大幅提升信息 需闲暇≥3', requires: { passion: 10, time: 3 }, promoteIntensity: 'heavy' },
+                   costLabel: '热情-8 大幅提升信息 需闲暇≥3', requires: { passion: 8, time: 3 }, promoteIntensity: 'heavy' },
   findPartner: { id: 'findPartner', name: '寻找搭档',   emoji: 'handshake', type: 'social',
                  costLabel: '热情-3 搭档有稿费成本', requires: { passion: 3, time: 2 } },
   partTimeJob: { id: 'partTimeJob', name: '普通打工',   emoji: 'storefront', type: 'work',
@@ -894,8 +962,34 @@ export function executeTurn(state, actionId) {
     state._pendingEventDip = null;
   }
 
+  // --- Track consecutive rest ---
+  if (action.type === 'rest') {
+    state.consecutiveRestTurns++;
+  } else {
+    state.consecutiveRestTurns = 0;
+  }
+
   // --- Process action ---
   if (action.type === 'rest') {
+    // Consecutive rest warning & exit (only before 3 years of work — after that, resting is a valid lifestyle choice)
+    const workYearsForRest = getLifeStage(state.turn) === 'work' ? (state.turn - 50) / 12 : 0;
+    const restMonths = state.consecutiveRestTurns;
+    if (workYearsForRest < 3) {
+      if (restMonths >= state._restExitThreshold) {
+        state.passion = 0;
+        state.phase = 'gameover';
+        state.gameOverReason = '连续休息了太久，你渐渐忘记了为什么要创作……同人的热情在无所事事中悄悄熄灭了。';
+        return result;
+      }
+      if (restMonths >= 8) {
+        const left = state._restExitThreshold - restMonths;
+        result.deltas.push({ icon: 'warning', label: '长期休息警告', value: `已连续休息${restMonths}个月！`, positive: false });
+        if (left <= 4) {
+          result.deltas.push({ icon: 'smiley-x-eyes', label: '再不行动就要退坑了', value: `预计还剩${left}个月`, positive: false });
+        }
+      }
+    }
+
     // Rest effectiveness decays with years in the hobby
     const yearsIn = state.turn / 12;
     const basRestore = 15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3; // stamina bonus
@@ -922,22 +1016,50 @@ export function executeTurn(state, actionId) {
 
   } else if (action.type === 'promote') {
     const intensity = action.promoteIntensity || 'light';
-    const passionCost = intensity === 'heavy' ? 12 : 3;
+    const passionCost = intensity === 'heavy' ? 8 : 3;
     state.passion -= passionCost;
-    // Base gain by intensity
-    const rawGain = intensity === 'heavy'
-      ? 0.45 + Math.random() * 0.20   // heavy: 45%~65% base (boosted to match faster decay)
-      : 0.18 + Math.random() * 0.12;  // light: 18%~30% base
+
+    // Check for minigame result (heavy promote only)
+    const mgResult = state._promoteMinigameResult;
+    state._promoteMinigameResult = null;
+
+    let rawGain, repBonus = 0;
+    if (mgResult && intensity === 'heavy') {
+      // Use minigame score (0.30-0.90 based on performance)
+      rawGain = mgResult.infoGain;
+      repBonus = mgResult.repBonus || 0;
+    } else {
+      // Default formula (light promote, or skipped minigame)
+      rawGain = intensity === 'heavy'
+        ? 0.45 + Math.random() * 0.20
+        : 0.12 + Math.random() * 0.12;  // light: 12-24%, always below heavy minigame floor (30%)
+    }
+
     // Signal inflation (Spence): diminishes gain but never below a floor
     const sigCost = state.advanced ? getSignalCost(state.advanced) : 1.0;
-    const mktBonus = 1 + (state.endowments.marketing || 0) * 0.12; // marketing endowment
+    // Marketing bonus: skip if minigame played (already factored into cooldown reduction)
+    const mktBonus = mgResult ? 1 : (1 + (state.endowments.marketing || 0) * 0.12);
     const scaledGain = rawGain * mktBonus / sigCost;
-    // Guaranteed minimum: even in max signal inflation, you always get SOME visibility
     const minGain = intensity === 'heavy' ? 0.12 : 0.05;
     const gain = Math.max(minGain, scaledGain);
     state.infoDisclosure = Math.min(1, state.infoDisclosure + gain);
+
     result.deltas.push({ icon: 'heart', label: '精力消耗', value: `-${passionCost}`, positive: false });
     result.deltas.push({ icon: 'megaphone', label: '信息透明度', value: `+${(gain * 100).toFixed(0)}% → ${(state.infoDisclosure * 100).toFixed(0)}%`, positive: true });
+
+    if (mgResult) {
+      result.deltas.push({ icon: 'chart-line-up', label: '宣发表现', value: `${mgResult.performance}分`, positive: mgResult.performance >= 50 });
+      if (mgResult.trendHits > 0) result.deltas.push({ icon: 'fire', label: '热点命中', value: `×${mgResult.trendHits}`, positive: true });
+      if (mgResult.trendMisses > 0) result.deltas.push({ icon: 'warning', label: '热点翻车', value: `×${mgResult.trendMisses}`, positive: false });
+      if (mgResult.spamPenalties > 0) result.deltas.push({ icon: 'prohibit', label: '刷屏掉粉', value: `×${mgResult.spamPenalties}`, positive: false });
+    }
+
+    // Reputation bonus from engagement
+    if (repBonus > 0) {
+      state.reputation += repBonus;
+      result.deltas.push({ icon: 'star', label: '互动声誉', value: `+${repBonus.toFixed(2)}`, positive: true });
+    }
+
     if (sigCost > 1.2) result.deltas.push({ icon: 'megaphone-simple', label: '信号通胀', value: `效果${Math.round(gain / rawGain * 100)}%（保底${Math.round(minGain * 100)}%）`, positive: false });
     result.tip = intensity === 'heavy' ? TIPS.promoteHeavy : TIPS.promoteLight;
 
@@ -1367,7 +1489,7 @@ export function executeTurn(state, actionId) {
       const needed = state.hasPartner ? sub.monthsPartner : soloNeeded;
       const [costMin, costMax] = sub.costRange;
       const printCost = costMin + Math.floor(Math.random() * (costMax - costMin));
-      state.hvpProject = { progress: 1, needed, printCost, subtype: subtypeId, workQuality: 1.0, styleTag: null, choices: [], isCultHit: false };
+      state.hvpProject = { progress: 1, needed, printCost, subtype: subtypeId, workQuality: 1.0, styleTag: null, choices: [], isCultHit: false, _qualityLog: [] };
 
       // Apply pending creative choices (theme from UI flow)
       if (state._pendingChoices) {
@@ -1385,8 +1507,27 @@ export function executeTurn(state, actionId) {
     } else {
       // Continue project
       // Apply any pending creative choices from UI flow
+      const hadChoice = !!state._pendingChoices;
       if (state._pendingChoices) {
-        for (const c of state._pendingChoices) applyCreativeChoice(state.hvpProject, c.category, c.optionId);
+        for (const c of state._pendingChoices) {
+          const qDelta = applyCreativeChoice(state.hvpProject, c.category, c.optionId);
+          // Show quality change from this choice
+          if (qDelta && Math.abs(qDelta) > 0.001) {
+            const sign = qDelta > 0 ? '+' : '';
+            result.deltas.push({
+              icon: qDelta > 0 ? 'arrow-fat-up' : 'arrow-fat-down',
+              label: '作品质量变化',
+              value: `${sign}${qDelta.toFixed(2)} ${getQualityStars(state.hvpProject.workQuality)}`,
+              positive: qDelta > 0,
+            });
+          }
+          // Show cult hit discovery
+          if (state.hvpProject.isCultHit && state.hvpProject._qualityLog?.some(l => l.special)) {
+            result.deltas.push({ icon: 'shooting-star', label: '意外发现！这可能成为Cult经典', value: '', positive: true });
+            // Clear so we don't show it again
+            state.hvpProject._qualityLog = state.hvpProject._qualityLog.map(l => ({ ...l, special: false }));
+          }
+        }
         // Extra passion cost from "polish" choice
         if (state.hvpProject._extraPassionCost) {
           state.passion -= state.hvpProject._extraPassionCost;
@@ -1395,6 +1536,23 @@ export function executeTurn(state, actionId) {
         }
         state._pendingChoices = null;
       }
+
+      // Creative journal: flavor text for non-choice months
+      if (!hadChoice) {
+        const ratio = state.hvpProject.progress / state.hvpProject.needed;
+        // Milestone at 50%
+        if (ratio >= 0.45 && ratio < 0.6 && state.hvpProject.progress > 1) {
+          result.deltas.push({ icon: 'flag-pennant', label: '创作手记', value: CREATIVE_JOURNAL.milestone, positive: true });
+        } else {
+          const entries = getCreativeJournal(state.hvpProject, state.hasPartner);
+          for (const e of entries) {
+            result.deltas.push({ icon: 'note-pencil', label: '创作手记', value: e, positive: true });
+          }
+        }
+        // Show current quality status
+        result.deltas.push({ icon: 'star', label: '当前质量', value: getQualityStars(state.hvpProject.workQuality), positive: state.hvpProject.workQuality >= 1.0 });
+      }
+
       // Work stage: creative efficiency reduced (fatigue after day job)
       let progressEff = getLifeStage(state.turn) === 'work' && !state.unemployed && !state.fullTimeDoujin ? 0.7 : 1.0;
       // Creative fatigue efficiency penalty
@@ -1409,16 +1567,20 @@ export function executeTurn(state, actionId) {
       const p = state.hvpProject;
       if (p.progress >= p.needed) {
         // === HVP COMPLETE → ADD TO INVENTORY ===
+        if (!p._qualityLog) p._qualityLog = [];
         // Creative fatigue: completing a full work is exhausting
         state.creativeFatigue += 2;
         // Quality penalty from fatigue
         if (state.creativeFatigue >= 5) {
+          const fatiguePenalty = p.workQuality * 0.15;
           p.workQuality *= 0.85;
-          result.deltas.push({ icon: 'battery-medium', label: '创作疲劳影响作品质量', value: '质量×0.85', positive: false });
+          p._qualityLog.push({ label: '创作疲劳', delta: -fatiguePenalty });
         }
         // Equipment quality bonus
         if (state.equipmentLevel > 0) {
-          p.workQuality += state.equipmentLevel * 0.08;
+          const eqBonus = state.equipmentLevel * 0.08;
+          p.workQuality += eqBonus;
+          p._qualityLog.push({ label: '设备加成', delta: eqBonus });
         }
         // Time debuff from fatigue
         if (state.creativeFatigue >= 4) {
@@ -1460,6 +1622,24 @@ export function executeTurn(state, actionId) {
         syncInventoryAggregates(state);
 
         result.deltas.push({ icon: subInfo.emoji, label: `${subInfo.name}完成！`, value: '', positive: true });
+
+        // Quality breakdown
+        const finalQ = savedProject.workQuality;
+        result.deltas.push({ icon: 'star', label: `作品质量 ${getQualityStars(finalQ)}`, value: `${finalQ.toFixed(2)}`, positive: finalQ >= 1.0 });
+        if (savedProject._qualityLog?.length) {
+          const breakdown = savedProject._qualityLog
+            .filter(l => Math.abs(l.delta) > 0.001 || l.special)
+            .map(l => {
+              if (l.special) return `  ${l.label}`;
+              const sign = l.delta > 0 ? '+' : '';
+              return `  ${l.label} ${sign}${l.delta.toFixed(2)}`;
+            }).join('\n');
+          if (breakdown) result.deltas.push({ icon: 'list-dashes', label: '质量拆解', value: breakdown, positive: true });
+        }
+        if (savedProject.isCultHit) {
+          result.deltas.push({ icon: 'shooting-star', label: 'Cult经典！', value: '小众但狂热的粉丝群体', positive: true });
+        }
+
         const costLabels = [];
         if (costMult > 1) costLabels.push('下行+20%');
         if (fx.costReduction > 0.01) costLabels.push(`熟练-${Math.round(fx.costReduction * 100)}%`);
@@ -1840,6 +2020,59 @@ export function executeTurn(state, actionId) {
       result.deltas.push({ icon: 'money', label: '亏损焦虑', value: `热情-${debtDrain}`, positive: false });
     }
   }
+
+  // --- Student debt bailout: family intervenes at -¥15000 ---
+  if (getLifeStage(state.turn) === 'university' && state.money <= -15000 && !state._debtBailoutDone) {
+    state._debtBailoutDone = true; // only triggers once
+    const bg = state.background;
+    const debt = Math.abs(state.money);
+
+    if (bg === 'poor') {
+      // 困难家庭：无力兜底，给一次缓冲警告
+      if (!state._debtFinalWarning) {
+        // First hit: warning + small help
+        state._debtFinalWarning = true;
+        state.money += 3000; // 家里东拼西凑了一点
+        state.passion = Math.max(0, state.passion - 20);
+        result.deltas.push({ icon: 'house-simple', label: '家里来电话了…', value: '东拼西凑帮你还了¥3000', positive: false });
+        result.deltas.push({ icon: 'smiley-sad', label: '"家里实在拿不出更多了"', value: '热情-20', positive: false });
+        result.deltas.push({ icon: 'warning', label: '再欠下去家里真的撑不住了', value: '', positive: false });
+      } else {
+        // Second time: game over
+        state.passion = 0;
+        state.phase = 'gameover';
+        state.gameOverReason = '欠债太多，家里已经借遍了亲戚也无力偿还。你不得不放弃同人创作，打工还债……';
+        return result;
+      }
+    } else if (bg === 'ordinary' || bg === 'comfort') {
+      // 普通/小康家庭：兜底还债，但有概率禁止继续
+      state.money = 0; // 家里帮你还清
+      state.passion = Math.max(0, state.passion - 15);
+      result.deltas.push({ icon: 'house', label: '父母帮你还清了欠款', value: `¥${debt}`, positive: false });
+      result.deltas.push({ icon: 'smiley-sad', label: '"以后花钱悠着点"', value: '热情-15', positive: false });
+      // 30% chance parents forbid doujin
+      if (Math.random() < 0.3) {
+        state.passion = 0;
+        state.phase = 'gameover';
+        state.gameOverReason = '父母帮你还完债后非常生气，勒令你不许再搞同人了。"把心思放在学业上！"';
+        return result;
+      }
+      result.deltas.push({ icon: 'warning', label: '父母很不高兴，下不为例', value: '', positive: false });
+    } else {
+      // 书香门第/富裕/超级富哥：兜底 + 额外支持
+      state.money = 0;
+      const support = bg === 'wealthy' ? 3000 : bg === 'tycoon' ? 8000 : 1500;
+      state.money += support;
+      result.deltas.push({ icon: BACKGROUNDS[bg].emoji, label: '家里帮你还清了欠款', value: `¥${debt}`, positive: false });
+      if (bg === 'educated') {
+        result.deltas.push({ icon: 'books', label: '"创作是好事，但要量力而行"', value: `额外给了¥${support}支持`, positive: true });
+      } else {
+        result.deltas.push({ icon: 'diamond', label: '"想做就做，钱不是问题"', value: `额外给了¥${support}`, positive: true });
+      }
+    }
+  }
+  // Reset bailout flag if debt recovered (allow re-trigger if they go back into deep debt)
+  if (state.money > -10000) state._debtBailoutDone = false;
 
   // --- Passive income ---
   const stage = getLifeStage(state.turn);
