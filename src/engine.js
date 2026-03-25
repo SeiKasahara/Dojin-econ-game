@@ -1599,32 +1599,32 @@ export function executeTurn(state, actionId) {
     result.tip = TIPS.lvp;
 
   } else if (action.type === 'reprint') {
-    // === REPRINT: add more copies to a specific work ===
+    // === REPRINT: add more copies to selected works ===
     state.passion -= 3;
     result.deltas.push({ icon: 'heart', label: '安排印刷', value: '-3', positive: false });
 
-    const workId = state._reprintWorkId;
-    state._reprintWorkId = null;
+    const workIds = state._reprintWorkIds || [];
+    state._reprintWorkIds = null;
+    let totalReprintCost = 0;
 
-    // Find the work — it might have qty=0 (sold out) or still have stock
-    let work = state.inventory.works.find(w => w.id === workId);
-    if (!work && workId != null) {
-      // Work was cleaned up (qty=0 and removed), recreate it from history
-      // Fallback: just do nothing
-    }
-    if (work) {
+    for (const workId of workIds) {
+      const work = state.inventory.works.find(w => w.id === workId);
+      if (!work) continue;
       const isHVP = work.type === 'hvp';
       const sub = isHVP ? (HVP_SUBTYPES[work.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[work.subtype] || LVP_SUBTYPES.acrylic);
       const qty = isHVP ? 30 : 20;
       const unitCost = isHVP ? 40 : 6;
       const cost = qty * unitCost;
       state.money -= cost;
+      totalReprintCost += cost;
       work.qty += qty;
-      syncInventoryAggregates(state);
-      result.deltas.push({ icon: 'printer', label: `追印${sub.name} ${qty}${isHVP ? '本' : '个'}`, value: `-¥${cost}`, positive: false });
-      result.deltas.push({ icon: 'package', label: '库存更新', value: `${sub.name}×${work.qty} 定价¥${work.price}`, positive: true });
+      result.deltas.push({ icon: 'printer', label: `追印${sub.name} +${qty}`, value: `-¥${cost}`, positive: false });
+    }
+    syncInventoryAggregates(state);
+    if (totalReprintCost > 0) {
+      result.deltas.push({ icon: 'package', label: '追印完成', value: `总计-¥${totalReprintCost}`, positive: true });
     } else {
-      result.deltas.push({ icon: 'warning', label: '没有找到可追印的作品', value: '', positive: false });
+      result.deltas.push({ icon: 'warning', label: '没有选择追印的作品', value: '', positive: false });
     }
     result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。' };
 

@@ -1320,9 +1320,9 @@ html, body {
 /* === App Desktop === */
 .app-desktop {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 8px 0 12px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px 8px;
+  padding: 12px 0 16px;
   animation: slideUp 0.4s ease;
 }
 
@@ -1330,7 +1330,7 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   cursor: pointer;
   position: relative;
   -webkit-user-select: none;
@@ -1342,9 +1342,9 @@ html, body {
 .app-icon.disabled { opacity: 0.35; pointer-events: none; }
 
 .app-icon-bg {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1551,9 +1551,9 @@ html, body {
   .alert-item { padding: 6px 10px; font-size: 0.72rem; }
   .spotlight-card { padding: 10px 12px; }
   .spotlight-item { font-size: 0.75rem; }
-  .app-icon-bg { width: 48px; height: 48px; border-radius: 14px; }
-  .app-icon-name { font-size: 0.62rem; max-width: 64px; }
-  .app-desktop { gap: 8px; }
+  .app-icon-bg { width: 44px; height: 44px; border-radius: 12px; }
+  .app-icon-name { font-size: 0.58rem; max-width: 60px; }
+  .app-desktop { gap: 10px 4px; }
 }
 
 /* Landscape on phones */
@@ -1567,8 +1567,8 @@ html, body {
   .action-card .action-cost { font-size: 0.58rem; }
   .narrative { padding: 8px 12px; margin-bottom: 6px; font-size: 0.78rem; line-height: 1.4; }
   .event-card { max-height: 90vh; padding: 16px; }
-  .app-desktop { grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px 0; }
-  .app-icon-bg { width: 40px; height: 40px; border-radius: 12px; }
+  .app-desktop { grid-template-columns: repeat(4, 1fr); gap: 6px 4px; padding: 4px 0; }
+  .app-icon-bg { width: 36px; height: 36px; border-radius: 10px; }
   .app-icon-name { font-size: 0.58rem; }
   .app-dock { gap: 16px; padding: 4px 0; }
 }

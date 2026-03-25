@@ -1129,7 +1129,10 @@ export function renderAppPage(appId, state, onAction, onBack) {
         <span class="app-title">${ic(app.icon)} ${app.name}</span>
         <span style="width:60px"></span>
       </div>
-      <div class="app-page-body">${cards}</div>
+      <div class="app-page-body">
+        ${cards}
+        ${appId === 'xuanfa' ? '<div style="text-align:center;font-size:0.6rem;color:var(--text-muted);padding:8px 0 4px;opacity:0.7">由 Openclaw 集成的 AI 宣发机，全网都能广播到！</div>' : ''}
+      </div>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -1830,24 +1833,41 @@ export function renderReprintSelector(state, onSelect, onCancel) {
     </div>
   `;
   document.body.appendChild(overlay);
-  let selectedId = null;
+  const selected = new Set();
   const confirmBtn = overlay.querySelector('#reprint-confirm');
+
+  function updateConfirm() {
+    if (selected.size === 0) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '确认追印';
+    } else {
+      confirmBtn.disabled = false;
+      let totalCost = 0;
+      for (const id of selected) {
+        const w = worksWithStock.find(w => w.id === id);
+        if (w) totalCost += (w.type === 'hvp' ? 30 * 40 : 20 * 6);
+      }
+      confirmBtn.textContent = `确认追印 ${selected.size}项 · 总计¥${totalCost}`;
+    }
+  }
+
   overlay.querySelectorAll('.app-action-card[data-work-id]').forEach(btn => {
     btn.addEventListener('click', () => {
-      // Deselect previous
-      overlay.querySelectorAll('.app-action-card[data-work-id]').forEach(b => {
-        b.style.borderColor = 'var(--border)';
-        b.style.background = 'var(--bg-card)';
-      });
-      // Select this one
-      btn.style.borderColor = 'var(--primary)';
-      btn.style.background = '#FFF5F5';
-      selectedId = parseInt(btn.dataset.workId);
-      confirmBtn.disabled = false;
+      const id = parseInt(btn.dataset.workId);
+      if (selected.has(id)) {
+        selected.delete(id);
+        btn.style.borderColor = 'transparent';
+        btn.style.background = 'var(--bg-card)';
+      } else {
+        selected.add(id);
+        btn.style.borderColor = 'var(--primary)';
+        btn.style.background = '#FFF5F5';
+      }
+      updateConfirm();
     });
   });
   confirmBtn.addEventListener('click', () => {
-    if (selectedId != null) { overlay.remove(); onSelect(selectedId); }
+    if (selected.size > 0) { overlay.remove(); onSelect([...selected]); }
   });
   overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
     overlay.remove();

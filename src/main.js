@@ -150,8 +150,8 @@ function handleAction(actionId) {
 
   // === Reprint: type selection → proceed ===
   if (actionId === 'reprint') {
-    renderReprintSelector(state, (workId) => {
-      state._reprintWorkId = workId;
+    renderReprintSelector(state, (workIds) => {
+      state._reprintWorkIds = workIds;
       proceedWithTurn(actionId);
     }, cancelBack);
     return;

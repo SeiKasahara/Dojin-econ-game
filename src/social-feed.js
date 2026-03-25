@@ -213,7 +213,11 @@ function generalChatter() {
 
 // === Context-aware comment generator ===
 // Each post carries its own comment pool for relevance
-const GENERIC_REACTIONS = ['哈哈哈', '真的吗', '+1', '同感', '绝了', '收藏了', '转发了', '太真实了', '笑死'];
+const GENERIC_REACTIONS = [
+  '说到心坎里了', '这条我要转给朋友看', '每次看到这种帖子都忍不住点进来',
+  '笑着笑着就哭了', '怎么说的跟我一模一样', '评论区比正文精彩',
+  '已截图保存', '这不就是我的日常吗', '看完沉默了好久',
+];
 
 function pickFrom(pool, count) {
   const result = [];
@@ -232,64 +236,120 @@ function generateComments(text, type) {
   const pool = [...GENERIC_REACTIONS];
 
   // NPC creator posts
-  if (text.includes('预告') || text.includes('新刊')) pool.push('期待！', '什么时候出', '已预定！', '封面好好看', '求通贩', '冲了冲了');
-  if (text.includes('展会') || text.includes('备货')) pool.push('哪个展', '几号摊', '去现场蹲', '帮我带一份', '展会见！');
-  if (text.includes('通贩') || text.includes('销量')) pool.push('链接在哪', '秒了', '手慢无', '已下单', '求补货');
-  if (text.includes('直播') || text.includes('过程')) pool.push('画得好快', '学到了', '手太稳了', '求教程', '看了两小时');
-  if (text.includes('合作') || text.includes('出本')) pool.push('强强联合！', '期待合作本', '这个组合绝了', '双厨狂喜');
-  if (text.includes('战利品') || text.includes('一袋子')) pool.push('羡慕', '花了多少', '好多好东西', '分享清单吧');
-  if (text.includes('涨价') || text.includes('印刷')) pool.push('真的涨了好多', '成本太高了', '同感', '小社团撑不住了', '换家试试');
-  if (text.includes('二手') || text.includes('炒')) pool.push('黄牛走开', '溢价太离谱', '当初怎么不多印点', '求原价出');
-  if (text.includes('停更') || text.includes('充电')) pool.push('好好休息', '不急慢慢来', '身体重要', '等你回来');
-  if (text.includes('终于画完') || text.includes('画完了')) pool.push('辛苦了！', '求看！', '速度好快', '熬夜了吧', '注意身体');
-  if (text.includes('返图')) pool.push('质量好好', '印刷不错', '颜色正吗', '好想要');
-  if (text.includes('封面') || text.includes('意见')) pool.push('A方案好看', 'B好！', '都好看选不了', '听你的', '个人偏好A');
-  if (text.includes('销售数据')) pool.push('太厉害了', '求分享经验', '羡慕', '销量好好', '什么类型的');
-  if (text.includes('接稿') || text.includes('画不动')) pool.push('注意休息', '别太拼了', '约稿排到什么时候了', '身体第一');
-  if (text.includes('新坑')) pool.push('什么坑！', '入了入了', '求安利', '终于等到了');
-  if (text.includes('草稿')) pool.push('线条好绝', '已经很好看了', '成品肯定更棒', '求上色版');
-  if (text.includes('排期') || text.includes('出货')) pool.push('终于定了', '等不及了', '印刷厂效率怎样', '什么时候发');
-  if (text.includes('手绘板坏') || text.includes('鼠标')) pool.push('心疼', '赶紧买新的', '鼠标画画太猛了', '先用手机凑合吧');
-  if (text.includes('感谢信')) pool.push('好暖', '有粉丝太幸福了', '感动', '继续加油');
-  if (text.includes('催更')) pool.push('催更大军+1', '不急不急', '慢慢来', '太太别有压力');
-  if (text.includes('画力对比') || text.includes('进步')) pool.push('进步好大！', '天赋型选手', '坚持就是胜利', '太太好厉害');
+  if (text.includes('预告') || text.includes('新刊')) pool.push(
+    '啊啊啊终于等到预告了，钱包已经准备好了', '这封面也太绝了吧我先死为敬', '求求了什么时候开通贩，我人不在本地',
+    '上一本到现在还在反复看，新的肯定也很棒', '已经把这个月的预算全部留给你了', '封面构图好有氛围感，期待内页');
+  if (text.includes('展会') || text.includes('备货')) pool.push(
+    '几号摊位啊，我要第一个冲过去', '能不能帮我带一份，路费实在凑不出来', '备货辛苦了！展会见！',
+    '去年你们摊位排了好长的队，今年要早点去', '帮朋友问一下可以代购吗');
+  if (text.includes('通贩') || text.includes('销量')) pool.push(
+    '链接呢链接呢，刷了半天没找到', '手慢了一步就没了，能不能补货啊', '刚下单了，坐等快递中',
+    '上次通贩十分钟就抢完了，这次设了闹钟', '终于买到了！开心到原地转圈');
+  if (text.includes('直播') || text.includes('过程')) pool.push(
+    '看了两小时根本停不下来，手太稳了', '原来大佬画画的过程是这样的，学到了', '建议出教程，愿意付费的那种',
+    '看别人画画治愈了我加班的疲惫');
+  if (text.includes('合作') || text.includes('出本')) pool.push(
+    '天哪这个组合我做梦都不敢想，双厨狂喜', '强强联合出来的东西质量肯定炸裂', '两位太太的画风放一起也太搭了吧');
+  if (text.includes('战利品') || text.includes('一袋子')) pool.push(
+    '好羡慕能去现场的人...远程粉丝只能眼馋', '这一袋子少说花了四位数吧', '求求了出一个战利品清单吧，想抄作业');
+  if (text.includes('涨价') || text.includes('印刷')) pool.push(
+    '印刷成本涨了但是定价又不好意思涨，难搞', '小社团真的快撑不住了，纸价太离谱', '有没有人拼团印的，分摊一下成本',
+    '换了三家印刷厂都在涨价，心累');
+  if (text.includes('二手') || text.includes('炒')) pool.push(
+    '黄牛真的把同人圈搞得乌烟瘴气', '溢价三倍你认真的吗，当初怎么不多印点', '求原价出，不想助长炒作风气');
+  if (text.includes('停更') || text.includes('充电')) pool.push(
+    '好好休息最重要，我们会一直等的', '太太身体要紧，作品什么时候都能画', '充完电回来继续发光发热',
+    '正好可以把之前的作品再翻出来看一遍');
+  if (text.includes('终于画完') || text.includes('画完了')) pool.push(
+    '辛苦了！是不是又熬夜了，注意身体啊', '完成一个项目的成就感是真的无可替代', '速度好快，我三个月了还在磨第一页',
+    '看到太太发这条我就知道又要出好东西了');
+  if (text.includes('返图')) pool.push(
+    '实物颜色好正，印刷质量在线', '比预想的还要好看，拿到实物的感觉就是不一样', '这个纸张手感肯定很好');
+  if (text.includes('封面') || text.includes('意见')) pool.push(
+    '个人觉得A方案更有冲击力', '两个都好看选不了，要不然出两个版本', '相信太太的审美，选哪个都不会差');
+  if (text.includes('销售数据')) pool.push(
+    '太厉害了，能分享一下运营经验吗', '看完只有一个感受：努力是有回报的', '数据看得我好酸，但也替你开心');
+  if (text.includes('接稿') || text.includes('画不动')) pool.push(
+    '别太拼了，手是吃饭的家伙', '约稿排到什么时候了？想约但怕太久', '接稿虽然赚钱但真的很消耗创作热情');
+  if (text.includes('新坑')) pool.push(
+    '什么坑！说出来让我看看值不值得跳', '又开新坑了，太太你是永动机吗', '已入坑，在线等安利');
+  if (text.includes('草稿')) pool.push(
+    '草稿阶段就这么好看了，成品还得了', '这线条也太干净了，羡慕手稳的人', '光看草稿就能感受到完成品的质量');
+  if (text.includes('排期') || text.includes('出货')) pool.push(
+    '终于确定排期了，等了好久', '希望印刷厂这次靠谱一点，别再延期了', '坐等出货，已经迫不及待了');
+  if (text.includes('手绘板坏') || text.includes('鼠标')) pool.push(
+    '用鼠标画画这种事我想想就头皮发麻', '趁着打折赶紧换一块吧，工具很重要', '之前板子坏了我直接用手机画了一个月...');
+  if (text.includes('感谢信')) pool.push(
+    '有读者写信是真的很感动，创作的意义就在这里', '好暖啊，这种反馈能顶三个月的热情', '看完也跟着感动了');
+  if (text.includes('催更')) pool.push(
+    '催更大军报到！但太太别有压力慢慢来', '不催不催，但如果更了我会第一时间冲', '太太什么时候更，我的F5键快按坏了');
+  if (text.includes('画力对比') || text.includes('进步')) pool.push(
+    '坚持画下来的人进步是真的肉眼可见', '天赋固然重要但你的努力更让人佩服', '看完进步对比图我也去翻了翻自己的旧图...');
 
   // Drama posts
-  if (text.includes('挂') || text.includes('吵架')) pool.push('吃瓜.jpg', '前因后果呢', '又吵了', '心累', '不想掺和');
-  if (text.includes('描图')) pool.push('有实锤吗', '对比图呢', '等官方回应', '如果是真的太过分了');
-  if (text.includes('收费') || text.includes('定价')) pool.push('每个人情况不同', '创作有成本的', '看质量', '自由定价吧');
-  if (text.includes('拖稿') || text.includes('跑路')) pool.push('还好我没约', '建议维权', '有截图吗', '以后先看口碑');
-  if (text.includes('CP') || text.includes('解释权')) pool.push('拉踩没意思', '各玩各的', 'CP是自由的', '别搞饭圈那套');
-  if (text.includes('盗印')) pool.push('太过分了', '举报了', '支持正版', '原作者加油');
+  if (text.includes('挂') || text.includes('吵架')) pool.push(
+    '好累啊能不能消停一天，我只想安静画画', '这瓜比本子还好看但吃完好空虚', '两边都关注了好尴尬，选择性失明中',
+    '建议大家冷静下来，不要上头', '每次出事我都想退网，但又舍不得这个圈子');
+  if (text.includes('描图')) pool.push(
+    '如果实锤了那确实过分，但也得等证据', '对比图看了，有些线确实重合度太高了', '希望不是真的，那位太太的作品我很喜欢');
+  if (text.includes('收费') || text.includes('定价')) pool.push(
+    '创作是有成本的这点不接受反驳', '觉得贵可以不买，但别去人家评论区阴阳', '不同品质的东西定价当然不同，市场会说话');
+  if (text.includes('拖稿') || text.includes('跑路')) pool.push(
+    '以后约稿一定先看口碑再下单', '有完整的聊天记录的话建议维权', '太离谱了吧，同人圈的信任就是这样被消耗的');
+  if (text.includes('CP') || text.includes('解释权')) pool.push(
+    '各磕各的不好吗，为什么一定要争个高下', 'CP是各人的解读自由，不需要获得批准', '拉踩其他CP真的让圈子氛围变很差');
+  if (text.includes('盗印')) pool.push(
+    '辛辛苦苦画的东西被盗印真的太气了', '已举报，大家也帮忙举报一下吧', '买正版是对创作者最基本的尊重');
 
   // Trend posts
-  if (text.includes('话题') || text.includes('热度')) pool.push('跟了跟了', '这波确实火', '已经在画了', '但愿能持续');
-  if (text.includes('讨论度') || text.includes('安利')) pool.push('确实到处都是', '我也被安利了', '真的好看', '不愧是热门');
-  if (text.includes('风向') || text.includes('流行')) pool.push('嗅到商机了', '该入坑了', '观望中', '感觉要火');
+  if (text.includes('话题') || text.includes('热度')) pool.push(
+    '这波热度是真的高，已经忍不住开始画了', '跟了跟了，但愿不是三分钟热度', '这个tag上热搜了吗，感觉到处都是');
+  if (text.includes('讨论度') || text.includes('安利')) pool.push(
+    '被安利了三次终于去看了，真香', '我也要加入安利大军', '确实好看，不愧是最近最火的tag');
+  if (text.includes('风向') || text.includes('流行')) pool.push(
+    '嗅到商机了，赶紧出本蹭热度', '观望中，想看看这波能持续多久', '不管流行什么，画自己喜欢的最重要');
 
   // Fan posts
-  if (text.includes('二创') || text.includes('同人图')) pool.push('太可爱了', '大佬画大佬', '双向奔赴');
-  if (text.includes('安利') || text.includes('推荐')) pool.push('确实好看', '已入坑', '谢谢安利', '去看了真的好');
-  if (text.includes('收藏')) pool.push('默默关注', '有眼光', '宝藏要被发现了');
+  if (text.includes('二创') || text.includes('同人图')) pool.push(
+    '大佬画大佬，这就是圈子里最浪漫的事', '看到二创的那一刻真的太感动了', '双向奔赴的感觉也太好了吧');
+  if (text.includes('安利') || text.includes('推荐')) pool.push(
+    '去看了真的很好！谢谢安利', '已入坑已购买，质量没让我失望', '朋友推荐的果然靠谱');
+  if (text.includes('收藏')) pool.push(
+    '默默关注了好久终于等到被发现', '有眼光的人迟早会被看到', '这位太太的作品真的被严重低估了');
 
   // Market posts
-  if (text.includes('二手') && text.includes('难卖')) pool.push('新品更有价值', '供大于求了', '换个思路试试');
-  if (text.includes('热闹') || text.includes('新人')) pool.push('圈子在壮大', '欢迎新朋友', '竞争也更激烈了');
-  if (text.includes('安静') || text.includes('萎缩')) pool.push('冷了', '大家都去哪了', '坚持就是胜利');
-  if (text.includes('经济不好') || text.includes('预算')) pool.push('确实要省省', '理性消费', '等打折再买');
+  if (text.includes('二手') && text.includes('难卖')) pool.push(
+    '二手冲击太大了，新品根本竞争不过', '有什么办法能让买家优先选择新品呢', '供大于求的时候只能卷质量了');
+  if (text.includes('热闹') || text.includes('新人')) pool.push(
+    '新人多了竞争确实更激烈了但整体是好事', '欢迎新朋友，圈子需要新鲜血液', '看到新人入圈就觉得这个坑还有救');
+  if (text.includes('安静') || text.includes('萎缩')) pool.push(
+    '时间线冷冷清清的，大家都去忙现实了吗', '坚持到最后的人才是真的热爱', '越是冷的时候越要发声，不然真的会散');
+  if (text.includes('经济不好') || text.includes('预算')) pool.push(
+    '确实得省着点花了，但喜欢的还是忍不住买', '理性消费理性消费，但这本真的想要', '经济不好对小社团打击最大');
 
   // General chatter
-  if (text.includes('画板') || text.includes('不知道画')) pool.push('打开就是进步', '先画个圆', '摸鱼也是创作的一部分');
-  if (text.includes('快递') || text.includes('谷子')) pool.push('快乐！', '什么谷', '求开箱', '羡慕');
-  if (text.includes('赶稿') || text.includes('头发')) pool.push('同在赶稿', '头发还好吗', '保重', '一起加油');
-  if (text.includes('排版') || text.includes('软件')) pool.push('用的什么软件', '推荐Clip', '试试Affinity', '求教程链接');
-  if (text.includes('零花钱') || text.includes('扫货')) pool.push('存了多少', '理性消费', '钱包哭泣', '冲就完了');
-  if (text.includes('摸鱼')) pool.push('被说中了', '摸鱼人集合', '摸完就画', '明天再说');
-  if (text.includes('咖啡') || text.includes('稿子')) pool.push('再来一杯', '没有咖啡不行', '肝帝', '注意身体');
-  if (text.includes('逛展') || text.includes('脚')) pool.push('穿舒服的鞋！', '坐下休息会', '值得', '腿已废');
-  if (text.includes('邮费')) pool.push('邮费刺客', '包邮不香吗', '成本都在邮费上了');
-  if (text.includes('预售')) pool.push('先预售比较稳', '设个目标量', '支持', '已蹲');
-  if (text.includes('浪漫') || text.includes('感动')) pool.push('破防了', '说得太好了', '是这样的', '热泪盈眶');
+  if (text.includes('画板') || text.includes('不知道画')) pool.push(
+    '打开画板就是最难的一步，打开了就好了', '不知道画什么的时候就画喜欢的角色', '摸鱼也是创作过程的一部分（心理安慰）');
+  if (text.includes('快递') || text.includes('谷子')) pool.push(
+    '拆谷子的那种快乐是别的东西替代不了的', '什么谷什么谷，发出来让我看看', '又要控制不住购物欲了');
+  if (text.includes('赶稿') || text.includes('头发')) pool.push(
+    '同在赶稿，互相打气吧', '头发的事先不要想了，交稿要紧', '赶稿人的头发和DDL成反比');
+  if (text.includes('排版') || text.includes('软件')) pool.push(
+    '我用Clip排的感觉还不错，推荐试试', '排版这东西一开始觉得难，上手了就还好', '有没有现成的模板分享一下');
+  if (text.includes('零花钱') || text.includes('扫货')) pool.push(
+    '存了三个月就为了展会这一天', '理智告诉我要省钱，手已经开始掏钱包了', '每次逛展都超预算是怎么回事');
+  if (text.includes('摸鱼')) pool.push(
+    '被说中了，此刻正在摸鱼刷时间线', '摸鱼人狂喜，有人和我一样不想画画', '摸完这条就去画...大概');
+  if (text.includes('咖啡') || text.includes('稿子')) pool.push(
+    '没有咖啡就没有创作力，这是刚需', '第三杯了，但稿子还是没画完', '肝帝请收下我的膝盖，我两杯就要心悸了');
+  if (text.includes('逛展') || text.includes('脚')) pool.push(
+    '穿舒服的鞋子是逛展的第一要义', '走了一天腿已经不是自己的了但很快乐', '明年一定要记得带折叠凳');
+  if (text.includes('邮费')) pool.push(
+    '邮费比谷子还贵是怎么回事', '通贩的利润大半都被邮费吃了', '求求快递公司给同人创作者打个折吧');
+  if (text.includes('预售')) pool.push(
+    '开预售是个好主意，至少能提前知道大概印多少', '先预售再印刷是最稳的做法', '已蹲预售链接，出了第一时间下单');
+  if (text.includes('浪漫') || text.includes('感动')) pool.push(
+    '看到最后一句直接破防了', '说同人创作是浪漫的事我完全同意', '是这种帖子让我觉得留在这个圈子是值得的');
 
   return pickFrom(pool, count);
 }
