@@ -166,7 +166,11 @@ export const RANDOM_EVENTS = [
     effect: '时间-4h(3回合) 资金+500', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: '996', reason: '996加班', turnsLeft: 3, delta: -4 }); s.time = computeTime(s.turn, s.timeDebuffs); s.money += 500; },
     tip: '滞胀特征：需要更多工作时间维持生活',
-    weight: 7, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
+    weight: 7, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed) return false;
+      // Not during remote work, flexible hours, or dept transfer
+      return !s.timeDebuffs.some(d => d.id.startsWith('remote_') || d.id.startsWith('flex_') || d.id.startsWith('transfer_'));
+    }, maxTotal: Infinity,
   },
   {
     id: 'inspiration_burst', emoji: 'sparkle', title: '灵感爆发！',
@@ -270,7 +274,11 @@ export const RANDOM_EVENTS = [
     effect: '热情-8 时间-2h(3回合) 资金-¥300~600', effectClass: 'negative',
     apply: (s) => { s.passion = Math.max(0, s.passion - 8); s.money -= 300 + Math.floor(Math.random() * 300); s.timeDebuffs.push({ id: 'burnout_' + s.turn, reason: '职业倦怠', turnsLeft: 3, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '职业倦怠不是懒——是长期高强度低回报工作的心理防御机制。',
-    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
+    weight: 6, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed) return false;
+      // Not during transfer to easy dept or partner support
+      return !s.timeDebuffs.some(d => d.id.startsWith('transfer_') || d.id.startsWith('partner_support_'));
+    }, maxTotal: Infinity,
   },
   {
     id: 'social_obligation', emoji: 'beer-stein', title: '社交应酬',
@@ -286,7 +294,11 @@ export const RANDOM_EVENTS = [
     effect: '时间-1h（6~12月）', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'commute_' + s.turn, reason: '通勤时间增加', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '通勤是城市生活最大的时间黑洞。',
-    weight: 3, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: 2,
+    weight: 3, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed) return false;
+      // Not during remote work
+      return !s.timeDebuffs.some(d => d.id.startsWith('remote_'));
+    }, maxTotal: 2,
   },
   {
     id: 'life_admin', emoji: 'clipboard', title: '生活琐事',
@@ -341,5 +353,74 @@ export const RANDOM_EVENTS = [
     apply: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.5 + Math.random() * 0.5)); s.money -= cost; },
     tip: '年度税费是不可避免的制度性支出。',
     weight: 20, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) > 0 && (s.turn - 50) % 12 === 0, maxTotal: Infinity,
+  },
+  // === Work 5+ years: positive time recovery events ===
+  {
+    id: 'remote_work', emoji: 'desktop', title: '公司开始推行居家办公',
+    desc: '公司调整了办公政策，每周有几天可以在家工作。省去通勤时间，创作时间多了不少！',
+    effect: '时间+2h（6~12月）热情+5', effectClass: 'positive',
+    apply: (s) => { s.timeDebuffs.push({ id: 'remote_' + s.turn, reason: '居家办公', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 5); },
+    tip: '远程办公是职场创作者最大的福音——每天省下的通勤时间足够画一张草稿。',
+    weight: 8, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 3) return false;
+      // Not during 996 or commute hell
+      return !s.timeDebuffs.some(d => d.id === '996' || d.id.startsWith('commute_'));
+    }, maxTotal: 3,
+  },
+  {
+    id: 'work_efficiency', emoji: 'rocket', title: '工作越来越熟练了',
+    desc: '在公司待了几年，业务流程已经烂熟于心。同样的工作量用更少的时间就能完成，摸出来的空闲时间用来构思创作。',
+    effect: '时间+1h（12~18月）', effectClass: 'positive',
+    apply: (s) => { s.timeDebuffs.push({ id: 'efficient_' + s.turn, reason: '高效摸鱼', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
+    tip: '工作熟练度是时间的朋友——入职初期忙得焦头烂额，几年后同样的活半天就做完了。省下的时间就是你的创作本钱。',
+    weight: 10, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 2) return false;
+      // Not during burnout
+      return !s.timeDebuffs.some(d => d.id.startsWith('burnout_'));
+    }, maxTotal: Infinity,
+  },
+  {
+    id: 'annual_leave', emoji: 'sun-horizon', title: '年假攒够了！',
+    desc: '工龄越长年假越多，你决定把假期集中起来，给自己一段专注创作的时光。',
+    effect: '时间+3h（3回合）热情+8', effectClass: 'positive',
+    apply: (s) => { s.timeDebuffs.push({ id: 'annual_leave_' + s.turn, reason: '年假创作', turnsLeft: 3, delta: 3 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
+    tip: '年假是打工人最宝贵的时间资产。有经验的创作者会把年假攒到展会前集中使用——备货、赶稿、参展一气呵成。',
+    weight: 12, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 1) return false;
+      // Can't take leave during 996
+      return !s.timeDebuffs.some(d => d.id === '996');
+    }, maxTotal: Infinity,
+  },
+  {
+    id: 'dept_transfer', emoji: 'arrows-clockwise', title: '调岗到清闲部门',
+    desc: '公司内部调整，你被调到了一个相对清闲的部门。虽然薪资不变，但工作压力小了很多，下班后终于有精力画画了。',
+    effect: '时间+2h（12~18月）热情+5', effectClass: 'positive',
+    apply: (s) => { s.timeDebuffs.push({ id: 'transfer_' + s.turn, reason: '清闲部门', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 5); },
+    tip: '不是所有职场变动都是坏事。有时候"被边缘化"反而是创作者的隐性福利——你要的不是升职加薪，是下班后的精力。',
+    weight: 5, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 4) return false;
+      // Not if recently promoted (promotion debuff active)
+      return !s.timeDebuffs.some(d => d.id === 'promotion');
+    }, maxTotal: 2,
+  },
+  {
+    id: 'flexible_hours', emoji: 'clock', title: '弹性工作制',
+    desc: '公司开始试行弹性工时，不用再朝九晚六了。你把工作时间调到早上，下午和晚上都可以用来创作。',
+    effect: '时间+1h（6~12月）', effectClass: 'positive',
+    apply: (s) => { s.timeDebuffs.push({ id: 'flex_' + s.turn, reason: '弹性工时', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
+    tip: '弹性工时让创作者能按自己的生物钟安排创作。有人是夜猫子型，有人是早起型——找到自己的节奏比加班更重要。',
+    weight: 8, when: (s) => {
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 2) return false;
+      // Not during 996 or commute hell
+      return !s.timeDebuffs.some(d => d.id === '996' || d.id.startsWith('commute_'));
+    }, maxTotal: Infinity,
+  },
+  {
+    id: 'partner_support', emoji: 'heart', title: '另一半很支持你的创作',
+    desc: '生活中的伴侣非常理解你的同人爱好，主动分担了家务和生活琐事，让你有更多时间创作。',
+    effect: '时间+1h（12月）热情+10', effectClass: 'positive',
+    apply: (s) => { s.timeDebuffs.push({ id: 'partner_support_' + s.turn, reason: '伴侣支持', turnsLeft: 12, delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 10); },
+    tip: '同人创作者最大的幸运之一就是遇到理解自己爱好的人。"你去画吧，碗我来洗"——这句话的含金量超过任何商业合作。',
+    weight: 5, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) / 12 >= 5, maxTotal: 1,
   },
 ];
