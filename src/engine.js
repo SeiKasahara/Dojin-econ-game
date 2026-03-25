@@ -7,6 +7,10 @@ import { ic } from './icons.js';
 import { createMarketState, tickMarket, getCompetitionModifier } from './market.js';
 import { createOfficialState, tickOfficial, getSecondHandModifier, recordPlayerWork } from './official.js';
 import { createAdvancedState, tickAdvanced, getAdvancedCostMod, getAdvancedSalesMod, getSignalCost, ADVANCED_EVENTS } from './advanced.js';
+import { SCHEDULED_EVENTS, RANDOM_EVENTS, setComputeEffectiveTime } from './events.js';
+import { generateEnding, generateCommercialEnding } from './endings.js';
+import { rollPartnerDrama } from './partner-drama.js';
+import { checkAchievements, getAchievementInfo as _getAchievementInfo } from './achievements.js';
 
 // === Crisis counter: max 2 simultaneous economic crises ===
 export function activeCrisisCount(s) {
@@ -27,13 +31,18 @@ export function getLifeStage(turn) {
   return 'work';
 }
 
-export function getLifeStageLabel(turn) {
+export function getLifeStageLabel(turn, state) {
   const stage = getLifeStage(turn);
   if (stage === 'summer') return '高考后暑假';
   if (stage === 'university') {
     const yr = Math.floor((turn - 2) / 12) + 1;
     return `大${['一', '二', '三', '四'][Math.min(yr - 1, 3)]}`;
   }
+  if (state?.fullTimeDoujin) {
+    const m = state.doujinMonths || 1;
+    return `全职同人第${m}月`;
+  }
+  if (state?.unemployed) return `失业中`;
   return `工作第${Math.floor((turn - 50) / 12) + 1}年`;
 }
 
@@ -62,6 +71,7 @@ function computeEffectiveTime(turn, debuffs) {
   for (const d of debuffs) t += d.delta;
   return Math.max(0, Math.min(10, t));
 }
+setComputeEffectiveTime(computeEffectiveTime);
 
 // === Creative Skill: Learning by Doing (Arrow 1962) ===
 // Skill grows logarithmically with cumulative output: HVP counts 3× more than LVP
@@ -267,10 +277,30 @@ export function getTrendBonus(styleTag, currentTrend) {
   return { salesMult: 0.8, repMult: 1.0 }; // off-trend slight penalty
 }
 
-// Sync inventory aggregates from works array (backward compat)
+// Sync inventory aggregates from works array
 export function syncInventoryAggregates(state) {
   state.inventory.hvpStock = state.inventory.works.filter(w => w.type === 'hvp').reduce((s, w) => s + w.qty, 0);
   state.inventory.lvpStock = state.inventory.works.filter(w => w.type === 'lvp').reduce((s, w) => s + w.qty, 0);
+}
+
+// Sell N items of a type from works array (FIFO: oldest first), returns { sold, revenue, details[] }
+function sellFromWorks(state, type, count) {
+  const works = state.inventory.works.filter(w => w.type === type && w.qty > 0);
+  let remaining = count;
+  let totalRev = 0;
+  const details = []; // { work, sold, rev }
+  for (const w of works) {
+    if (remaining <= 0) break;
+    const sell = Math.min(remaining, w.qty);
+    const rev = sell * w.price;
+    w.qty -= sell;
+    remaining -= sell;
+    totalRev += rev;
+    details.push({ work: w, sold: sell, rev });
+  }
+  // Keep sold-out works in array (qty=0) so they can be reprinted
+  syncInventoryAggregates(state);
+  return { sold: count - remaining, revenue: totalRev, details };
 }
 
 // === Initial State ===
@@ -362,6 +392,9 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     _debtPassionStreak: 0,          // consecutive months with money<0 and passion>=60
     _lowPassionHit: false,          // ever had passion<=15
     _passionRecovered: false,       // recovered from <=15 to >=80
+    fullTimeDoujin: false,          // quit job to go full-time doujin creator
+    doujinMonths: 0,                // months spent as full-time doujin creator
+    doujinWorkYearReset: 0,         // turn at which work years reset (for salary calc after returning)
   };
 }
 
@@ -389,8 +422,10 @@ export const ACTIONS = {
                  costLabel: '需有同人展·路费·亲参≥3h/寄售≥1h', requires: { passion: 5, time: 1 } },
   jobSearch:   { id: 'jobSearch',   name: '找工作',     emoji: 'briefcase', type: 'jobSearch',
                  costLabel: '热情-10 面试奔波', requires: { passion: 5 } },
+  quitForDoujin: { id: 'quitForDoujin', name: '辞职全职同人', emoji: 'sparkle', type: 'quitForDoujin',
+                 costLabel: '辞掉工作，全身心投入同人创作', requires: {} },
   reprint:     { id: 'reprint',     name: '追加印刷',   emoji: 'printer', type: 'reprint',
-                 costLabel: '补印库存 需有旧作', requires: { passion: 3, time: 2 } },
+                 costLabel: '补印库存 需有旧作', requires: { passion: 3 } },
   buyGoods:    { id: 'buyGoods',    name: '购买谷子',   emoji: 'shopping-bag', type: 'buyGoods',
                  costLabel: '¥200 热情↑(效果逐年递减)', requires: {} },
   sellGoods:   { id: 'sellGoods',   name: '出售闲置',   emoji: 'export', type: 'sellGoods',
@@ -504,7 +539,7 @@ export function getActionDisplay(actionId, state) {
 
 // Freelance time cost depends on life situation
 export function getFreelanceTimeCost(state) {
-  if (state.unemployed) return 2;                        // 失业：时间多，闲暇消耗少
+  if (state.unemployed || state.fullTimeDoujin) return 2;  // 失业/全职同人：时间多
   if (getLifeStage(state.turn) === 'university') return 3; // 学生：中等
   return 5;                                               // 在职：下班后还要接稿，消耗大
 }
@@ -514,8 +549,13 @@ export function canPerformAction(state, actionId) {
   if (!r) return false;
   // Unemployed: time is plentiful but anxiety drains passion fast — all actions allowed
   // (the real constraint is passion budget, not action locks)
-  // jobSearch: only when unemployed
-  if (actionId === 'jobSearch' && !state.unemployed) return false;
+  // jobSearch: when unemployed OR full-time doujin (wanting to go back)
+  if (actionId === 'jobSearch' && !state.unemployed && !state.fullTimeDoujin) return false;
+  // quitForDoujin: work stage, employed, rep≥3, money≥25000, 5+ events
+  if (actionId === 'quitForDoujin') {
+    if (getLifeStage(state.turn) !== 'work' || state.unemployed || state.fullTimeDoujin) return false;
+    if (state.reputation < 3 || state.money < 25000 || (state.eventLog?.length || 0) < 5) return false;
+  }
   // partTimeJob: only students or unemployed
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
@@ -753,41 +793,7 @@ export function getSupplyDemandData(state, sales) {
 // ============================================================
 
 // --- Scheduled events: fire at specific turns, guaranteed ---
-const SCHEDULED_EVENTS = [
-  // 社团招新: September of Y1 and Y2
-  {
-    turns: [2, 14],
-    event: {
-      id: 'uni_club', emoji: 'mask-happy', title: '社团招新',
-      desc: '大学社团招新季！你加入了创作相关社团，认识了很多同好。',
-      effect: '声誉+0.2 热情+5', effectClass: 'positive',
-      apply: (s) => { s.reputation += 0.2; s.passion = Math.min(100, s.passion + 5); },
-      tip: '社群网络扩展降低了协作搜寻成本。认识的人越多，越容易找到搭档。',
-    },
-  },
-  // 期末考试: every December and June during university
-  {
-    condition: (turn) => getLifeStage(turn) === 'university' && (getCalendarMonth(turn) === 12 || getCalendarMonth(turn) === 6),
-    event: {
-      id: 'uni_exam', emoji: 'note-pencil', title: '期末考试周',
-      desc: '期末考试来了！接下来要全力复习，创作只能暂停...',
-      effect: '时间-3h（持续2回合）', effectClass: 'negative',
-      apply: (s) => { s.timeDebuffs.push({ id: 'exam', reason: '期末考试', turnsLeft: 2, delta: -3 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
-      tip: '考试是周期性的外生时间冲击。大学生创作者的产出呈明显的学期周期——寒暑假是同人产出的高峰期，考试月是低谷。',
-    },
-  },
-  // 毕业
-  {
-    turns: [49],
-    event: {
-      id: 'graduation', emoji: 'graduation-cap', title: '毕业了',
-      desc: '四年大学生活结束了。从此以后，同人创作变成了"业余爱好"。工作会给你收入，但空闲时间将大幅减少...',
-      effect: '热情-5 开始工作生涯', effectClass: 'neutral',
-      apply: (s) => { s.passion -= 5; },
-      tip: '进入工作后，时间禀赋永久性下降。工作后的同人创作者是真正的幸存者。',
-    },
-  },
-];
+// SCHEDULED_EVENTS — see events.js
 
 function getScheduledEvent(state) {
   for (const se of SCHEDULED_EVENTS) {
@@ -806,360 +812,7 @@ function getScheduledEvent(state) {
   return null;
 }
 
-// --- Random events with frequency caps ---
-const RANDOM_EVENTS = [
-  {
-    id: 'boom', emoji: 'fire', title: '圈内大佬出圈了！',
-    desc: '一位知名创作者的作品在社交媒体上爆火，整个圈子的关注度都上升了。',
-    effect: '声誉+0.3 热情+10', effectClass: 'positive',
-    apply: (s) => { s.reputation += 0.3; s.passion = Math.min(100, s.passion + 10); },
-    tip: '在无干预的同人市场中，任何创作者的出圈都是正外部性——别人把盘子做大了，你不花任何成本就能享受流量红利。',
-    weight: 12, when: () => true, maxTotal: Infinity,
-  },
-  {
-    id: 'collapse', emoji: 'warning-circle', title: '塌方事件！',
-    desc: '圈内爆发争吵，有创作者被挂，社群气氛紧张...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(15 * m)} 声誉-${Math.round(20 * m)}%`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(15 * m); s.reputation *= (1 - 0.2 * m); },
-    tip: '声誉是风险资产：积累越多，塌方损失的绝对值越大。',
-    weight: 8, when: (s) => s.reputation > 0.3, maxTotal: Infinity,
-  },
-  // --- 家人生病：整个游戏最多1-2次 ---
-  {
-    id: 'family_emergency', emoji: 'first-aid', title: '家人生病了',
-    desc: '家里突然有人生病需要照顾，接下来几个月你的空闲时间会大幅减少，医疗费也是一大笔...',
-    effect: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.8 + Math.random() * 0.7)); return `时间-3h(3回合) 资金-¥${cost}`; }, effectClass: 'negative',
-    apply: (s) => { s.timeDebuffs.push({ id: 'family', reason: '照顾家人', turnsLeft: 3, delta: -3 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); const cost = Math.round((s.monthlyIncome || 800) * (0.8 + Math.random() * 0.7)); s.money -= cost; },
-    tip: '外生冲击可以让时间降到0。一半创作者退出是因为"现实太忙"——时间约束独立于热情预算，是最硬的硬约束。',
-    weight: 4, when: () => true, maxTotal: 2,
-  },
-  // --- 加班/赶DDL ---
-  {
-    id: 'overtime', emoji: 'clock', title: '连续加班/赶论文',
-    desc: '这段时间完全被工作或学业占满，几乎没有私人时间...',
-    effect: '时间-4h（持续2回合）', effectClass: 'negative',
-    apply: (s) => { s.timeDebuffs.push({ id: 'overtime', reason: '加班/赶DDL', turnsLeft: 2, delta: -4 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
-    tip: '当时间降到0时，什么创作也做不了，只能选择休息等待忙碌过去。',
-    weight: 7, when: (s) => s.turn > 1, maxTotal: Infinity,
-  },
-  // --- 假期 ---
-  {
-    id: 'holiday', emoji: 'tree-palm', title: '一段悠闲时光',
-    desc: '难得的闲暇，可以专心创作。',
-    effect: '时间+2h(2回合) 热情+8', effectClass: 'positive',
-    apply: (s) => { s.timeDebuffs.push({ id: 'holiday', reason: '悠闲时光', turnsLeft: 2, delta: 2 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
-    tip: '同人本创作需要"成块的连续时间"。',
-    weight: 10, when: () => true, maxTotal: Infinity,
-  },
-  // --- 同人展 ---
-  {
-    id: 'doujin_event', emoji: 'tent', title: '同人展开催！',
-    desc: '本地同人展即将举办！面对面贩售，信息披露自动拉满。',
-    effect: '声誉+0.2 资金+200 信息↑', effectClass: 'positive',
-    apply: (s) => { s.reputation += 0.2; s.money += 200; s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); },
-    tip: '同人展是信息密集的面对面交易——消费者直接翻阅实物',
-    weight: 8, when: (s) => s.totalHVP > 0 || s.totalLVP > 0, maxTotal: Infinity,
-  },
-  // --- 经济下行：长期影响2-3年，整个游戏最多1-2次 ---
-  {
-    id: 'recession', emoji: 'trend-down', title: '经济下行',
-    desc: '宏观经济进入下行周期，消费者的可支配休闲资金持续减少。这不是一时的困难，而是持续数年的寒冬...',
-    effect: '销量-30%（持续2~3年！）', effectClass: 'negative',
-    apply: (s) => {
-      const duration = 24 + Math.floor(Math.random() * 12); // 24-36个月
-      s.recessionTurnsLeft = duration;
-    },
-    tip: '经济下行不是一次性冲击。同人本是弱奢侈品(收入弹性≈1.06)，超量消费被持续压缩。承诺消费提供底线保护，但上限被大幅削减。',
-    weight: 3,
-    when: (s) => s.recessionTurnsLeft <= 0 && s.turn > 12 && activeCrisisCount(s) < 2,
-    maxTotal: 2,
-  },
-  // --- AI冲击 ---
-  {
-    id: 'ai', emoji: 'robot', title: 'AI冲击波',
-    desc: '大量AI生成的内容涌入市场，竞争加剧...',
-    effect: '声誉-0.15', effectClass: 'neutral',
-    apply: (s) => { s.reputation = Math.max(0, s.reputation - 0.15); },
-    tip: 'AI把"执行劳动"无限贬值，但无法取代企业家的敏锐度——发现未被满足需求的能力。人创的不完美性反而成了稀缺品。',
-    weight: 5, when: (s) => s.turn > 18 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
-  },
-  // --- 收到长评 ---
-  {
-    id: 'fanmail', emoji: 'envelope', title: '收到热情长评！',
-    desc: '一位读者写了很长的感想，详细描述了你的作品给TA带来的感动...',
-    effect: '热情+15', effectClass: 'positive',
-    apply: (s) => { s.passion = Math.min(100, s.passion + 15); },
-    tip: '社群反馈是热情预算的重要补充来源。一封走心的长评可以抵消很多现实消耗。',
-    weight: 10, when: (s) => s.reputation > 1 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
-  },
-  // --- 印刷成本上涨 ---
-  {
-    id: 'inflation', emoji: 'money', title: '印刷成本上涨',
-    desc: '原材料涨价，印刷和制作成本提高了...',
-    effect: '资金-400', effectClass: 'negative',
-    apply: (s) => { s.money -= 400; },
-    tip: '通胀从两个方向夹击多样性：降低同人谷声誉稳态，同时抬高同人本准入门槛。',
-    weight: 5, when: (s) => s.totalHVP > 0 || s.totalLVP > 0, maxTotal: Infinity,
-  },
-  // --- 感情变动：大学期间最多2次 ---
-  {
-    id: 'uni_breakup', emoji: 'heart-break', title: '感情变动',
-    desc: '一段感情的开始或结束占据了你大量的心理能量...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(12 * m)}`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(12 * m); },
-    tip: '热情预算不仅被创作消耗，还被生活中的情绪事件消耗。',
-    weight: 4, when: (s) => getLifeStage(s.turn) === 'university', maxTotal: 2,
-  },
-  // --- 工作：升职加薪 ---
-  {
-    id: 'work_raise', emoji: 'trend-up', title: '升职加薪！',
-    desc: '工作表现不错，获得了加薪。但责任更重，时间更少...',
-    effect: '资金+1000 时间-1h（永久）', effectClass: 'neutral',
-    apply: (s) => { s.money += 1000; s.timeDebuffs.push({ id: 'promotion', reason: '升职加责', turnsLeft: 999, delta: -1 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); },
-    tip: '高收入者的时间机会成本更高。',
-    weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: 3,
-  },
-  // --- 工作：996 ---
-  {
-    id: 'work_996', emoji: 'building-office', title: '996加班季',
-    desc: '项目紧急，公司要求全员加班。几乎没有私人时间...',
-    effect: '时间-4h(3回合) 资金+500', effectClass: 'negative',
-    apply: (s) => { s.timeDebuffs.push({ id: '996', reason: '996加班', turnsLeft: 3, delta: -4 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.money += 500; },
-    tip: '滞胀特征：需要更多工作时间维持生活',
-    weight: 7, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
-  },
-  // === Endowment-gated events ===
-  {
-    id: 'inspiration_burst', emoji: 'sparkle', title: '灵感爆发！',
-    desc: '你的创作天赋在某个瞬间被点燃，脑海中涌现出绝妙的创意！',
-    effect: '热情+8 声誉+0.2', effectClass: 'positive',
-    apply: (s) => { s.passion = Math.min(100, s.passion + 8); s.reputation += 0.2; },
-    tip: '创作天赋高的创作者更容易进入"心流"状态。这种突发灵感是内在动机的体现',
-    weight: 4, when: (s) => (s.endowments.talent || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
-  },
-  {
-    id: 'creative_block', emoji: 'wall', title: '创作瓶颈',
-    desc: '怎么画都不满意，反复推翻重来...感觉自己江郎才尽了。',
-    effect: '热情-6', effectClass: 'negative',
-    apply: (s) => { s.passion = Math.max(0, s.passion - 6); },
-    tip: '创作天赋低的创作者更容易遭遇瓶颈。',
-    weight: 5, when: (s) => (s.endowments.talent || 0) <= 1 && s.totalHVP > 0, maxTotal: Infinity,
-  },
-  {
-    id: 'health_issue', emoji: 'thermometer', title: '身体不适',
-    desc: '最近免疫力下降，生了一场病，看病买药花了不少...',
-    effect: '热情-5 时间-2h(2回合) 资金-¥500~800', effectClass: 'negative',
-    apply: (s) => { s.passion = Math.max(0, s.passion - 5); s.timeDebuffs.push({ id: 'sick', reason: '身体不适', turnsLeft: 2, delta: -2 }); s.time = computeEffectiveTime(s.turn, s.timeDebuffs); s.money -= 500 + Math.floor(Math.random() * 300); },
-    tip: '体力精力低的创作者更容易生病。身体是革命的本钱。',
-    weight: 4, when: (s) => (s.endowments.stamina || 0) <= 1, maxTotal: 3,
-  },
-  {
-    id: 'energy_surge', emoji: 'fire', title: '精力充沛！',
-    desc: '最近状态特别好，精力旺盛，感觉什么都能做！',
-    effect: '热情+6', effectClass: 'positive',
-    apply: (s) => { s.passion = Math.min(100, s.passion + 6); },
-    tip: '体力禀赋高的人恢复速度快、消耗低。同样的创作行为，不同人的精力消耗截然不同。',
-    weight: 3, when: (s) => (s.endowments.stamina || 0) >= 2, maxTotal: Infinity,
-  },
-  {
-    id: 'friend_intro', emoji: 'chat-circle', title: '朋友介绍了靠谱搭档',
-    desc: '你的社交圈帮你找到了一位口碑很好的创作者，TA愿意合作！',
-    effect: '自动获得优质搭档(3个月·免稿费)', effectClass: 'positive',
-    apply: (s) => { if (!s.hasPartner) { s.hasPartner = true; s.partnerType = 'supportive'; s.partnerTurns = 3; s.partnerFee = 0; } },
-    tip: '社交魅力高→搜寻成本低。协作可得性随社交网络递增。',
-    weight: 3, when: (s) => (s.endowments.social || 0) >= 2 && !s.hasPartner, maxTotal: 2,
-  },
-  {
-    id: 'viral_post', emoji: 'phone', title: '帖子意外火了！',
-    desc: '你随手发的一条动态获得了大量转发，信息扩散到了意想不到的范围！',
-    effect: '信息+30% 声誉+0.15', effectClass: 'positive',
-    apply: (s) => { s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); s.reputation += 0.15; },
-    tip: '营销直觉高的创作者更善于制造传播点。信息披露是比声誉更直接的转化驱动力。',
-    weight: 3, when: (s) => (s.endowments.marketing || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
-  },
-  {
-    id: 'promo_fail', emoji: 'eye-closed', title: '宣传翻车...',
-    desc: '发了一条宣传但措辞不当，引发了一些争议...',
-    effect: '声誉-0.1 信息+10%(黑红也是红)', effectClass: 'negative',
-    apply: (s) => { s.reputation = Math.max(0, s.reputation - 0.1); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1); },
-    tip: '营销直觉低的人更容易踩雷。信息披露是双刃剑——不当宣传会带来负面注意力，但"黑红也是红"确实会提升曝光度。',
-    weight: 4, when: (s) => (s.endowments.marketing || 0) <= 1 && s.infoDisclosure > 0.3 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
-  },
-  {
-    id: 'harsh_review', emoji: 'smiley-angry', title: '遭遇恶评',
-    desc: '有人公开发了一篇针对你的尖锐批评，言辞很伤人...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)}`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); },
-    tip: '心理韧性低的人对负面反馈更敏感。',
-    weight: 5, when: (s) => s.reputation > 0.5 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
-  },
-  // === Speculator & secondhand market events (frmn.md) ===
-  {
-    id: 'speculator_rush', emoji: 'trend-up', title: '投机客涌入二手市场！',
-    desc: '有人发现圈内某些旧作价格在涨，大量投机客开始囤货。二手市场价格被推高，普通消费者被挤出...',
-    effect: '二手压力暂降 收藏品增值', effectClass: 'neutral',
-    apply: (s) => {
-      if (s.official) {
-        s.official.secondHandPool.lvp = Math.floor(s.official.secondHandPool.lvp * 0.5);
-        s.official.secondHandPool.hvp = Math.floor(s.official.secondHandPool.hvp * 0.6);
-      }
-    },
-    tip: '投机客买的不是内容，而是押注稀缺性溢价。当他们涌入时，二手池被清空（压力降低），但普通消费者被挤出。',
-    weight: 3, when: (s) => s.turn > 12 && s.official && (s.official.secondHandPool.lvp > 10 || s.official.secondHandPool.hvp > 5), maxTotal: Infinity,
-  },
-  {
-    id: 'bubble_burst', emoji: 'warning-circle', title: '二手泡沫破裂！',
-    desc: '投机客集体抛售，大量二手商品涌入市场，价格暴跌！新品销量也受到冲击...',
-    effect: '二手压力大幅上升 同人谷销量受挫', effectClass: 'negative',
-    apply: (s) => {
-      if (s.official) {
-        s.official.secondHandPool.lvp += Math.floor((s.market?.communitySize || 10000) * 0.01);
-        s.official.secondHandPool.hvp += Math.floor((s.market?.communitySize || 10000) * 0.003);
-      }
-    },
-    tip: '泡沫破裂时，投机客理性泡沫B归零，价格回落到基础价值F。大量抛售使二手池膨胀，同人谷受冲击最大。',
-    weight: 2, when: (s) => s.turn > 18 && (s.eventCounts['speculator_rush'] || 0) > 0, maxTotal: 3,
-  },
-  {
-    id: 'rare_work_found', emoji: 'diamond', title: '你的旧作成了海景房！',
-    desc: '你早期的一件作品因为绝版和声誉加持，在二手市场上被炒到了高价。有人愿意出高价向你求购签名版...',
-    effect: '资金+声誉加成 声誉+0.3', effectClass: 'positive',
-    apply: (s) => {
-      const bonus = 500 + Math.round(s.maxReputation * 200);
-      s.money += bonus;
-      s.reputation += 0.3;
-    },
-    tip: '当一手市场关闭（绝版），无套利上限被打破，商品从消费品相变为金融资产。声誉越高，基础定价F越高。这就是"富有声誉的创作者退坑被视作看涨期权"——你的旧作因稀缺性而升值。',
-    weight: 2, when: (s) => s.maxReputation >= 2 && s.totalHVP >= 2 && s.turn > 24, maxTotal: 3,
-  },
-  // === Work stage difficulty events ===
-  {
-    id: 'rent_increase', emoji: 'house', title: '房租上涨',
-    desc: '房东通知下个月开始涨租。在这个城市，住房成本是越来越重的负担...',
-    effect: '资金-300~500 热情-3', effectClass: 'negative',
-    apply: (s) => {
-      const increase = 300 + Math.floor(Math.random() * 200);
-      s.money -= increase;
-      s.passion = Math.max(0, s.passion - 3);
-    },
-    tip: '住房成本是都市创作者的隐性杀手。房租挤占的不是时间，是"心理安全感"——当生存成本上升，创作变成一种奢侈。',
-    weight: 5, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: 3,
-  },
-  {
-    id: 'work_burnout', emoji: 'smiley-sad', title: '职业倦怠',
-    desc: '每天重复的工作内容让你感到麻木，回到家只想瘫着什么都不做，还忍不住冲动消费...',
-    effect: '热情-8 时间-2h(3回合) 资金-¥300~600', effectClass: 'negative',
-    apply: (s) => {
-      s.passion = Math.max(0, s.passion - 8);
-      s.money -= 300 + Math.floor(Math.random() * 300);
-      s.timeDebuffs.push({ id: 'burnout_' + s.turn, reason: '职业倦怠', turnsLeft: 3, delta: -2 });
-      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
-    },
-    tip: '职业倦怠不是懒——是长期高强度低回报工作的心理防御机制。它同时消耗热情和有效时间，是工作阶段最常见的隐性成本。',
-    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
-  },
-  {
-    id: 'social_obligation', emoji: 'beer-stein', title: '社交应酬',
-    desc: '公司团建、同事聚餐、客户应酬……这些"不得不去"的社交活动占据了你的创作时间。',
-    effect: '时间-2h(2回合) 资金-200 热情-2', effectClass: 'negative',
-    apply: (s) => {
-      s.timeDebuffs.push({ id: 'social_' + s.turn, reason: '社交应酬', turnsLeft: 2, delta: -2 });
-      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
-      s.money -= 200;
-      s.passion = Math.max(0, s.passion - 2);
-    },
-    tip: '职场社交是一种"强制消费"——你用时间和金钱购买的不是快乐，而是职场关系的维护成本。对创作者来说，这是最纯粹的机会成本。',
-    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
-  },
-  {
-    id: 'commute_hell', emoji: 'train', title: '通勤地狱',
-    desc: '公司搬了办公地点，或者你不得不搬到更远的地方住。每天通勤时间大幅增加...',
-    effect: '时间-1h(永久)', effectClass: 'negative',
-    apply: (s) => {
-      s.timeDebuffs.push({ id: 'commute_' + s.turn, reason: '通勤时间增加', turnsLeft: 999, delta: -1 });
-      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
-    },
-    tip: '通勤是城市生活最大的时间黑洞。每天多一小时通勤≈每月少30小时自由时间。这是结构性的时间剥夺，无法通过"更努力"来弥补。',
-    weight: 3, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: 2,
-  },
-  {
-    id: 'life_admin', emoji: 'clipboard', title: '生活琐事',
-    desc: '交费、修电器、跑手续……生活充满了琐碎但不得不做的事情，还得花钱。',
-    effect: (s) => { const cost = getLifeStage(s.turn) === 'work' ? '200~500' : '50~150'; return `时间-2h(2回合) 热情-3 资金-¥${cost}`; }, effectClass: 'negative',
-    apply: (s) => {
-      s.timeDebuffs.push({ id: 'admin_' + s.turn, reason: '生活琐事', turnsLeft: 2, delta: -2 });
-      s.time = computeEffectiveTime(s.turn, s.timeDebuffs);
-      const cost = getLifeStage(s.turn) === 'work' ? 200 + Math.floor(Math.random() * 300) : 50 + Math.floor(Math.random() * 100);
-      s.money -= cost;
-      s.passion = Math.max(0, s.passion - 3);
-    },
-    tip: '生活管理成本是成年后的隐性税——学生时代由父母承担的一切，现在都需要你自己的时间和精力。这是"长大"的真实代价。',
-    weight: 7, when: () => true, maxTotal: Infinity,
-  },
-  {
-    id: 'old_friend_reunion', emoji: 'beer-bottle', title: '老友重聚',
-    desc: '大学时一起搞同人的朋友约你出来聚聚。几年不见，大家的生活都变了很多...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情+5 或 -${Math.round(5 * m)}（看情况）`; }, effectClass: 'neutral',
-    apply: (s) => {
-      if (Math.random() < 0.5) {
-        s.passion = Math.min(100, s.passion + 5);
-      } else {
-        const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1;
-        s.passion = Math.max(0, s.passion - Math.round(5 * m));
-      }
-    },
-    tip: '同人圈的社交关系随时间自然衰减。重聚可能带来温暖的回忆和重新连接，也可能让你意识到"只有自己还在坚持"的孤独感。这种身份认同的动摇比任何经济因素都更能影响热情。',
-    weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) / 12 > 2, maxTotal: 3,
-  },
-  // === Commercial transition event ===
-  {
-    id: 'commercial_offer', emoji: 'envelope', title: '出版社的邀约',
-    desc: '你的作品在业界引起了关注。一位出版社编辑在展会后找到你，递来了名片——"我们很看好你的创作实力，有兴趣聊聊商业出版吗？"',
-    effect: '解锁「商业出道」行动', effectClass: 'positive',
-    apply: (s) => { s.commercialOfferReceived = true; s.passion = Math.min(100, s.passion + 10); },
-    tip: '从同人到商业是许多创作者的自然进化路径。Type-Moon从Comiket走向Fate，KEY从同人走向Kanon。当声誉和销量达到临界点，商业化就不再是"卖梦想"，而是"顺势而为"。你可以选择接受，也可以继续留在同人圈。',
-    weight: 15,
-    when: (s) => {
-      if (s.commercialOfferReceived || s.reputation < 10 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
-      // Economic crisis: publishers are cautious, only 30% chance of scouting
-      if (s.recessionTurnsLeft > 0 || (s.advanced && (s.advanced.stagflationTurnsLeft > 0 || s.advanced.debtCrisisActive))) return Math.random() < 0.3;
-      return true;
-    },
-    maxTotal: 1,
-  },
-  // === Secondhand market event ===
-  {
-    id: 'secondhand_crackdown', emoji: 'shield', title: '平台整治二手倒卖',
-    desc: '交易平台开始打击无授权二手倒卖行为，大量违规商品被下架。正规新品的竞争环境暂时好转了。',
-    effect: '二手压力大幅下降 新品销量回升', effectClass: 'positive',
-    apply: (s) => {
-      if (s.official) {
-        s.official.secondHandPool.lvp = Math.floor(s.official.secondHandPool.lvp * 0.6);
-        s.official.secondHandPool.hvp = Math.floor(s.official.secondHandPool.hvp * 0.6);
-      }
-      s.passion = Math.min(100, s.passion + 3);
-    },
-    tip: '平台整治是外部力量对二手市场的周期性干预。每次整治后二手压力会短暂下降，但只要供需结构不变，压力终会回升。创作者应抓住窗口期加大新品推广力度。',
-    weight: 3, when: (s) => s.official && (s.official.secondHandPressure.lvp > 0.3 || s.official.secondHandPressure.hvp > 0.2), maxTotal: 2,
-  },
-  // === Financial shock events ===
-  {
-    id: 'unexpected_expense', emoji: 'cardholder', title: '意外大额支出',
-    desc: '手机摔碎了/电脑出问题/朋友随礼……生活总会给你一些"惊喜"。',
-    effect: (s) => { const isWork = getLifeStage(s.turn) === 'work'; const cost = isWork ? 1500 + Math.round(Math.random() * 1500) : 300 + Math.round(Math.random() * 400); return `资金-¥${cost} 热情-3`; }, effectClass: 'negative',
-    apply: (s) => { const isWork = getLifeStage(s.turn) === 'work'; const cost = isWork ? 1500 + Math.floor(Math.random() * 1500) : 300 + Math.floor(Math.random() * 400); s.money -= cost; s.passion = Math.max(0, s.passion - 3); },
-    tip: '意外支出是生活的常态。没有备用金，一次意外就可能吃掉你几个月的同人预算。',
-    weight: 5, when: (s) => s.turn > 3, maxTotal: Infinity,
-  },
-  {
-    id: 'tax_season', emoji: 'receipt', title: '年度税费清算',
-    desc: '工作满一年，个税汇算、社保补缴、各种年度账单一起到……钱包大出血。',
-    effect: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.5 + Math.random() * 0.5)); return `资金-¥${cost}`; }, effectClass: 'negative',
-    apply: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.5 + Math.random() * 0.5)); s.money -= cost; },
-    tip: '年度税费是不可避免的制度性支出。收入越高，税费越多。这笔钱完全不可能流向同人创作。',
-    weight: 20, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) > 0 && (s.turn - 50) % 12 === 0, maxTotal: Infinity,
-  },
-];
+// RANDOM_EVENTS — see events.js
 
 // === Roll Events ===
 export function rollEvent(state) {
@@ -1529,28 +1182,26 @@ export function executeTurn(state, actionId) {
           const lvpSold = Math.min(actualSold - hvpSold, state.inventory.lvpStock);
 
           if (hvpSold > 0) {
-            state.inventory.hvpStock -= hvpSold;
-            const hvpRev = hvpSold * state.inventory.hvpPrice;
-            eventRevenue += hvpRev;
-            totalEventSold += hvpSold;
-            state.totalSales += hvpSold;
-            result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
-            const repGain = 0.08 * state.infoDisclosure * hvpSold * 0.05;
+            const hvpResult = sellFromWorks(state, 'hvp', hvpSold);
+            eventRevenue += hvpResult.revenue;
+            totalEventSold += hvpResult.sold;
+            state.totalSales += hvpResult.sold;
+            result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpResult.sold}本`, value: `+¥${hvpResult.revenue}`, positive: true });
+            const repGain = 0.08 * state.infoDisclosure * hvpResult.sold * 0.05;
             state.reputation += repGain;
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
-            if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
+            if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpResult.sold);
           }
           if (lvpSold > 0) {
-            state.inventory.lvpStock -= lvpSold;
-            const lvpRev = lvpSold * state.inventory.lvpPrice;
-            eventRevenue += lvpRev;
-            totalEventSold += lvpSold;
-            state.totalSales += lvpSold;
-            result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
-            const repGain = 0.01 * state.infoDisclosure * lvpSold * 0.05;
+            const lvpResult = sellFromWorks(state, 'lvp', lvpSold);
+            eventRevenue += lvpResult.revenue;
+            totalEventSold += lvpResult.sold;
+            state.totalSales += lvpResult.sold;
+            result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
+            const repGain = 0.01 * state.infoDisclosure * lvpResult.sold * 0.05;
             state.reputation += repGain;
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
-            if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
+            if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpResult.sold);
           }
         }
       } else {
@@ -1559,36 +1210,34 @@ export function executeTurn(state, actionId) {
           state.playerPrice.hvp = state.inventory.hvpPrice;
           const sales = calculateSales('hvp', state);
           const hvpSold = Math.min(sales.hvpSales, state.inventory.hvpStock);
-          state.inventory.hvpStock -= hvpSold;
-          const hvpRev = hvpSold * state.inventory.hvpPrice;
-          eventRevenue += hvpRev;
-          totalEventSold += hvpSold;
-          state.totalSales += hvpSold;
+          const hvpResult = sellFromWorks(state, 'hvp', hvpSold);
+          eventRevenue += hvpResult.revenue;
+          totalEventSold += hvpResult.sold;
+          state.totalSales += hvpResult.sold;
           result.salesInfo = sales;
           result.supplyDemand = getSupplyDemandData(state, sales);
-          result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpSold}本`, value: `+¥${hvpRev}`, positive: true });
-          if (sales.hvpSales > hvpSold) result.deltas.push({ icon: 'fire', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpSold}`, positive: false });
-          const repGain = 0.08 * state.infoDisclosure * hvpSold * 0.05;
+          result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpResult.sold}本`, value: `+¥${hvpResult.revenue}`, positive: true });
+          if (sales.hvpSales > hvpResult.sold) result.deltas.push({ icon: 'fire', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpResult.sold}`, positive: false });
+          const repGain = 0.08 * state.infoDisclosure * hvpResult.sold * 0.05;
           state.reputation += repGain;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
-          if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpSold);
+          if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpResult.sold);
         }
         if (state.inventory.lvpStock > 0) {
           state.playerPrice.lvp = state.inventory.lvpPrice;
           const sales = calculateSales('lvp', state);
           const lvpSold = Math.min(sales.lvpSales, state.inventory.lvpStock);
-          state.inventory.lvpStock -= lvpSold;
-          const lvpRev = lvpSold * state.inventory.lvpPrice;
-          eventRevenue += lvpRev;
-          totalEventSold += lvpSold;
-          state.totalSales += lvpSold;
+          const lvpResult = sellFromWorks(state, 'lvp', lvpSold);
+          eventRevenue += lvpResult.revenue;
+          totalEventSold += lvpResult.sold;
+          state.totalSales += lvpResult.sold;
           if (!result.salesInfo) { result.salesInfo = sales; result.supplyDemand = getSupplyDemandData(state, sales); }
-          result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpSold}个`, value: `+¥${lvpRev}`, positive: true });
-          if (sales.lvpSales > lvpSold) result.deltas.push({ icon: 'fire', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpSold}`, positive: false });
-          const repGain = 0.01 * state.infoDisclosure * lvpSold * 0.05;
+          result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
+          if (sales.lvpSales > lvpResult.sold) result.deltas.push({ icon: 'fire', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpResult.sold}`, positive: false });
+          const repGain = 0.01 * state.infoDisclosure * lvpResult.sold * 0.05;
           state.reputation += repGain;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
-          if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpSold);
+          if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpResult.sold);
         }
       }
 
@@ -1665,6 +1314,16 @@ export function executeTurn(state, actionId) {
     }
 
   } else if (action.type === 'jobSearch') {
+    // If full-time doujin, first transition to job-seeking
+    if (state.fullTimeDoujin && !state.unemployed) {
+      state.fullTimeDoujin = false;
+      state.unemployed = true;
+      state.jobSearchTurns = 0;
+      state.doujinWorkYearReset = state.turn; // remember for salary reset
+      result.deltas.push({ icon: 'briefcase', label: '决定回去找工作', value: '全职同人→求职中', positive: false });
+      result.deltas.push({ icon: 'warning', label: '重返职场后薪资从头开始', value: '基础¥800/月', positive: false });
+      result.tip = { label: '回归职场', text: '放弃全职同人回去上班——这不是失败，是务实的选择。但离开职场这段时间不计入工龄，薪资要从基础水平重新开始。' };
+    } else {
     // === UNEMPLOYMENT: looking for work ===
     state.passion -= 10;
     state.jobSearchTurns++;
@@ -1675,6 +1334,8 @@ export function executeTurn(state, actionId) {
     if (Math.random() < findProb) {
       state.unemployed = false;
       state.jobSearchTurns = 0;
+      // Salary reset if returning from full-time doujin
+      if (state.doujinWorkYearReset > 0) state.doujinWorkYearReset = state.turn; // reset work year reference
       result.deltas.push({ icon: 'confetti', label: '找到工作了！', value: '恢复正常生活', positive: true });
       result.tip = TIPS.jobFound;
     } else {
@@ -1684,6 +1345,7 @@ export function executeTurn(state, actionId) {
       }
       result.tip = TIPS.jobSearching;
     }
+    } // end else (not fullTimeDoujin transition)
 
   } else if (action.type === 'hvp') {
     // === MULTI-TURN HVP PROJECT ===
@@ -1734,7 +1396,7 @@ export function executeTurn(state, actionId) {
         state._pendingChoices = null;
       }
       // Work stage: creative efficiency reduced (fatigue after day job)
-      let progressEff = getLifeStage(state.turn) === 'work' && !state.unemployed ? 0.7 : 1.0;
+      let progressEff = getLifeStage(state.turn) === 'work' && !state.unemployed && !state.fullTimeDoujin ? 0.7 : 1.0;
       // Creative fatigue efficiency penalty
       if (state.creativeFatigue >= 3) {
         progressEff *= 0.85;
@@ -1937,31 +1599,34 @@ export function executeTurn(state, actionId) {
     result.tip = TIPS.lvp;
 
   } else if (action.type === 'reprint') {
-    // === REPRINT: add more copies to inventory ===
+    // === REPRINT: add more copies to a specific work ===
     state.passion -= 3;
     result.deltas.push({ icon: 'heart', label: '安排印刷', value: '-3', positive: false });
 
-    const reprintType = state._reprintType || (state.totalHVP > 0 ? 'hvp' : 'lvp');
-    state._reprintType = null;
+    const workId = state._reprintWorkId;
+    state._reprintWorkId = null;
 
-    if (reprintType === 'hvp' && state.totalHVP > 0) {
-      const qty = 30;
-      const unitCost = 40; // cheaper than first print (plates already made)
-      const cost = qty * unitCost;
-      state.money -= cost;
-      state.inventory.hvpStock += qty;
-      result.deltas.push({ icon: 'printer', label: `追印同人本${qty}本`, value: `-¥${cost}`, positive: false });
-      result.deltas.push({ icon: 'package', label: '库存更新', value: `同人本×${state.inventory.hvpStock} 定价¥${state.inventory.hvpPrice}`, positive: true });
-    } else if (reprintType === 'lvp' && state.totalLVP > 0) {
-      const qty = 20;
-      const unitCost = 6;
-      const cost = qty * unitCost;
-      state.money -= cost;
-      state.inventory.lvpStock += qty;
-      result.deltas.push({ icon: 'printer', label: `追加制作谷子${qty}个`, value: `-¥${cost}`, positive: false });
-      result.deltas.push({ icon: 'package', label: '库存更新', value: `谷子×${state.inventory.lvpStock} 定价¥${state.inventory.lvpPrice}`, positive: true });
+    // Find the work — it might have qty=0 (sold out) or still have stock
+    let work = state.inventory.works.find(w => w.id === workId);
+    if (!work && workId != null) {
+      // Work was cleaned up (qty=0 and removed), recreate it from history
+      // Fallback: just do nothing
     }
-    result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。真正的同人创作者都在学习的供应链管理。' };
+    if (work) {
+      const isHVP = work.type === 'hvp';
+      const sub = isHVP ? (HVP_SUBTYPES[work.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[work.subtype] || LVP_SUBTYPES.acrylic);
+      const qty = isHVP ? 30 : 20;
+      const unitCost = isHVP ? 40 : 6;
+      const cost = qty * unitCost;
+      state.money -= cost;
+      work.qty += qty;
+      syncInventoryAggregates(state);
+      result.deltas.push({ icon: 'printer', label: `追印${sub.name} ${qty}${isHVP ? '本' : '个'}`, value: `-¥${cost}`, positive: false });
+      result.deltas.push({ icon: 'package', label: '库存更新', value: `${sub.name}×${work.qty} 定价¥${work.price}`, positive: true });
+    } else {
+      result.deltas.push({ icon: 'warning', label: '没有找到可追印的作品', value: '', positive: false });
+    }
+    result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。' };
 
   } else if (action.type === 'buyGoods') {
     // === BUY GOODS AS CONSUMER: cost scales with wealth, passion stays constant ===
@@ -2060,6 +1725,22 @@ export function executeTurn(state, actionId) {
   }
 
   // --- Commercial transition: player accepts publisher offer ---
+  // === Quit job for full-time doujin ===
+  if (action.type === 'quitForDoujin') {
+    state.fullTimeDoujin = true;
+    state.doujinMonths = 0;
+    state.monthlyIncome = 0;
+    state.doujinWorkYearReset = state.turn; // mark for salary reset if returning
+    // Clear work-related debuffs (promotion, commute, 996 etc.)
+    state.timeDebuffs = state.timeDebuffs.filter(d => !['promotion', '996'].includes(d.id) && !d.id.startsWith('commute_') && !d.id.startsWith('social_') && !d.id.startsWith('burnout_'));
+    state.time = Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)));
+    state.passion = Math.min(100, state.passion + 10);
+    result.deltas.push({ icon: 'sparkle', label: '辞职了！全身心投入同人创作！', value: '闲暇→7h 月收入→0', positive: true });
+    result.deltas.push({ icon: 'heart', label: '自由的感觉真好', value: '热情+10', positive: true });
+    result.deltas.push({ icon: 'warning', label: '每月生活费¥800自动扣除', value: '没有固定收入了', positive: false });
+    result.tip = { label: '全职同人创作者', text: '你选择了最勇敢的道路——辞掉工作，全身心投入同人创作。时间自由了，但收入完全靠自己。存款就是你的安全线，低于¥5000时焦虑会开始侵蚀热情。如果撑不住，随时可以回去找工作——但薪资要从头开始。' };
+  }
+
   if (action.type === 'goCommercial') {
     state.commercialTransition = true;
     checkAchievements(state); // ensure commercial_debut achievement is recorded
@@ -2233,9 +1914,24 @@ export function executeTurn(state, actionId) {
       const unemployedExpense = Math.round(impliedLiving * erosionRate);
       state.money -= unemployedExpense;
       result.deltas.push({ icon: 'house', label: `生活费侵蚀同人资金(${Math.round(erosionRate * 100)}%)`, value: `-¥${unemployedExpense}`, positive: false });
+    } else if (state.fullTimeDoujin) {
+      // Full-time doujin: no salary, fixed living cost, anxiety based on savings
+      state.doujinMonths = (state.doujinMonths || 0) + 1;
+      state.monthlyIncome = 0;
+      const livingCost = 800;
+      state.money -= livingCost;
+      result.deltas.push({ icon: 'house', label: '生活费', value: `-¥${livingCost}`, positive: false });
+
+      // Anxiety based on savings level
+      let doujinAnxiety = 0;
+      if (state.money < 0) { doujinAnxiety = 10; result.deltas.push({ icon: 'smiley-nervous', label: '负债焦虑：全职同人撑不下去了', value: `热情-${doujinAnxiety}`, positive: false }); }
+      else if (state.money < 5000) { doujinAnxiety = 5; result.deltas.push({ icon: 'smiley-nervous', label: '存款吃紧，有点慌', value: `热情-${doujinAnxiety}`, positive: false }); }
+      else if (state.money < 10000) { doujinAnxiety = 2; result.deltas.push({ icon: 'smiley-meh', label: '存款在减少...', value: `热情-${doujinAnxiety}`, positive: false }); }
+      state.passion = Math.max(0, state.passion - doujinAnxiety);
     } else {
       const bgSalaryMult = BACKGROUNDS[state.background]?.salaryMult || 1.0;
-      const baseSalary = Math.round((800 + Math.floor((state.turn - 50) / 12) * 200) * bgSalaryMult);
+      const workStart = state.doujinWorkYearReset > 0 ? state.doujinWorkYearReset : 50; // reset if returned from doujin
+      const baseSalary = Math.round((800 + Math.max(0, Math.floor((state.turn - workStart) / 12)) * 200) * bgSalaryMult);
       const salary = state.recessionTurnsLeft > 0 ? Math.floor(baseSalary * 0.8) : baseSalary; // recession cuts salary
       state.money += salary;
       state.monthlyIncome = salary;
@@ -2303,14 +1999,13 @@ export function executeTurn(state, actionId) {
       const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
       const sold = Math.min(demand, state.inventory.hvpStock);
       if (sold > 0) {
-        state.inventory.hvpStock -= sold;
-        const rev = sold * state.inventory.hvpPrice;
-        state.money += rev;
-        state.totalRevenue += rev;
-        state.totalSales += sold;
-        const repGain = (0.02 + 0.06 * state.infoDisclosure) * sold * 0.03;
+        const hvpResult = sellFromWorks(state, 'hvp', sold);
+        state.money += hvpResult.revenue;
+        state.totalRevenue += hvpResult.revenue;
+        state.totalSales += hvpResult.sold;
+        const repGain = (0.02 + 0.06 * state.infoDisclosure) * hvpResult.sold * 0.03;
         state.reputation += repGain;
-        result.deltas.push({ icon: 'globe-simple', label: `网上售出同人本×${sold}`, value: `+¥${rev}`, positive: true });
+        result.deltas.push({ icon: 'globe-simple', label: `网上售出同人本×${hvpResult.sold}`, value: `+¥${hvpResult.revenue}`, positive: true });
       }
     }
 
@@ -2321,12 +2016,11 @@ export function executeTurn(state, actionId) {
       const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
       const sold = Math.min(demand, state.inventory.lvpStock);
       if (sold > 0) {
-        state.inventory.lvpStock -= sold;
-        const rev = sold * state.inventory.lvpPrice;
-        state.money += rev;
-        state.totalRevenue += rev;
-        state.totalSales += sold;
-        result.deltas.push({ icon: 'globe-simple', label: `网上售出谷子×${sold}`, value: `+¥${rev}`, positive: true });
+        const lvpResult = sellFromWorks(state, 'lvp', sold);
+        state.money += lvpResult.revenue;
+        state.totalRevenue += lvpResult.revenue;
+        state.totalSales += lvpResult.sold;
+        result.deltas.push({ icon: 'globe-simple', label: `网上售出谷子×${lvpResult.sold}`, value: `+¥${lvpResult.revenue}`, positive: true });
       }
     }
 
@@ -2386,7 +2080,7 @@ export function executeTurn(state, actionId) {
 
   // --- Advance turn ---
   state.turn++;
-  state.time = state.unemployed
+  state.time = (state.unemployed || state.fullTimeDoujin)
     ? Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)))
     : computeEffectiveTime(state.turn, state.timeDebuffs);
 
@@ -2410,166 +2104,10 @@ export function executeTurn(state, actionId) {
 
 // === Partner Drama ===
 // === Personalized Ending Generator ===
-function generateEnding(state) {
-  const stage = getLifeStage(state.turn);
-  const rep = state.maxReputation;
-  const hvp = state.totalHVP;
-  const rev = state.totalRevenue;
-  const events = state.eventLog?.length || 0;
-  const unemployed = state.unemployed;
-
-  // Pick the most fitting ending based on player's journey
-  if (unemployed && state.money < -500) {
-    return '失业和债务的双重压力让你再也无法提起画笔。同人创作从生活的支柱变成了无法承受的奢侈……但那些作品里倾注的心血，读者不会忘记。';
-  }
-  if (stage === 'university' && hvp === 0 && state.totalLVP <= 1) {
-    return '大学生活的丰富多彩最终让创作计划搁浅了。也许这只是一个"以后再说"的梦想——但谁知道呢，很多传奇创作者都是毕业后才真正开始的。';
-  }
-  if (rep >= 5 && hvp >= 3) {
-    return `从声誉${rep.toFixed(1)}的高峰缓缓走下，你在圈内留下了${hvp}本同人志的印记。虽然热情最终还是燃尽了，但你的作品已经成为了这个圈子历史的一部分。有人会记得你的名字。`;
-  }
-  if (rev >= 10000 && events >= 5) {
-    return `累计¥${rev.toLocaleString()}的销售额和${events}次展会经历，你已经不是"用爱发电"那么简单了。这是一段真正的创业故事——只不过主角最终选择了转身。也许未来某天，你会以不同的身份回到这个圈子。`;
-  }
-  if (hvp >= 5) {
-    return `${hvp}本同人志，每一本都是无数个深夜的结晶。你证明了自己能够持续产出高质量的作品。热情会消退，但创作能力不会——它已经刻进了你的骨子里。`;
-  }
-  if (events >= 8) {
-    return `跑了${events}场展会，从紧张地守着空荡荡的摊位到熟练地招呼来客……展会上认识的人、交换的名片、听到的故事，这些才是最珍贵的收获。同人展的热闹会想你的。`;
-  }
-  if (state.totalLVP >= 8 && hvp <= 1) {
-    return '你是谷子界的多产选手，用小而精的周边温暖了很多人的日常。虽然始终没能跨过同人本的门槛，但这又有什么关系呢？创作的形式不重要，重要的是你表达过。';
-  }
-  if (stage === 'work' && rep < 1) {
-    return '工作和生活的压力逐渐磨灭了你对同人创作的热情。这不是失败——51.2%的创作者都因为"现实太忙"而离开。你只是选择了另一种生活方式。';
-  }
-  if (state.turn < 12) {
-    return '同人创作之路刚刚开始就戛然而止。也许时机不对，也许准备不足——但至少你迈出了第一步。很多人连试都不敢试。';
-  }
-  if (state.money >= 5000) {
-    return '虽然热情燃尽了，但你至少攒下了一笔积蓄。这段创作经历教会你的不只是画画和排版——还有成本控制、市场判断和自我管理。这些能力会跟着你一辈子。';
-  }
-  return stage === 'work'
-    ? '工作的齿轮不会为任何人的梦想停转。你的同人创作之路在现实的重压下缓缓落幕——但每一个曾经熬过的夜晚，都是真实存在过的热爱。'
-    : '热情耗尽——用爱发电的电量归零了。但请记住：退坑不等于失败，只是人生的优先级发生了变化。那些作品会替你记住，你曾经为热爱全力以赴过。';
-}
-
-function generateCommercialEnding(state) {
-  const rep = state.maxReputation;
-  const hvp = state.totalHVP;
-  const rev = state.totalRevenue;
-  const age = getAge(state.turn);
-  if (rep >= 8 && hvp >= 8) {
-    return `从${age - 18}岁暑假的第一本同人志，到声誉${rep.toFixed(1)}的圈内传说，再到今天签下商业出版合约——你的故事本身就是一部最好的作品。${hvp}本同人志积累的技艺、审美和粉丝，将成为你商业生涯最坚实的基础。同人圈永远欢迎你回来。`;
-  }
-  if (rev >= 50000) {
-    return `累计¥${rev.toLocaleString()}的同人销售额证明了你的商业潜力。出版社看中的不只是你的创作能力，更是你对市场的敏锐嗅觉。从"为爱发电"到"以此为业"，这不是梦想的终结，而是梦想的升级。`;
-  }
-  return `${hvp}本同人志、无数个深夜的创作、大大小小的展会——这些经历铸就了今天的你。当出版社编辑递来合约时，你知道这不是终点。同人时代教会你的一切——对作品的执着、对读者的理解、对市场的把握——将在商业舞台上绽放更耀眼的光芒。`;
-}
-
-function rollPartnerDrama(type) {
-  const pool = {
-    demanding: [{ desc: '搭档嫌弃你的画稿质量，要求推翻重来', summary: '热情-8', passionDelta: -8, reputationDelta: 0 }],
-    unreliable: [
-      { desc: '搭档突然消失不回消息，进度全部拖延', summary: '热情-5', passionDelta: -5, reputationDelta: 0 },
-      { desc: '搭档交付的部分质量很差，只能你来返工', summary: '热情-8', passionDelta: -8, reputationDelta: 0 },
-    ],
-    toxic: [
-      { desc: '搭档在社交媒体上公开吐槽你', summary: '热情-12 声誉-0.5', passionDelta: -12, reputationDelta: -0.5 },
-      { desc: '搭档挑起粉丝之间的对立', summary: '热情-10 声誉-0.3', passionDelta: -10, reputationDelta: -0.3 },
-      { desc: '搭档把未完成草稿泄露出去', summary: '热情-15 声誉-0.4', passionDelta: -15, reputationDelta: -0.4 },
-    ],
-  };
-  const options = pool[type] || [];
-  return options.length > 0 ? options[Math.floor(Math.random() * options.length)] : { desc: '', summary: '', passionDelta: 0, reputationDelta: 0 };
-}
-
-// === Achievements ===
-function checkAchievements(state) {
-  // --- Update tracking counters ---
-  // Debt + passion streak
-  if (state.money < 0 && state.passion >= 60) {
-    state._debtPassionStreak = (state._debtPassionStreak || 0) + 1;
-  } else {
-    state._debtPassionStreak = 0;
-  }
-  // Phoenix tracking: passion nadir → recovery
-  if (state.passion <= 15) state._lowPassionHit = true;
-  if (state._lowPassionHit && state.passion >= 80) state._passionRecovered = true;
-
-  const age = getAge(state.turn);
-  const checks = [
-    { id: 'first_hvp', cond: state.totalHVP >= 1 }, { id: 'first_lvp', cond: state.totalLVP >= 1 },
-    { id: 'rep3', cond: state.reputation >= 3 }, { id: 'rep5', cond: state.reputation >= 5 }, { id: 'rep8', cond: state.reputation >= 8 },
-    { id: 'survive12', cond: state.turn >= 12 }, { id: 'survive24', cond: state.turn >= 24 }, { id: 'survive120', cond: state.turn >= 120 },
-    { id: 'survive_work', cond: getLifeStage(state.turn) === 'work' && state.passion > 0 },
-    { id: 'rich', cond: state.money >= 10000 && state.totalRevenue >= 5000 }, { id: 'hvp5', cond: state.totalHVP >= 5 },
-    { id: 'recession_survivor', cond: (state.eventCounts['recession'] || 0) > 0 && state.recessionTurnsLeft === 0 && state.passion > 0 },
-    { id: 'diversity_savior', cond: state.market && state.market.nHVP === 0 && state.hvpProject && state.hvpProject.progress > 0 },
-    { id: 'market_veteran', cond: state.market && state.market.diversityHealth < 0.3 && state.passion > 20 },
-    { id: 'niche_hunter', cond: state.advanced && state.advanced.nichesFound >= 3 },
-    { id: 'ai_survivor', cond: state.advanced && state.advanced.aiRevolution && state.totalHVP > 0 && state.passion > 20 },
-    { id: 'stagflation_survivor', cond: state.advanced && (state.eventCounts['stagflation'] || 0) > 0 && state.advanced.stagflationTurnsLeft === 0 && state.passion > 0 },
-    { id: 'veblen', cond: (state.eventCounts['veblen_hype'] || 0) > 0 },
-    { id: 'collector', cond: state.goodsCollection >= 10 && state.totalHVP === 0 && state.totalLVP === 0 },
-    { id: 'commercial_debut', cond: state.commercialTransition },
-    // --- Hard achievements ---
-    { id: 'survive180', cond: state.turn >= 180 },                          // 15 years, age 33
-    { id: 'survive240', cond: state.turn >= 240 },                          // 20 years, age 38
-    { id: 'survive360', cond: state.turn >= 360 },                          // 30 years, age 48
-    { id: 'rep10', cond: state.reputation >= 10 },                          // legendary reputation
-    { id: 'hvp10', cond: state.totalHVP >= 10 },                            // prolific creator
-    { id: 'hvp20', cond: state.totalHVP >= 20 },                            // insane output
-    { id: 'debt_warrior', cond: (state._debtPassionStreak || 0) >= 6 },     // 6 months debt + high passion
-    { id: 'debt_abyss', cond: state.money <= -10000 && state.passion > 0 }, // deep in debt, still alive
-    { id: 'phoenix', cond: state._passionRecovered },                       // recover from near-death
-    { id: 'elder_creator', cond: age >= 35 && state.totalHVP > 0 && state.passion > 0 }, // still creating at 35+
-    { id: 'rich_mogul', cond: state.money >= 30000 },                       // extremely wealthy
-    { id: 'triple_threat', cond: (state.eventCounts['recession'] || 0) >= 2 && state.passion > 20 }, // survived 2+ recessions
-  ];
-  for (const c of checks) if (c.cond && !state.achievements.includes(c.id)) state.achievements.push(c.id);
-  if (state.partnerType === 'toxic' && !state.achievements.includes('toxic_encounter')) state.achievements.push('toxic_encounter');
-}
-
-export function getAchievementInfo(id) {
-  const map = {
-    first_hvp: { name: '初出茅庐', desc: '完成第一本同人志', emoji: 'book-open-text' },
-    first_lvp: { name: '小试牛刀', desc: '制作了第一批谷子', emoji: 'key' },
-    rep3: { name: '小有名气', desc: '声誉达到3', emoji: 'star' },
-    rep5: { name: '圈内知名', desc: '声誉达到5', emoji: 'star-four' },
-    rep8: { name: '传说大手', desc: '声誉达到8', emoji: 'crown' },
-    survive12: { name: '一年坚持', desc: '持续创作满一年', emoji: 'calendar' },
-    survive24: { name: '两年老兵', desc: '持续创作满两年', emoji: 'trophy' },
-    survive_work: { name: '社畜创作者', desc: '进入工作后仍在创作', emoji: 'briefcase' },
-    rich: { name: '同人致富', desc: '资金超过10000元', emoji: 'coins' },
-    hvp5: { name: '高产创作者', desc: '完成5本同人志', emoji: 'books' },
-    toxic_encounter: { name: '遇人不淑', desc: '遭遇了有毒搭档', emoji: 'skull' },
-    recession_survivor: { name: '穿越周期', desc: '经历经济下行后仍在创作', emoji: 'trend-up' },
-    diversity_savior: { name: '多样性守护者', desc: '在市场同人本数量为零时开始创作同人本', emoji: 'star-four' },
-    market_veteran: { name: '寒冬幸存者', desc: '在市场多样性极低时仍保持热情', emoji: 'mountains' },
-    niche_hunter: { name: '需求猎人', desc: '发现3个以上细分需求缺口', emoji: 'magnifying-glass' },
-    ai_survivor: { name: 'AI时代的人类', desc: '在AI革命后仍坚持人工创作', emoji: 'robot' },
-    stagflation_survivor: { name: '滞胀幸存者', desc: '经历滞胀后仍在创作', emoji: 'fire' },
-    veblen: { name: '圣遗物制造者', desc: '作品成为二手奢侈品', emoji: 'diamond' },
-    collector: { name: '纯粹的消费者', desc: '收藏了10件谷子却从未创作过', emoji: 'shopping-cart' },
-    survive120: { name: '十年老兵', desc: '在同人创作之路上坚持了十年', emoji: 'medal' },
-    survive180: { name: '十五年传奇', desc: '同人之路走了十五年，热情犹在', emoji: 'medal-military' },
-    survive240: { name: '二十年不灭', desc: '二十年如一日，你就是同人圈的活化石', emoji: 'flame' },
-    survive360: { name: '永恒之火', desc: '三十年...从少年到中年，热情从未熄灭', emoji: 'seal' },
-    rep10: { name: '活着的传说', desc: '声誉达到10，你的名字就是品牌', emoji: 'crown' },
-    hvp10: { name: '十本成就', desc: '完成10本同人志，量变引起质变', emoji: 'books' },
-    hvp20: { name: '创作机器', desc: '完成20本同人志，前无古人', emoji: 'building-office' },
-    debt_warrior: { name: '用爱发电', desc: '连续6个月负债但热情始终高涨', emoji: 'fire' },
-    debt_abyss: { name: '深渊行者', desc: '负债超过¥10000仍在坚持创作', emoji: 'arrow-circle-down' },
-    phoenix: { name: '涅槃重生', desc: '热情跌到谷底后重新燃起', emoji: 'bird' },
-    elder_creator: { name: '老骥伏枥', desc: '35岁之后仍在创作同人本', emoji: 'sun-horizon' },
-    rich_mogul: { name: '同人大亨', desc: '资金超过¥30000，富可敌国', emoji: 'diamond' },
-    triple_threat: { name: '经济周期收割者', desc: '经历两次以上经济下行仍保持热情', emoji: 'waves' },
-    commercial_debut: { name: '商业出道', desc: '从同人创作者成功转型为商业创作者', emoji: 'star-four' },
-  };
-  return map[id] || { name: id, desc: '', emoji: 'medal' };
-}
+// generateEnding, generateCommercialEnding — see endings.js
+// rollPartnerDrama — see partner-drama.js
+// checkAchievements, getAchievementInfo — see achievements.js
+export { _getAchievementInfo as getAchievementInfo };
 
 // === Tips ===
 const TIPS = {

@@ -18,24 +18,7 @@ const P_LVP_EXIT = 0.025; // LVP exit rate
 const ALPHA_DECAY = 0.95; // consumer α decay per turn when N_HVP=0 (faster for gameplay)
 const GAMMA_H = 15;       // committed consumption (vacuum profit base)
 
-// === NPC Circle Names ===
-const NPC_CIRCLE_NAMES = [
-  // 日系古典风
-  '「星屑」', '「月光工房」', '「赤い鍵」', '「深夜茶会」', '「黒猫堂」',
-  '「虹色書房」', '「蒼穹社」', '「雪兎工坊」', '「焔の翼」', '「白鴉」',
-  '「花火亭」', '「琥珀色」', '「夢幻回廊」', '「朧月」', '「紫苑」',
-  '「碧の庭」', '「流星群」', '「曙光」', '「銀の鈴」', '「夕暮れ堂」',
-  // 中文风
-  '「竹海楼」', '「子夜星界」', '「水晶幻境」', '「蔷薇前线」',
-  '「萤火虫之森」', '「墨染工房」', '「青鸟小筑」', '「浮光掠影」',
-  '「桃源绘社」', '「织梦亭」', '「拾光社」', '「鹿鸣馆」',
-  // 英文/洋风
-  '「Comet」', '「Blaze」', '「Palette」', '「Stardust」',
-  '「Reverie」', '「Prism」', '「Nocturne」', '「Afterglow」',
-  // 可爱/趣味系
-  '「猫耳朵制作组」', '「凌晨三点半」', '「咸鱼翻身社」', '「修罗场工坊」',
-  '「来一杯拿铁」', '「通宵画稿同盟」', '「救救孩子」', '「就差一笔」',
-];
+import { NPC_CIRCLE_NAMES } from './npc-names.js';
 
 function generateNPCNames(count) {
   const shuffled = [...NPC_CIRCLE_NAMES].sort(() => Math.random() - 0.5);

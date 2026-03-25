@@ -65,7 +65,7 @@ export function getSaveSummary() {
     return {
       turn: s.turn,
       age: getAge(s.turn),
-      stage: getLifeStageLabel(s.turn),
+      stage: getLifeStageLabel(s.turn, s),
       money: s.money,
       reputation: s.reputation?.toFixed(1),
       passion: Math.round(s.passion),

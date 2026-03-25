@@ -567,7 +567,7 @@ function renderDashboard(state) {
 
 function renderPhoneStatus(state, partnerInfo, debuffInfo, recessionInfo, hvpInfo, unemployedInfo) {
   const age = getAge(state.turn);
-  const stageLabel = getLifeStageLabel(state.turn);
+  const stageLabel = getLifeStageLabel(state.turn, state);
   const month = ((state.turn + 6) % 12) + 1;
   const seasonIcon = month >= 3 && month <= 5 ? 'flower-lotus' : month >= 6 && month <= 8 ? 'sun' : month >= 9 && month <= 11 ? 'leaf' : 'snowflake';
 
@@ -858,9 +858,21 @@ export function openMarketApp(state) {
       <div style="text-align:center;padding:8px;background:#F8F9FA;border-radius:8px"><div style="font-size:1rem;font-weight:700">${state.totalLVP}</div><div style="font-size:0.65rem;color:var(--text-muted)">谷子批次</div></div>
     </div>
     <div style="margin-bottom:12px">
-      <div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('package')} 库存</div>
-      <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem;margin-bottom:4px"><span style="width:36px">${ic('book-open-text')}×${state.inventory.hvpStock}</span><div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${hvpPct}%;background:var(--primary);border-radius:5px"></div></div></div>
-      <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem"><span style="width:36px">${ic('key')}×${state.inventory.lvpStock}</span><div style="flex:1;height:10px;background:#E0E0E0;border-radius:5px;overflow:hidden"><div style="height:100%;width:${lvpPct}%;background:var(--secondary);border-radius:5px"></div></div></div>
+      <div style="font-weight:600;font-size:0.8rem;margin-bottom:6px">${ic('package')} 库存 <span style="font-weight:400;color:var(--text-muted)">本×${state.inventory.hvpStock} 谷×${state.inventory.lvpStock}</span></div>
+      ${state.inventory.works.filter(w => w.qty > 0).length > 0
+        ? state.inventory.works.filter(w => w.qty > 0).map(w => {
+            const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
+            const qColor = w.workQuality >= 1.3 ? 'var(--success)' : w.workQuality < 0.8 ? 'var(--danger)' : 'var(--text-muted)';
+            return `<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;padding:4px 0;border-bottom:1px dashed #eee">
+              <span style="flex-shrink:0">${ic(sub.emoji)}</span>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub.name}${w.isCultHit ? ' ★' : ''}</span>
+              <span style="color:${qColor};flex-shrink:0">Q${(w.workQuality || 1).toFixed(1)}</span>
+              <span style="flex-shrink:0;font-weight:600">×${w.qty}</span>
+              <span style="flex-shrink:0;color:var(--primary)">¥${w.price}</span>
+            </div>`;
+          }).join('')
+        : '<div style="font-size:0.72rem;color:var(--text-muted);padding:4px 0">暂无库存</div>'
+      }
     </div>
     ${recent.length > 1 ? `<div style="margin-bottom:12px"><div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('coins')} 近${recent.length}月收入</div><div style="display:flex;gap:12px;font-size:0.65rem;color:var(--text-muted);margin-bottom:2px"><span style="color:var(--primary)">● 月收入</span><span style="color:#F39C12">● 累计</span></div><svg viewBox="-10 -8 220 68" style="width:100%;height:65px"><polyline points="${cumLine}" fill="none" stroke="#F39C12" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/><polyline points="${revPolyline}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>${revLine.map(p => p.isEvent ? `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="var(--primary)" stroke="#fff" stroke-width="1"/>` : `<circle cx="${p.x}" cy="${p.y}" r="2" fill="#81D4FA"/>`).join('')}</svg></div>` : ''}
     ${repRecent.length > 1 ? `<div style="margin-bottom:12px"><div style="font-weight:600;font-size:0.8rem;margin-bottom:4px">${ic('star')} 声誉趋势 <span style="font-weight:400;color:var(--text-muted)">(${state.reputation.toFixed(1)})</span></div><svg viewBox="-5 -5 210 50" style="width:100%;height:50px"><polyline points="${repPoints}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/></svg></div>` : ''}
@@ -1033,7 +1045,7 @@ export const APP_DEFS = [
   { id: 'enzao', name: '嗯造', icon: 'palette', color: '#E8605C', actions: ['hvp', 'lvp', 'reprint'], logo: 'app logos/嗯造.avif' },
   { id: 'xuanfa', name: '次元宣发机', icon: 'megaphone', color: '#E6A817', actions: ['promote_light', 'promote_heavy'], logo: 'app logos/次元宣发机.jpg' },
   { id: 'miaohuashi', name: '喵画师', icon: 'paint-brush', color: '#9B59B6', actions: ['freelance'], logo: 'app logos/喵画师.avif' },
-  { id: 'miaosi', name: '喵丝职聘', icon: 'briefcase', color: '#5B7DB1', actions: ['partTimeJob', 'jobSearch'], logo: 'app logos/喵丝职聘.avif' },
+  { id: 'miaosi', name: '喵丝职聘', icon: 'briefcase', color: '#5B7DB1', actions: ['partTimeJob', 'jobSearch', 'quitForDoujin'], logo: 'app logos/喵丝职聘.avif' },
   { id: 'manzhan', name: '漫展通', icon: 'tent', color: '#E84393', actions: ['attendEvent', 'buyGoods', 'sellGoods'], logo: 'app logos/漫展通.avif' },
   { id: 'ciyuanbi', name: '打破次元墙', icon: 'handshake', color: '#27AE60', actions: ['findPartner', 'hireAssistant', 'sponsorCommunity'], logo: 'app logos/打破次元壁.jpg' },
   { id: 'rest', name: '休息', icon: 'coffee', color: '#8B6914', actions: ['rest'], special: true, logo: 'app logos/休息.avif' },
@@ -1783,40 +1795,59 @@ export function renderEventSelector(state, onSelect, onCancel) {
 export function renderReprintSelector(state, onSelect, onCancel) {
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
-  const hasHVP = state.totalHVP > 0;
-  const hasLVP = state.totalLVP > 0;
+
+  // Collect all unique works that have ever been created (including sold-out ones from history)
+  // For reprint, we show works currently in inventory + works that are sold out (qty=0 but existed)
+  const allWorks = state.inventory.works || [];
+  // Also include sold-out works by checking all past creations via totalHVP/totalLVP
+  // For simplicity, show works array (includes qty=0 items before cleanup) + a generic option for each type
+  const worksWithStock = allWorks.filter(w => w.qty >= 0); // all works including sold-out
+  const workItems = worksWithStock.map(w => {
+    const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
+    const isHVP = w.type === 'hvp';
+    const reprintQty = isHVP ? 30 : 20;
+    const unitCost = isHVP ? 40 : 6;
+    const totalCost = reprintQty * unitCost;
+    return `<div class="app-action-card" data-work-id="${w.id}" style="cursor:pointer">
+      <div class="app-action-icon" style="color:${isHVP ? 'var(--primary)' : 'var(--secondary)'}">${ic(sub.emoji, '1.1rem')}</div>
+      <div class="app-action-body">
+        <div class="app-action-name">${sub.name}${w.isCultHit ? ' ★' : ''} <span style="font-weight:400;color:var(--text-muted);font-size:0.7rem">¥${w.price}/个</span></div>
+        <div class="app-action-cost">追印${reprintQty}${isHVP ? '本' : '个'} · 成本¥${totalCost} · 现有库存${w.qty}</div>
+      </div>
+    </div>`;
+  }).join('');
 
   overlay.innerHTML = `
-    <div class="event-card" style="max-width:360px">
-      <div class="event-emoji">${ic('printer')}</div>
-      <div class="event-title">追加印刷</div>
-      <div class="event-desc" style="margin-bottom:8px">选择要追印的类型</div>
-      <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">${ic('package')} 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
-      <div class="price-selector">
-        ${hasHVP ? `<div class="price-btn" data-type="hvp">
-          <div class="price-label">${ic('book-open-text')} 同人本</div>
-          <div class="price-value">30本 ¥1,200</div>
-          <div class="price-desc">¥40/本 定价¥${state.inventory.hvpPrice}</div>
-        </div>` : ''}
-        ${hasLVP ? `<div class="price-btn" data-type="lvp">
-          <div class="price-label">${ic('key')} 谷子</div>
-          <div class="price-value">20个 ¥120</div>
-          <div class="price-desc">¥6/个 定价¥${state.inventory.lvpPrice}</div>
-        </div>` : ''}
+    <div class="event-card" style="max-width:380px;text-align:left">
+      <div style="text-align:center;margin-bottom:8px"><span style="font-size:1.3rem">${ic('printer')}</span></div>
+      <div style="text-align:center;font-weight:700;font-size:1rem;margin-bottom:4px">追加印刷</div>
+      <div style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-bottom:12px">选择要追印的作品</div>
+      <div style="max-height:45vh;overflow-y:auto">
+        ${workItems || '<div style="text-align:center;color:var(--text-muted);padding:12px">没有可追印的作品</div>'}
       </div>
-      <div class="tip-box" style="text-align:left;margin-bottom:0">
-        <div class="tip-label">追印经济学</div>
-        <div class="tip-text">追印单价比首印便宜（印版/模具已有）。关键是预判展会需求——库存太多积压资金，太少则展会售罄错失收入。</div>
-      </div>
-      <button class="btn btn-block btn-cancel-overlay" style="margin-top:12px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+      <button class="btn btn-primary btn-block" id="reprint-confirm" style="margin-top:12px" disabled>确认追印</button>
+      <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
   `;
   document.body.appendChild(overlay);
-  overlay.querySelectorAll('.price-btn[data-type]').forEach(btn => {
+  let selectedId = null;
+  const confirmBtn = overlay.querySelector('#reprint-confirm');
+  overlay.querySelectorAll('.app-action-card[data-work-id]').forEach(btn => {
     btn.addEventListener('click', () => {
-      overlay.remove();
-      onSelect(btn.dataset.type);
+      // Deselect previous
+      overlay.querySelectorAll('.app-action-card[data-work-id]').forEach(b => {
+        b.style.borderColor = 'var(--border)';
+        b.style.background = 'var(--bg-card)';
+      });
+      // Select this one
+      btn.style.borderColor = 'var(--primary)';
+      btn.style.background = '#FFF5F5';
+      selectedId = parseInt(btn.dataset.workId);
+      confirmBtn.disabled = false;
     });
+  });
+  confirmBtn.addEventListener('click', () => {
+    if (selectedId != null) { overlay.remove(); onSelect(selectedId); }
   });
   overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
     overlay.remove();

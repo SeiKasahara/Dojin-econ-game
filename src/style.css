@@ -1492,11 +1492,12 @@ html, body {
   gap: 12px;
   padding: 14px;
   background: var(--bg-card);
+  border: 2px solid transparent;
   border-radius: var(--radius);
   margin-bottom: 10px;
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: transform 0.15s;
+  transition: transform 0.15s, border-color 0.2s, background 0.2s;
   -webkit-user-select: none;
   user-select: none;
 }

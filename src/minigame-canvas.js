@@ -322,14 +322,24 @@ export function renderFrame(ctx, mg, canvas) {
 
   // --- Player booth ---
   drawBooth(ctx, mg.boothX, mg.boothY, mg.boothW, mg.boothH, '#FFD6D6', null);
-  // Works display
-  ctx.fillStyle = '#3D2B1F';
-  ctx.font = '9px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(`本${mg.playerWorks.hvp} 谷${mg.playerWorks.lvp}`, mg.boothX + mg.boothW / 2, mg.boothY + mg.boothH + 12);
-
   // Player pixel sprite at booth
   drawSprite(ctx, 'player', mg.boothX + mg.boothW / 2, mg.boothY + mg.boothH - 12, 60);
+
+  // Works display — above booth as a label badge
+  const stockText = `本×${mg.playerWorks.hvp}  谷×${mg.playerWorks.lvp}`;
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  const stockW = ctx.measureText(stockText).width + 12;
+  const stockX = mg.boothX + mg.boothW / 2 - stockW / 2;
+  const stockY = mg.boothY - 10;
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, stockX, stockY, stockW, 16, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#3D2B1F';
+  ctx.fillText(stockText, mg.boothX + mg.boothW / 2, stockY + 12);
 
   // --- Customers ---
   for (const c of mg.customers) {
