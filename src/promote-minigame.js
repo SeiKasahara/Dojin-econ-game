@@ -280,10 +280,20 @@ function addToast(state, text, positive) {
 
 // === Trending Topic ===
 function spawnTrending(state) {
-  const category = pick(ALL_CATEGORIES);
+  // 50% chance: pick from player's own tags (guaranteed match if they ride it)
+  // 50% chance: fully random (may or may not match)
+  const playerTags = [...state.playerSubtypes, ...state.playerStyleTags];
+  let category;
+  if (playerTags.length > 0 && Math.random() < 0.5) {
+    category = pick(playerTags);
+  } else {
+    category = pick(ALL_CATEGORIES);
+  }
+  const matched = state.playerSubtypes.has(category) || state.playerStyleTags.has(category);
   state.trendingTopic = {
     category,
     displayName: CATEGORY_DISPLAY[category] || category,
+    matched, // pre-compute for hint display (player still needs to recognize it)
     remainingMs: TREND_DURATION,
   };
   state.trendsSpawned++;
@@ -512,7 +522,10 @@ function updateDOM(state, dom, timestamp) {
     const t = state.trendingTopic;
     const tSec = Math.ceil(t.remainingMs / 1000);
     dom.trendBanner.style.display = '';
-    dom.trendBanner.innerHTML = `${ic('fire', '0.85rem')} 热搜 <b>#${t.displayName}</b> <span class="promo-trend-timer">${tSec}s</span>`;
+    const matchHint = t.matched
+      ? `<span style="color:var(--success);font-size:0.65rem;margin-left:4px">${ic('check-circle', '0.65rem')} 与你的作品相关</span>`
+      : `<span style="color:var(--text-muted);font-size:0.65rem;margin-left:4px">${ic('warning', '0.65rem')} 和你无关</span>`;
+    dom.trendBanner.innerHTML = `${ic('fire', '0.85rem')} 热搜 <b>#${t.displayName}</b> ${matchHint} <span class="promo-trend-timer">${tSec}s</span>`;
   } else {
     dom.trendBanner.style.display = 'none';
   }
