@@ -138,7 +138,7 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
         <div style="font-size:1.5rem;margin-bottom:8px">${ic('warning', '1.5rem')}</div>
         <div style="font-weight:700;margin-bottom:8px">确定跳过小游戏？</div>
         <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:16px;line-height:1.5">
-          跳过后将按当前已售出 <b>${mg.sold}件</b> 的成绩结算。<br/>剩余时间的销售机会将全部放弃。
+          跳过后将按当前已售出 <b>${mg.score.sold}件</b> 的成绩结算。<br/>剩余时间的销售机会将全部放弃。
         </div>
         <button class="btn btn-block" id="mg-skip-confirm" style="background:#FFF0F0;border:1px solid var(--danger);color:var(--danger);margin-bottom:8px">确认跳过</button>
         <button class="btn btn-block" id="mg-skip-cancel" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">继续摆摊</button>

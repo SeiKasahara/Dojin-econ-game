@@ -1253,6 +1253,15 @@ export function executeTurn(state, actionId) {
     if (fatigueMult < 0.8) {
       result.deltas.push({ icon: 'smiley-sad', label: '长期疲惫', value: `恢复效率${Math.round(fatigueMult * 100)}%`, positive: false });
     }
+    // Estimate total passion drain this turn to warn player
+    let estDrain = getRealityDrain(state.turn);
+    const idleM = state.turn - state.lastCreativeTurn;
+    if (idleM >= 3) estDrain += Math.min(8, Math.floor((idleM - 2) * 1.5));
+    if (state.money < 0) estDrain += Math.min(10, Math.floor(Math.abs(state.money) / 500) * 2);
+    if (restore < estDrain) {
+      result.deltas.push({ icon: 'warning', label: '休息无法抵消消耗', value: `恢复${restore} < 预计消耗${Math.round(estDrain)}`, positive: false });
+      result.deltas.push({ icon: 'lightbulb', label: '如果还有空的话...试试接稿、买谷子、参展?', value: '', positive: false });
+    }
     const decay = state.reputation * 0.02;
     state.reputation = Math.max(0, state.reputation - decay);
     if (decay > 0.01) result.deltas.push({ icon: 'star', label: '声誉自然衰减', value: `-${decay.toFixed(2)}`, positive: false });
@@ -1955,27 +1964,19 @@ export function executeTurn(state, actionId) {
     result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。真正的同人创作者都在学习的供应链管理。' };
 
   } else if (action.type === 'buyGoods') {
-    // === BUY GOODS AS CONSUMER: spend money for passion ===
-    const cost = 200;
+    // === BUY GOODS AS CONSUMER: cost scales with wealth, passion stays constant ===
+    const m = Math.max(0, state.money);
+    const cost = m < 3000 ? 200 : m < 6000 ? 600 : m < 9000 ? 1500 : m < 15000 ? 3000 : 5000;
     state.money -= cost;
-    result.deltas.push({ icon: 'coins', label: '购买谷子', value: `-¥${cost}`, positive: false });
+    result.deltas.push({ icon: 'coins', label: `购买谷子${cost > 200 ? '(眼光变高了)' : ''}`, value: `-¥${cost}`, positive: false });
 
-    // Passion gain diminishes with: years in hobby + idle months without creating
-    const yearsIn = state.turn / 12;
-    const yearDecay = Math.max(0.3, 1 - yearsIn * 0.08);
-    // If not creating, buying gives less joy — "只买不做" fatigue
-    const idleMonths = state.turn - state.lastCreativeTurn;
-    const idleDecay = idleMonths >= 3 ? Math.max(0.3, 1 - (idleMonths - 2) * 0.1) : 1.0;
-    const efficiency = yearDecay * idleDecay;
-    const passionGain = Math.max(2, Math.round(12 * efficiency));
+    // Fixed passion gain — buying goods always feels good
+    const passionGain = 12;
     state.passion = Math.min(100, state.passion + passionGain);
     result.deltas.push({ icon: 'heart', label: '买到心仪的谷子！', value: `热情+${passionGain}`, positive: true });
 
-    if (yearDecay < 0.8 || idleDecay < 1) {
-      const reasons = [];
-      if (yearDecay < 0.8) reasons.push('年限递减');
-      if (idleDecay < 1) reasons.push(`已${idleMonths}月未创作`);
-      result.deltas.push({ icon: 'trend-down', label: reasons.join('+'), value: `效率${Math.round(efficiency * 100)}%`, positive: false });
+    if (cost > 200) {
+      result.deltas.push({ icon: 'sparkle', label: '钱多了品味也上来了', value: `花费¥${cost}`, positive: false });
     }
 
     // Small info disclosure gain (you're engaging with the community)
@@ -1986,7 +1987,7 @@ export function executeTurn(state, actionId) {
     state.goodsCollection++;
     result.deltas.push({ icon: 'package', label: '加入收藏', value: `收藏品${state.goodsCollection}件`, positive: true });
 
-    result.tip = { label: '消费者身份 (双重角色)', text: '同人创作者同时也是消费者——买别人的谷子是维持热情的重要方式。但随着入坑年限增加，新鲜感递减(边际效用递减)。购入的谷子日后也可以在二手市场出售回血。' };
+    result.tip = { label: '消费者身份 (双重角色)', text: '同人创作者同时也是消费者——买别人的谷子是维持热情的重要方式。钱多了之后眼光也会变高，花费也随之增加。购入的谷子日后可以在二手市场出售回血。' };
 
   } else if (action.type === 'sellGoods') {
     // === SELL COLLECTION TO SECONDHAND MARKET ===
