@@ -253,12 +253,10 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
       : `<div style="width:40px;height:40px;border-radius:50%;background:#888;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem">?</div>`;
 
     if (dialog.resolved) {
-      // Show reply
+      // Show reply — always customer's avatar (it's their reaction)
       dialogOverlay.innerHTML = `
         <div style="background:#fff;border-radius:12px;padding:10px 12px;display:flex;gap:8px;align-items:flex-start">
-          ${dialog.positive
-            ? '<img src="player/player.png" style="width:36px;height:36px;object-fit:contain;border-radius:50%;background:#FFE8E8;border:2px solid #fff;flex-shrink:0">'
-            : spriteHtml.replace('style="', 'style="flex-shrink:0;')}
+          ${spriteHtml.replace('style="', 'style="flex-shrink:0;')}
           <div style="font-size:0.78rem;line-height:1.5;color:${dialog.positive ? 'var(--success)' : 'var(--danger)'}">${dialog.reply}</div>
         </div>`;
     } else {

@@ -75,9 +75,9 @@ export const RANDOM_EVENTS = [
   {
     id: 'collapse', emoji: 'warning-circle', title: '塌方事件！',
     desc: '圈内爆发争吵，有创作者被挂，社群气氛紧张...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(15 * m)} 声誉-${Math.round(20 * m)}%`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(15 * m); s.reputation *= (1 - 0.2 * m); },
-    tip: '声誉是风险资产：积累越多，塌方损失的绝对值越大。',
+    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(15 * m)}`; }, effectClass: 'negative',
+    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(15 * m); },
+    tip: '塌方影响的是社群氛围和你的心态，但你的作品和口碑还在。保持冷静，风波总会过去。',
     weight: 8, when: (s) => s.reputation > 0.3, maxTotal: Infinity,
   },
   {
@@ -230,10 +230,10 @@ export const RANDOM_EVENTS = [
   },
   {
     id: 'harsh_review', emoji: 'smiley-angry', title: '遭遇恶评',
-    desc: '有人公开发了一篇针对你的尖锐批评，言辞很伤人...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)}`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); },
-    tip: '心理韧性低的人对负面反馈更敏感。',
+    desc: '有人公开发了一篇针对你的尖锐批评，言辞很伤人，还在圈子里传开了...',
+    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)} 声誉-${Math.round(15 * m)}%`; }, effectClass: 'negative',
+    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); s.reputation *= (1 - 0.15 * m); },
+    tip: '恶评针对的是你个人，会直接损害声誉。心理韧性低的人受影响更大。和圈内塌方不同——塌方只伤心态，恶评伤口碑。',
     weight: 5, when: (s) => s.reputation > 0.5 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
