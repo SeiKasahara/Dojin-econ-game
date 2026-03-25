@@ -386,8 +386,8 @@ const TUTORIAL_STEPS = [
   { target: '.app-icon[data-app="ciyuanbi"]', title: '打破次元墙', body: `<b>人脉与协作</b>中心：<br/>· <b>寻找搭档</b>：从人脉池中选人合作，搭档能加速创作、提升销量<br/>· <b>外包助手</b>：花钱加速同人本进度<br/>· <b>赞助社区</b>：花钱提升声誉和曝光，同时认识新朋友<br/><br/>人脉通过<b>展会交换名片、赞助社区、线上宣发</b>积累。关系越深，搭档越靠谱！` },
   { target: '.app-icon[data-app="nyaner"]', title: 'Nyaner', body: '查看<b>圈内动态</b>（创作者们在干什么）和<b>今日新闻</b>（宏观经济、社会热点、文化现象）。同人市场数据请去「同人市场观察」App查看。' },
   { target: '.app-icon[data-app="market"]', title: '同人市场观察', body: '查看详细的<b>市场数据</b>（社群人数、多样性、IP热度）和你的<b>创作者数据面板</b>（收入、销量、趋势图）。' },
-  { target: '.app-icon[data-app="message"]', title: '短信', body: `<b>和朋友聊天：</b><br/>· <b>小柚</b>（闺蜜）：每月聊3条，关心你的近况，给生活建议<br/>· <b>傲娇女神</b>（织梦）：当宏观经济事件发生时上线，用傲娇的方式解释同人经济学原理。抓住机会请教！<br/><br/>此外，如果有出版社看上你的作品，也会通过短信联系你。` },
-  { target: '.phone-stats-panel', title: '叙事信息', body: '下拉展开可以查看<b>当前状态提示和叙事文本</b>。包括人生阶段描述、创作建议、状态徽章（搭档、HVP进度、经济下行等）。', expand: '#phone-stats-panel' },
+  { target: '.app-icon[data-app="message"]', title: '短信', body: `<b>和朋友聊天：</b><br/>· <b>小柚</b>（闺蜜）：关心你的近况，给生活建议<br/>· <b>傲娇女神</b>（织梦）：当宏观经济事件发生时上线，用傲娇的方式解释同人经济学原理。抓住机会请教！<br/><br/>此外，如果有出版社看上你的作品，也会通过短信联系你。` },
+  { target: '.phone-stats-panel', title: '叙事信息', body: '下拉展开可以查看<b>当前状态提示和叙事文本</b>。包括人生阶段描述、创作建议、状态徽章（搭档、同人本进度、经济下行等）。', expand: '#phone-stats-panel' },
   { target: null, title: '开始你的创作之旅', body: `<div style="text-align:left;line-height:1.8">· 先<b>创作</b>积累库存，再<b>宣发</b>让人知道你<br/>· 参加<b>同人展</b>卖出去，库存也有通贩收入<br/>· 关注<b>资金</b>，印刷和生活都要花钱<br/>· 上班后闲暇骤降，要<b>取舍</b><br/>· 热情低于30要及时<b>休息</b>！<br/>· 通过展会和社区活动积累<b>人脉</b>，找到好搭档</div>` },
 ];
 
