@@ -585,6 +585,12 @@ export function getActionDisplay(actionId, state) {
     const sellPrice = Math.round(120 + (state.official?.secondHandPressure?.lvp || 0) * -80);
     return { ...base, costLabel: `收藏${state.goodsCollection}件 预估¥${Math.max(50, sellPrice)}/件 热情-3` };
   }
+  if (actionId === 'quitForDoujin') {
+    if (state.unemployed) {
+      return { ...base, name: '全职搞同人', costLabel: '不找工作了，把失业变成机遇！' };
+    }
+    return base;
+  }
   if (actionId === 'hireAssistant') {
     if (!state.hvpProject) return { ...base, costLabel: '需要正在进行的同人本项目' };
     const used = state.hvpProject._assistantCount || 0;
@@ -619,10 +625,16 @@ export function canPerformAction(state, actionId) {
   // (the real constraint is passion budget, not action locks)
   // jobSearch: when unemployed OR full-time doujin (wanting to go back)
   if (actionId === 'jobSearch' && !state.unemployed && !state.fullTimeDoujin) return false;
-  // quitForDoujin: work stage, employed, rep≥3, money≥25000, 5+ events
+  // quitForDoujin: work stage, not already full-time doujin, rep≥3, money≥25000, 5+ events
+  // Unemployed players can also go full-time doujin (they already have no job to quit)
   if (actionId === 'quitForDoujin') {
-    if (getLifeStage(state.turn) !== 'work' || state.unemployed || state.fullTimeDoujin) return false;
-    if (state.reputation < 3 || state.money < 25000 || (state.eventLog?.length || 0) < 5) return false;
+    if (getLifeStage(state.turn) !== 'work' || state.fullTimeDoujin) return false;
+    if (state.unemployed) {
+      // Unemployed: lower threshold — no job to lose, but still need financial viability
+      if (state.reputation < 2 || state.money < 15000 || (state.eventLog?.length || 0) < 3) return false;
+    } else {
+      if (state.reputation < 3 || state.money < 25000 || (state.eventLog?.length || 0) < 5) return false;
+    }
   }
   // partTimeJob: only students or unemployed
   if (actionId === 'partTimeJob') {
@@ -1907,18 +1919,28 @@ export function executeTurn(state, actionId) {
   // --- Commercial transition: player accepts publisher offer ---
   // === Quit job for full-time doujin ===
   if (action.type === 'quitForDoujin') {
+    const wasUnemployed = state.unemployed;
     state.fullTimeDoujin = true;
+    state.unemployed = false;
     state.doujinMonths = 0;
     state.monthlyIncome = 0;
+    state.jobSearchTurns = 0;
     state.doujinWorkYearReset = state.turn; // mark for salary reset if returning
     // Clear work-related debuffs (promotion, commute, 996 etc.)
     state.timeDebuffs = state.timeDebuffs.filter(d => !['promotion', '996'].includes(d.id) && !d.id.startsWith('commute_') && !d.id.startsWith('social_') && !d.id.startsWith('burnout_'));
     state.time = Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)));
-    state.passion = Math.min(100, state.passion + 10);
-    result.deltas.push({ icon: 'sparkle', label: '辞职了！全身心投入同人创作！', value: '闲暇→7h 月收入→0', positive: true });
-    result.deltas.push({ icon: 'heart', label: '自由的感觉真好', value: '热情+10', positive: true });
+    state.passion = Math.min(100, state.passion + (wasUnemployed ? 15 : 10));
+    if (wasUnemployed) {
+      result.deltas.push({ icon: 'sparkle', label: '不找工作了！全职搞同人！', value: '闲暇→7h', positive: true });
+      result.deltas.push({ icon: 'heart', label: '把失业变成机遇', value: `热情+15`, positive: true });
+    } else {
+      result.deltas.push({ icon: 'sparkle', label: '辞职了！全身心投入同人创作！', value: '闲暇→7h 月收入→0', positive: true });
+      result.deltas.push({ icon: 'heart', label: '自由的感觉真好', value: '热情+10', positive: true });
+    }
     result.deltas.push({ icon: 'warning', label: '每月生活费¥800自动扣除', value: '没有固定收入了', positive: false });
-    result.tip = { label: '全职同人创作者', text: '你选择了最勇敢的道路——辞掉工作，全身心投入同人创作。时间自由了，但收入完全靠自己。存款就是你的安全线，低于¥5000时焦虑会开始侵蚀热情。如果撑不住，随时可以回去找工作——但薪资要从头开始。' };
+    result.tip = wasUnemployed
+      ? { label: '化危为机', text: '失业不一定是坏事——你已经有了足够的积蓄和声誉，不如把这当作转型的契机。全职同人创作，时间完全自由，但一切靠自己。存款低于¥5000时焦虑会侵蚀热情。撑不住随时可以重新找工作。' }
+      : { label: '全职同人创作者', text: '你选择了最勇敢的道路——辞掉工作，全身心投入同人创作。时间自由了，但收入完全靠自己。存款就是你的安全线，低于¥5000时焦虑会开始侵蚀热情。如果撑不住，随时可以回去找工作——但薪资要从头开始。' };
   }
 
   if (action.type === 'goCommercial') {
