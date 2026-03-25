@@ -99,8 +99,10 @@ function handleAction(actionId) {
   // === Attend Event: event selection → mode → mini-game/consign → proceed ===
   if (actionId === 'attendEvent') {
     const processEvent = (chosenEvent) => {
-      // Roll event condition: cancelled / normal / popular (recession increases cancel chance)
-      const cancelChance = state.recessionTurnsLeft > 0 ? 0.15 : 0.05;
+      // Roll event condition: cancelled / normal / popular
+      // Bigger events are more organized → lower cancel chance
+      const baseCancelChance = chosenEvent.size === 'mega' ? 0.01 : chosenEvent.size === 'big' ? 0.03 : 0.05;
+      const cancelChance = state.recessionTurnsLeft > 0 ? baseCancelChance * 3 : baseCancelChance;
       const condRoll = Math.random();
       if (condRoll < cancelChance) {
         chosenEvent.condition = 'cancelled';

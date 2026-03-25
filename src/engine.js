@@ -1160,6 +1160,13 @@ export function executeTurn(state, actionId) {
     const evt = state.attendingEvent || (state.availableEvents && state.availableEvents[0]);
     if (evt) {
 
+      // Read and consume mode/minigame state BEFORE branching (shared by cancelled + normal paths)
+      const mode = state._eventMode || 'attend';
+      state._eventMode = null;
+      const isAttend = mode === 'attend';
+      const mg = isAttend ? state._minigameResult : null;
+      state._minigameResult = null;
+
       // --- Event cancelled (流展) ---
       if (evt.condition === 'cancelled') {
         if (isAttend) {
@@ -1182,12 +1189,6 @@ export function executeTurn(state, actionId) {
         result.tip = { label: '流展风险', text: '展会因故取消是同人创作者面临的真实风险。路费变成沉没成本，无法追回。经济学告诉我们：不要因为已经花了路费就做出非理性决策——关键是接下来怎么安排。' };
         // Skip all selling logic below
       } else {
-
-      const mode = state._eventMode || 'attend'; // 'attend' = 亲参, 'consign' = 寄售
-      state._eventMode = null;
-      const isAttend = mode === 'attend';
-      const mg = isAttend ? state._minigameResult : null;
-      state._minigameResult = null;
 
       // Lodging + meals + booth fee for 亲参 (scales with travel distance)
       // Local: minimal, distant: 2 nights hotel + meals + booth
