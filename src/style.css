@@ -811,6 +811,126 @@ html, body {
 
 .mg-chat-btn { animation: pulse 1.5s infinite; }
 
+/* === Schedule Card (月度日程) === */
+.schedule-card {
+  margin: 8px 16px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #F8F4EE 0%, #FFF8F0 100%);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--secondary);
+}
+.schedule-header .schedule-remaining {
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+.schedule-body { padding: 6px 10px; }
+.schedule-timeline { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.schedule-track {
+  display: flex;
+  gap: 3px;
+  min-height: 38px;
+  align-items: stretch;
+}
+.schedule-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 6px;
+  background: var(--primary-light);
+  color: #fff;
+  border-radius: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+.schedule-block-name {
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.schedule-block-cost {
+  font-size: 0.58rem;
+  opacity: 0.8;
+}
+.schedule-block-free {
+  background: var(--border);
+  color: var(--text-muted);
+}
+.schedule-tooltip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--secondary);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+  animation: fadeIn 0.15s ease;
+}
+.schedule-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0 0;
+}
+.schedule-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-light);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+.schedule-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.schedule-footer { padding: 6px 10px 10px; }
+.schedule-end-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text-light);
+  transition: background 0.15s, border-color 0.15s;
+}
+.schedule-end-btn:active { transform: scale(0.98); }
+.schedule-end-btn.urgent {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
 /* === Promote Mini-Game (Social Media) === */
 .promo-titlebar {
   display: flex;

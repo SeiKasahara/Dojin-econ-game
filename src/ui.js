@@ -8,6 +8,7 @@ import { createChartCanvas, drawSupplyDemand } from './chart.js';
 import { getMarketNarratives, getPriceTiers, calculatePricedSales, getMarketAvgPrice, IP_TYPES } from './market.js';
 import { getOfficialNarratives } from './official.js';
 import { getAdvancedNarratives } from './advanced.js';
+import { generateWorldNews } from './world-news.js';
 import { toggleMute, isMuted } from './bgm.js';
 import { ic } from './icons.js';
 import { hasSave, getSaveSummary } from './save.js';
@@ -247,6 +248,47 @@ export function renderGame(state, onAction, onRetire) {
     ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger);font-weight:700">${ic('warning-circle')} 失业中</span>`
     : '';
 
+  // Month schedule card
+  const timeRemaining = Math.max(0, state.time - (state.monthTimeSpent || 0));
+  const actions = state.monthActions || [];
+  const scheduleCard = `
+    <div class="schedule-card">
+      <div class="schedule-header">
+        <span>${ic('calendar-blank')} 本月日程</span>
+        <span class="schedule-remaining" style="color:${timeRemaining <= 0 ? 'var(--danger)' : timeRemaining <= 2 ? 'var(--warning)' : 'var(--text-light)'}">
+          ${timeRemaining <= 0 ? `${ic('warning')} 0/${state.time}天` : `剩余 ${timeRemaining}/${state.time}天`}
+        </span>
+      </div>
+      <div class="schedule-body">
+        ${(() => {
+          const timedActions = actions.filter(a => a.timeCost > 0);
+          const freeActions = actions.filter(a => a.timeCost === 0);
+          if (actions.length === 0) return `<div class="schedule-empty">还没有安排，选择一个行动开始吧</div>`;
+          let html = '';
+          if (timedActions.length > 0 || timeRemaining > 0) {
+            html += `<div class="schedule-timeline"><div class="schedule-track">
+              ${timedActions.map(a => `<div class="schedule-block" style="flex:${a.timeCost} 0 0" title="${ACTIONS[a.actionId]?.name || a.actionId} ${a.timeCost}天">
+                <span class="schedule-block-name">${ACTIONS[a.actionId]?.name || a.actionId}</span>
+                <span class="schedule-block-cost">${a.timeCost}天</span>
+              </div>`).join('')}
+              ${timeRemaining > 0 ? `<div class="schedule-block schedule-block-free" style="flex:${timeRemaining} 0 0"><span class="schedule-block-name">空闲</span></div>` : ''}
+            </div></div>`;
+          }
+          if (freeActions.length > 0) {
+            html += `<div class="schedule-tags">${freeActions.map(a =>
+              `<span class="schedule-tag">${ic('check', '0.6rem')} ${ACTIONS[a.actionId]?.name || a.actionId}</span>`
+            ).join('')}</div>`;
+          }
+          return html;
+        })()}
+      </div>
+      <div class="schedule-footer">
+        <button class="schedule-end-btn ${timeRemaining <= 0 ? 'urgent' : ''}" id="btn-end-month">
+          ${ic('calendar-check')} ${timeRemaining <= 0 ? '闲暇耗尽 · 结束本月' : actions.length > 0 ? `结束本月（剩余${timeRemaining}天）` : '结束本月（跳过）'}
+        </button>
+      </div>
+    </div>`;
+
   app().innerHTML = `
     <div class="screen screen-game">
       <div class="game-header">
@@ -258,15 +300,32 @@ export function renderGame(state, onAction, onRetire) {
         </span>
       </div>
 
-      ${renderPhoneStatus(state, partnerInfo, debuffInfo, recessionInfo, hvpInfo, unemployedInfo)}
+      ${renderPhoneNarrative(state, partnerInfo, debuffInfo, recessionInfo, hvpInfo, unemployedInfo)}
 
       <div class="game-content">
-        ${(() => { const s = buildNarrativeSections(state); return renderAlertBanner(s.alerts) + renderSpotlightCard(s.spotlight) + renderPersonalNarrative(getNarrativeTitle(state), s.personal); })()}
-
+        ${renderStatsBar(state)}
+        ${scheduleCard}
         ${renderAppDesktop(state)}
       </div>
     </div>
   `;
+
+  // End month button
+  document.getElementById('btn-end-month')?.addEventListener('click', () => onAction('endMonth'));
+
+  // Schedule block tap tooltip (mobile: title attr doesn't show)
+  document.querySelectorAll('.schedule-block[title]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.schedule-tooltip').forEach(t => t.remove());
+      const tip = document.createElement('div');
+      tip.className = 'schedule-tooltip';
+      tip.textContent = el.getAttribute('title');
+      el.style.position = 'relative';
+      el.appendChild(tip);
+      setTimeout(() => tip.remove(), 2000);
+    });
+  });
 
   // App icon clicks
   document.querySelectorAll('.app-icon:not(.disabled)').forEach(el => {
@@ -317,15 +376,18 @@ export function renderGame(state, onAction, onRetire) {
 
 // === Tutorial Overlay ===
 const TUTORIAL_STEPS = [
-  { target: '.phone-clock', title: '时间显示', body: '这是你的年龄和当前人生阶段。游戏从18岁高考后暑假开始，经历大学和工作。<b>每回合 = 一个月</b>。' },
-  { target: '.phone-stats-panel', title: '属性面板', body: `下拉查看四大核心属性：<br/><b>${ic('heart')} 热情</b> 生命值，归零=Game Over<br/><b>${ic('star')} 声誉</b> 决定市场份额和销量<br/><b>${ic('timer')} 闲暇</b> 每月可用时间<br/><b>${ic('megaphone')} 信息</b> 买家认知度，每月衰减`, expand: '#phone-stats-panel' },
-  { target: '.money-badge', title: '同人资金', body: '这是你用于<b>同人创作和消费</b>的资金，不是总储蓄。印刷、参展路费、购买谷子等都从这里扣。打工、接稿、售卖收入会增加。<b>变为负数时焦虑会消耗热情</b>。' },
-  { target: '.app-icon[data-app="enzao"]', title: '嗯造', body: '创作同人本（多月项目）、制作谷子（单月完成）、追加印刷。<b>创作是你的核心活动</b>，完成后作品入库等待售卖。' },
-  { target: '.app-icon[data-app="xuanfa"]', title: '次元宣发机', body: '提高信息透明度，让更多潜在买家看到你的作品。<b>宣发后要尽快制作和售卖</b>，因为信息每月都在衰减！' },
-  { target: '.app-icon[data-app="manzhan"]', title: '漫展通', body: '参加同人展是<b>销售的黄金机会</b>，面对面交易能大幅提升销量。也可以在这里购买或出售谷子。' },
-  { target: '.app-icon[data-app="nyaner"]', title: 'Nyaner', body: '查看圈内创作者动态和世界动态（市场竞争、IP热度、宏观经济等），掌握市场环境变化。' },
+  { target: '.phone-clock', title: '时间显示', body: '这是你的年龄和当前人生阶段。游戏从18岁高考后暑假开始，经历大学和工作。' },
+  { target: '.phone-stats-grid', title: '核心属性', body: `四大核心数值一目了然：<br/><b>${ic('heart')} 热情</b> 生命值，归零=Game Over<br/><b>${ic('star')} 声誉</b> 决定市场份额和销量<br/><b>${ic('timer')} 闲暇</b> 每月可用天数，行动消耗天数<br/><b>${ic('megaphone')} 信息</b> 买家认知度，每月衰减` },
+  { target: '.schedule-card', title: '月度日程', body: '每个月你可以执行<b>多个行动</b>，每个行动消耗若干天闲暇。时间轴会显示本月安排。<b>闲暇用完或手动点击「结束本月」</b>进入月末结算。剩余天数会自动转为休息恢复。' },
+  { target: '.money-badge', title: '同人资金', body: '用于<b>同人创作和消费</b>的资金。印刷、参展路费、购买谷子等都从这里扣。打工、接稿、售卖收入会增加。<b>变为负数时焦虑会消耗热情</b>。' },
+  { target: '.app-icon[data-app="enzao"]', title: '嗯造', body: '创作同人本（多月项目）、制作谷子（单月完成）、追加印刷。<b>创作是你的核心活动</b>，完成后作品入库。同人本和谷子每月只能各做一次。' },
+  { target: '.app-icon[data-app="xuanfa"]', title: '次元宣发机', body: '提高信息透明度，让更多潜在买家看到你的作品。<b>全力宣发</b>会进入社媒运营小游戏！信息每月衰减，要持续维护。' },
+  { target: '.app-icon[data-app="manzhan"]', title: '漫展通', body: '参加同人展是<b>销售的黄金机会</b>，亲参会进入摊位小游戏。展会会消耗当月全部剩余闲暇。也可以在这里购买或出售谷子。' },
+  { target: '.app-icon[data-app="ciyuanbi"]', title: '打破次元墙', body: `<b>人脉与协作</b>中心：<br/>· <b>寻找搭档</b>：从人脉池中选人合作，搭档能加速创作、提升销量<br/>· <b>外包助手</b>：花钱加速同人本进度<br/>· <b>赞助社区</b>：花钱提升声誉和曝光，同时认识新朋友<br/><br/>人脉通过<b>展会交换名片、赞助社区、线上宣发</b>积累。关系越深，搭档越靠谱！` },
+  { target: '.app-icon[data-app="nyaner"]', title: 'Nyaner', body: '查看<b>圈内动态</b>（创作者们在干什么）和<b>今日新闻</b>（宏观经济、社会热点、文化现象）。同人市场数据请去「同人市场观察」App查看。' },
   { target: '.app-icon[data-app="market"]', title: '同人市场观察', body: '查看详细的<b>市场数据</b>（社群人数、多样性、IP热度）和你的<b>创作者数据面板</b>（收入、销量、趋势图）。' },
-  { target: null, title: '开始你的创作之旅', body: `<div style="text-align:left;line-height:1.8">· 先<b>创作</b>积累库存，再<b>宣发</b>让人知道你<br/>· 参加<b>同人展</b>卖出去<br/>· 关注<b>资金</b>，印刷和生活都要花钱<br/>· 上班后闲暇骤降，要<b>取舍</b><br/>· 热情低于30要及时<b>休息</b>！</div>` },
+  { target: '.phone-stats-panel', title: '叙事信息', body: '下拉展开可以查看<b>当前状态提示和叙事文本</b>。包括人生阶段描述、创作建议、状态徽章（搭档、HVP进度、经济下行等）。', expand: '#phone-stats-panel' },
+  { target: null, title: '开始你的创作之旅', body: `<div style="text-align:left;line-height:1.8">· 先<b>创作</b>积累库存，再<b>宣发</b>让人知道你<br/>· 参加<b>同人展</b>卖出去，库存也有通贩收入<br/>· 关注<b>资金</b>，印刷和生活都要花钱<br/>· 上班后闲暇骤降，要<b>取舍</b><br/>· 热情低于30要及时<b>休息</b>！<br/>· 通过展会和社区活动积累<b>人脉</b>，找到好搭档</div>` },
 ];
 
 export function renderTutorial(onDone) {
@@ -565,23 +627,19 @@ function renderDashboard(state) {
   overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
 }
 
-function renderPhoneStatus(state, partnerInfo, debuffInfo, recessionInfo, hvpInfo, unemployedInfo) {
+// Narrative goes in the collapsible phone panel (折叠区)
+function renderPhoneNarrative(state, partnerInfo, debuffInfo, recessionInfo, hvpInfo, unemployedInfo) {
   const age = getAge(state.turn);
   const stageLabel = getLifeStageLabel(state.turn, state);
   const month = ((state.turn + 6) % 12) + 1;
   const seasonIcon = month >= 3 && month <= 5 ? 'flower-lotus' : month >= 6 && month <= 8 ? 'sun' : month >= 9 && month <= 11 ? 'leaf' : 'snowflake';
 
-  const passionPct = Math.max(0, state.passion);
-  const repPct = Math.min(100, state.reputation * 10);
-  const timePct = Math.min(100, state.time * 10);
-  const infoPct = state.infoDisclosure * 100;
-
   const badges = [unemployedInfo, hvpInfo, partnerInfo, debuffInfo, recessionInfo].filter(Boolean).join(' ');
-
   const sk = (state.totalHVP + state.totalLVP > 0) ? getCreativeSkill(state) : null;
   const invLine = (state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0)
     ? `${ic('package')} 本×${state.inventory.hvpStock} 谷×${state.inventory.lvpStock}` : '';
   const skillLine = sk !== null ? `${ic('target')} Lv${sk.toFixed(1)} ${getSkillLabel(sk)}` : '';
+  const narrative = (() => { const s = buildNarrativeSections(state); return renderAlertBanner(s.alerts) + renderSpotlightCard(s.spotlight) + renderPersonalNarrative(getNarrativeTitle(state), s.personal); })();
 
   return `
     <div class="phone-clock">
@@ -590,26 +648,42 @@ function renderPhoneStatus(state, partnerInfo, debuffInfo, recessionInfo, hvpInf
     </div>
     <div class="phone-stats-panel collapsed" id="phone-stats-panel">
       <div class="phone-stats-handle" id="phone-stats-toggle"><div class="phone-stats-bar"></div></div>
-      <div class="phone-stats-grid">
-        <div class="phone-stat-card">
-          <div class="phone-stat-header"><span>${ic('heart')} 热情</span><span class="phone-stat-val ${passionPct < 25 ? 'danger' : ''}">${Math.round(state.passion)}</span></div>
-          <div class="phone-stat-bar-bg"><div class="stat-bar passion ${passionPct < 25 ? 'danger' : ''}" style="width:${passionPct}%"></div></div>
-        </div>
-        <div class="phone-stat-card">
-          <div class="phone-stat-header"><span>${ic('star')} 声誉</span><span class="phone-stat-val">${state.reputation.toFixed(1)}</span></div>
-          <div class="phone-stat-bar-bg"><div class="stat-bar reputation" style="width:${repPct}%"></div></div>
-        </div>
-        <div class="phone-stat-card">
-          <div class="phone-stat-header"><span>${ic('timer')} 闲暇</span><span class="phone-stat-val ${state.time <= 1 ? 'danger' : ''}">${state.time}/10</span></div>
-          <div class="phone-stat-bar-bg"><div class="stat-bar time ${state.time <= 1 ? 'danger' : ''}" style="width:${timePct}%"></div></div>
-        </div>
-        <div class="phone-stat-card">
-          <div class="phone-stat-header"><span>${ic('megaphone')} 信息</span><span class="phone-stat-val">${Math.round(infoPct)}%</span></div>
-          <div class="phone-stat-bar-bg"><div class="stat-bar" style="width:${infoPct}%;background:linear-gradient(90deg,#E6A817,#F5D76E)"></div></div>
-        </div>
-      </div>
       ${badges ? `<div class="phone-badges">${badges}</div>` : ''}
       ${invLine || skillLine ? `<div class="phone-inv">${invLine}${invLine && skillLine ? ' · ' : ''}${skillLine}</div>` : ''}
+      <div style="padding:0 12px 8px">${narrative}</div>
+    </div>`;
+}
+
+// Stats bar directly visible in game-content (不折叠)
+function renderStatsBar(state) {
+  const passionPct = Math.max(0, state.passion);
+  const repPct = Math.min(100, state.reputation * 10);
+  const timeRemaining = Math.max(0, state.time - (state.monthTimeSpent || 0));
+  const timePct = Math.min(100, state.time * 10);
+  const timeRemainingPct = Math.min(100, timeRemaining * 10);
+  const infoPct = state.infoDisclosure * 100;
+
+  return `
+    <div class="phone-stats-grid" style="padding:0 12px 4px">
+      <div class="phone-stat-card">
+        <div class="phone-stat-header"><span>${ic('heart')} 热情</span><span class="phone-stat-val ${passionPct < 25 ? 'danger' : ''}">${Math.round(state.passion)}</span></div>
+        <div class="phone-stat-bar-bg"><div class="stat-bar passion ${passionPct < 25 ? 'danger' : ''}" style="width:${passionPct}%"></div></div>
+      </div>
+      <div class="phone-stat-card">
+        <div class="phone-stat-header"><span>${ic('star')} 声誉</span><span class="phone-stat-val">${state.reputation.toFixed(1)}</span></div>
+        <div class="phone-stat-bar-bg"><div class="stat-bar reputation" style="width:${repPct}%"></div></div>
+      </div>
+      <div class="phone-stat-card">
+        <div class="phone-stat-header"><span>${ic('timer')} 闲暇</span><span class="phone-stat-val ${timeRemaining <= 1 ? 'danger' : ''}">${timeRemaining}/${state.time}天</span></div>
+        <div class="phone-stat-bar-bg" style="position:relative">
+          <div class="stat-bar" style="width:${timePct}%;background:#D8D0C4;position:absolute;top:0;left:0;height:100%;border-radius:3px"></div>
+          <div class="stat-bar time ${timeRemaining <= 1 ? 'danger' : ''}" style="width:${timeRemainingPct}%;position:relative;z-index:1"></div>
+        </div>
+      </div>
+      <div class="phone-stat-card">
+        <div class="phone-stat-header"><span>${ic('megaphone')} 信息</span><span class="phone-stat-val">${Math.round(infoPct)}%</span></div>
+        <div class="phone-stat-bar-bg"><div class="stat-bar" style="width:${infoPct}%;background:linear-gradient(90deg,#E6A817,#F5D76E)"></div></div>
+      </div>
     </div>`;
 }
 
@@ -807,7 +881,16 @@ export function openMarketApp(state) {
       <div style="margin-top:8px;border-top:1px solid var(--border);padding:8px 4px">
         <div style="font-size:0.75rem;font-weight:700;color:var(--secondary);margin-bottom:4px">${ic('storefront')} 市场动态</div>
         ${npcFeed}
-      </div>`;
+      </div>
+      ${(() => {
+        const s = buildNarrativeSections(state);
+        const w = s.world;
+        const worldSections = [];
+        if (w.market.length) worldSections.push(`<div style="font-size:0.75rem;font-weight:700;color:var(--secondary);margin-bottom:4px">${ic('storefront')} 同人市场趋势</div>${w.market.map(t => `<div style="font-size:0.75rem;color:var(--text-light);padding:2px 0">${t}</div>`).join('')}`);
+        if (w.official.length) worldSections.push(`<div style="font-size:0.75rem;font-weight:700;color:var(--secondary);margin-bottom:4px">${ic('film-strip')} IP动态</div>${w.official.map(t => `<div style="font-size:0.75rem;color:var(--text-light);padding:2px 0">${t}</div>`).join('')}`);
+        if (w.advanced.length) worldSections.push(`<div style="font-size:0.75rem;font-weight:700;color:var(--secondary);margin-bottom:4px">${ic('globe-simple')} 宏观环境</div>${w.advanced.map(t => `<div style="font-size:0.75rem;color:var(--text-light);padding:2px 0">${t}</div>`).join('')}`);
+        return worldSections.length > 0 ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding:8px 4px">${worldSections.join('<div style="margin-top:6px"></div>')}</div>` : '';
+      })()}`;
   } else {
     marketHtml = '<div style="text-align:center;padding:24px;color:var(--text-muted)">暂无市场数据</div>';
   }
@@ -987,20 +1070,22 @@ export function openSNSPanel(state) {
       </div>`;
     }).join('');
 
-  // Build world HTML
-  const sections = buildNarrativeSections(state);
-  const w = sections.world;
-  const worldGroups = [];
-  if (w.market.length) worldGroups.push({ icon: 'storefront', label: '市场动态', items: w.market });
-  if (w.official.length) worldGroups.push({ icon: 'film-strip', label: 'IP动态', items: w.official });
-  if (w.advanced.length) worldGroups.push({ icon: 'globe-simple', label: '宏观环境', items: w.advanced });
-
-  const worldHtml = worldGroups.length === 0
-    ? '<div style="text-align:center;padding:40px 20px;color:var(--text-muted);font-size:0.82rem">暂无动态</div>'
-    : worldGroups.map(g => `
-      <div class="sns-world-group">
-        <div class="sns-world-label">${ic(g.icon)} ${g.label}</div>
-        ${g.items.map(t => `<div class="sns-world-item">${t}</div>`).join('')}
+  // Build world news HTML (macro economy & life headlines, not market data)
+  const worldNews = generateWorldNews(state);
+  const categoryIcons = { macro: 'chart-line-up', life: 'newspaper', quirky: 'smiley-wink', app: 'device-mobile' };
+  const categoryLabels = { macro: '财经', life: '社会', quirky: '趣闻', app: '科技' };
+  const worldHtml = worldNews.length === 0
+    ? '<div style="text-align:center;padding:40px 20px;color:var(--text-muted);font-size:0.82rem">暂无新闻</div>'
+    : worldNews.map(n => `
+      <div class="sns-feed-item" style="padding:10px 14px">
+        <div style="width:32px;height:32px;border-radius:50%;background:${n.category === 'macro' ? '#3498DB' : n.category === 'app' ? '#9B59B6' : n.category === 'quirky' ? '#F39C12' : '#27AE60'};display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;font-size:0.75rem">${ic(categoryIcons[n.category] || 'newspaper')}</div>
+        <div class="sns-feed-body">
+          <div class="sns-feed-meta">
+            <span class="sns-feed-author">${categoryLabels[n.category] || '新闻'}</span>
+            <span class="sns-feed-time">今日</span>
+          </div>
+          <div class="sns-feed-text">${n.text}</div>
+        </div>
       </div>`).join('');
 
   // Create overlay
@@ -1018,7 +1103,7 @@ export function openSNSPanel(state) {
       <div class="sns-header">
         <div class="sns-tabs">
           <div class="sns-tab active" data-tab="feed">圈内动态</div>
-          <div class="sns-tab" data-tab="world">世界动态</div>
+          <div class="sns-tab" data-tab="world">今日新闻</div>
         </div>
       </div>
       <div class="sns-content">
@@ -1067,7 +1152,7 @@ function renderAppDesktop(state) {
     if (app.special === 'sns' || app.special === 'market' || app.special === 'browser') {
       disabled = false; // always available
     } else if (app.special === 'message') {
-      disabled = !state.commercialOfferReceived;
+      disabled = false; // always available (闺蜜 + 女神 always there)
     } else {
       disabled = !app.actions.some(a => canPerformAction(state, a));
     }
@@ -1109,7 +1194,7 @@ export function renderAppPage(appId, state, onAction, onBack) {
     if (disabled) {
       const r = action.requires;
       if (r.time && state.time < r.time) {
-        disableReason = actionId === 'hvp' ? `需闲暇≥${r.time}（有搭档≥2）` : `需闲暇≥${r.time}`;
+        disableReason = actionId === 'hvp' ? `需闲暇≥${r.time}天（有搭档≥2天）` : `需闲暇≥${r.time}天`;
       } else if (r.passion && state.passion < r.passion) disableReason = '热情不足';
     }
     return `
@@ -1134,6 +1219,29 @@ export function renderAppPage(appId, state, onAction, onBack) {
       <div class="app-page-body">
         ${cards}
         ${appId === 'xuanfa' ? '<div style="text-align:center;font-size:0.6rem;color:var(--text-muted);padding:8px 0 4px;opacity:0.7">由 Openclaw 集成的 AI 宣发机，全网都能广播到！</div>' : ''}
+        ${appId === 'ciyuanbi' && state.contacts?.length > 0 ? (() => {
+          const tierColors = { acquaintance: '#95a5a6', familiar: '#3498db', trusted: '#27ae60' };
+          const tierLabels = { acquaintance: '认识', familiar: '熟悉', trusted: '信任' };
+          const contactsList = [...state.contacts]
+            .sort((a, b) => b.affinity - a.affinity)
+            .map(c => {
+              const tc = tierColors[c.tier] || '#95a5a6';
+              const tl = tierLabels[c.tier] || '';
+              const isToxicRevealed = c.pType === 'toxic' && c.tier === 'trusted';
+              return `<div class="contact-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+                <img src="partner/${c.avatarIdx}.webp" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid ${tc}">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:0.78rem;font-weight:600;display:flex;gap:4px;align-items:center">${c.name} <span style="font-size:0.58rem;padding:0 4px;border-radius:6px;background:${tc}18;color:${tc}">${tl}</span></div>
+                  <div style="font-size:0.65rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.bio}</div>
+                </div>
+                ${isToxicRevealed ? `<button class="contact-remove" data-cid="${c.id}" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:0.8rem" title="断联">${ic('trash', '0.8rem')}</button>` : ''}
+              </div>`;
+            }).join('');
+          return `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border)">
+            <div style="font-size:0.8rem;font-weight:700;margin-bottom:8px">${ic('users')} 人脉池 (${state.contacts.length})</div>
+            <div style="max-height:200px;overflow-y:auto">${contactsList}</div>
+          </div>`;
+        })() : ''}
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1143,27 +1251,31 @@ export function renderAppPage(appId, state, onAction, onBack) {
   overlay.querySelectorAll('.app-action-card:not(.disabled)').forEach(el => {
     el.addEventListener('click', () => { overlay.remove(); onAction(el.dataset.action); });
   });
+  // Bind toxic contact removal
+  overlay.querySelectorAll('.contact-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const cid = parseInt(btn.dataset.cid);
+      state.contacts = state.contacts.filter(c => c.id !== cid);
+      btn.closest('.contact-row')?.remove();
+      // Update count
+      const countEl = overlay.querySelector('.app-page-body [style*="人脉池"]');
+      if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
+    });
+  });
 }
 
 export function renderMessageApp(state, onAction, onBack) {
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
 
-  if (!state.commercialOfferReceived) {
-    overlay.innerHTML = `
-      <div class="app-page">
-        <div class="app-titlebar" style="border-bottom-color:#2ECC71">
-          <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
-          <span class="app-title">${ic('envelope')} 短信</span>
-          <span style="width:60px"></span>
-        </div>
-        <div class="app-page-body" style="text-align:center;padding:40px 20px;color:var(--text-muted)">
-          ${ic('envelope', '2rem')}<br><br>暂无新消息
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
-    return;
+  // Contact list view
+  const contacts = [
+    { id: 'bestie', name: '小柚', subtitle: '闺蜜', color: '#E84393', avatar: 'Goddess/Guimi.jpg' },
+    { id: 'goddess', name: '傲娇女神', subtitle: '织梦', color: '#9B59B6', avatar: 'Goddess/goddess.jpg' },
+  ];
+  if (state.commercialOfferReceived) {
+    contacts.push({ id: 'publisher', name: '某出版社编辑', subtitle: '新消息！', color: '#2ECC71', icon: 'building-office', badge: true });
   }
 
   overlay.innerHTML = `
@@ -1174,32 +1286,154 @@ export function renderMessageApp(state, onAction, onBack) {
         <span style="width:60px"></span>
       </div>
       <div class="app-page-body">
-        <div style="padding:16px">
-          <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:16px">
-            <div style="width:40px;height:40px;border-radius:50%;background:#2ECC71;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">
-              ${ic('building-office', '1.1rem')}
+        ${contacts.map(c => `
+          <div class="app-action-card" data-contact="${c.id}" style="cursor:pointer">
+            ${c.avatar
+              ? `<img src="${c.avatar}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid ${c.color}">`
+              : `<div style="width:40px;height:40px;border-radius:50%;background:${c.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">${ic(c.icon || 'user', '1.1rem')}</div>`
+            }
+            <div class="app-action-body">
+              <div class="app-action-name">${c.name} ${c.badge ? `<span style="background:var(--danger);color:#fff;font-size:0.55rem;padding:1px 5px;border-radius:8px;margin-left:4px">新</span>` : ''}</div>
+              <div class="app-action-cost">${c.subtitle}</div>
             </div>
-            <div>
-              <div style="font-weight:700;font-size:0.85rem;margin-bottom:2px">某出版社编辑</div>
-              <div style="font-size:0.7rem;color:var(--text-muted)">刚刚</div>
-            </div>
-          </div>
-          <div style="background:#F0FAF0;border-radius:var(--radius);padding:14px;font-size:0.82rem;line-height:1.6;color:var(--text);margin-bottom:16px">
-            你好！我是XX出版社的编辑。在上次展会后一直在关注你的作品——我们很看好你的创作实力。<br><br>
-            不知道你有没有兴趣聊聊商业出版？从同人到商业是许多优秀创作者的自然进化路径。
-          </div>
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5;padding:0 4px">
-            ${ic('lightbulb')} 接受后将告别同人创作，开启商业出道结局。这是游戏的正面结局之一。
-          </div>
-          <button class="btn btn-primary btn-block" id="msg-accept" style="margin-bottom:8px">${ic('star')} 接受邀约，商业出道</button>
-          <button class="btn btn-block" id="msg-decline" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">暂时不考虑</button>
-        </div>
+          </div>`).join('')}
       </div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
-  overlay.querySelector('#msg-decline').addEventListener('click', () => { overlay.remove(); if (onBack) onBack(); });
+
+  overlay.querySelectorAll('.app-action-card[data-contact]').forEach(el => {
+    el.addEventListener('click', () => {
+      const contactId = el.dataset.contact;
+      overlay.remove();
+      if (contactId === 'publisher') {
+        renderPublisherMessage(state, onAction, onBack);
+      } else {
+        renderChatView(state, contactId, onAction, onBack);
+      }
+    });
+  });
+}
+
+function renderPublisherMessage(state, onAction, onBack) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="app-page">
+      <div class="app-titlebar" style="border-bottom-color:#2ECC71">
+        <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
+        <span class="app-title">${ic('building-office')} 某出版社编辑</span>
+        <span style="width:60px"></span>
+      </div>
+      <div class="app-page-body" style="padding:16px">
+        <div style="background:#F0FAF0;border-radius:var(--radius);padding:14px;font-size:0.82rem;line-height:1.6;color:var(--text);margin-bottom:16px">
+          你好！我是XX出版社的编辑。在上次展会后一直在关注你的作品——我们很看好你的创作实力。<br><br>
+          不知道你有没有兴趣聊聊商业出版？从同人到商业是许多优秀创作者的自然进化路径。
+        </div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+          ${ic('lightbulb')} 接受后将告别同人创作，开启商业出道结局。
+        </div>
+        <button class="btn btn-primary btn-block" id="msg-accept" style="margin-bottom:8px">${ic('star')} 接受邀约，商业出道</button>
+        <button class="btn btn-block" id="msg-decline" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">暂时不考虑</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#app-back').addEventListener('click', () => { overlay.remove(); renderMessageApp(state, onAction, onBack); });
+  overlay.querySelector('#msg-decline').addEventListener('click', () => { overlay.remove(); renderMessageApp(state, onAction, onBack); });
   overlay.querySelector('#msg-accept').addEventListener('click', () => { overlay.remove(); onAction('goCommercial'); });
+}
+
+async function renderChatView(state, characterId, onAction, onBack) {
+  const { chatWithNPC, CHAT_CHARACTERS } = await import('./chat-npc.js');
+  const char = CHAT_CHARACTERS[characterId];
+  if (!char) return;
+
+  // Init chat history on state (persists during session)
+  if (!state._chatHistory) state._chatHistory = {};
+  if (!state._chatHistory[characterId]) state._chatHistory[characterId] = [];
+  const history = state._chatHistory[characterId];
+
+  // Inject greeting as first bubble if history is empty
+  if (history.length === 0) {
+    history.push({ role: 'assistant', content: char.getGreeting() });
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+
+  function renderMessages() {
+    const msgsHtml = history.map(m => `
+        <div style="display:flex;margin-bottom:8px;${m.role === 'user' ? 'flex-direction:row-reverse' : ''}">
+          <div style="max-width:75%;padding:8px 12px;border-radius:12px;font-size:0.8rem;line-height:1.5;${
+            m.role === 'user'
+              ? 'background:var(--primary);color:#fff;border-bottom-right-radius:4px'
+              : `background:var(--bg);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:4px`
+          }">${m.content}</div>
+        </div>`).join('');
+    return msgsHtml;
+  }
+
+  function render() {
+    overlay.innerHTML = `
+      <div class="app-page" style="display:flex;flex-direction:column;height:80vh">
+        <div class="app-titlebar" style="border-bottom-color:${char.color};flex-shrink:0">
+          <button class="app-back" id="chat-back">${ic('arrow-left')} 返回</button>
+          <span class="app-title" style="display:flex;align-items:center;gap:6px">
+            <img src="${char.avatar}" style="width:24px;height:24px;border-radius:50%;object-fit:cover">
+            ${char.name}
+          </span>
+          <span style="width:60px"></span>
+        </div>
+        <div id="chat-messages" style="flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch">
+          ${renderMessages()}
+        </div>
+        <div style="padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;background:var(--bg-card)">
+          <input id="chat-input" type="text" placeholder="说点什么…" style="flex:1;border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:0.8rem;outline:none;background:var(--bg)">
+          <button id="chat-send" class="btn btn-primary" style="padding:8px 14px;border-radius:20px;font-size:0.8rem">${ic('paper-plane-right')}</button>
+        </div>
+      </div>`;
+
+    if (!document.body.contains(overlay)) document.body.appendChild(overlay);
+
+    // Scroll to bottom
+    const msgBox = overlay.querySelector('#chat-messages');
+    msgBox.scrollTop = msgBox.scrollHeight;
+
+    // Bind
+    overlay.querySelector('#chat-back').addEventListener('click', () => { overlay.remove(); renderMessageApp(state, onAction, onBack); });
+
+    const input = overlay.querySelector('#chat-input');
+    const sendBtn = overlay.querySelector('#chat-send');
+
+    async function send() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+
+      history.push({ role: 'user', content: text });
+      render();
+
+      // Show typing indicator
+      const msgBox2 = overlay.querySelector('#chat-messages');
+      const typing = document.createElement('div');
+      typing.style.cssText = 'text-align:left;padding:4px 0;font-size:0.75rem;color:var(--text-muted)';
+      typing.textContent = `${char.name}正在输入...`;
+      msgBox2.appendChild(typing);
+      msgBox2.scrollTop = msgBox2.scrollHeight;
+
+      const reply = await chatWithNPC(characterId, history, state);
+      typing.remove();
+
+      history.push({ role: 'assistant', content: reply });
+      render();
+    }
+
+    sendBtn.addEventListener('click', send);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) send(); });
+    input.focus();
+  }
+
+  render();
 }
 
 function renderActionCard(action, state) {
@@ -1209,7 +1443,7 @@ function renderActionCard(action, state) {
   if (disabled) {
     const r = action.requires;
     if (r.time && state.time < r.time) {
-      disableReason = action.id === 'hvp' ? `需闲暇≥${r.time}（有搭档≥2）` : `需闲暇≥${r.time}`;
+      disableReason = action.id === 'hvp' ? `需闲暇≥${r.time}天（有搭档≥2天）` : `需闲暇≥${r.time}天`;
     } else if (r.passion && state.passion < r.passion) disableReason = '热情不足';
   }
   // Highlight if HVP in progress
@@ -1714,16 +1948,16 @@ export function renderEventModeSelector(state, event, onSelect, onCancel) {
         <div style="font-size:0.75rem;color:var(--text-light)">路费¥${event.travelCost} · ${ic('package')}本${state.inventory.hvpStock} 谷${state.inventory.lvpStock}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
-        <div class="price-btn mode-btn${state.time < 3 ? ' disabled' : ''}" data-mode="attend" style="padding:12px;cursor:${state.time < 3 ? 'not-allowed' : 'pointer'};${state.time < 3 ? 'opacity:0.5;' : ''}">
+        <div class="price-btn mode-btn${(state.time - (state.monthTimeSpent || 0)) < 3 ? ' disabled' : ''}" data-mode="attend" style="padding:12px;cursor:${(state.time - (state.monthTimeSpent || 0)) < 3 ? 'not-allowed' : 'pointer'};${(state.time - (state.monthTimeSpent || 0)) < 3 ? 'opacity:0.5;' : ''}">
           <div style="font-weight:700;font-size:0.9rem">${ic('storefront')} 亲自摆摊</div>
           <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">进入展会迷你游戏，亲手招揽客人售卖。销量取决于你的操作表现。</div>
-          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-5 · 闲暇≥3h · 路费+住宿餐饮+摊位≈¥${event.travelCost + Math.round(event.travelCost * 1.2 + 200)} · 连续参展有疲劳</div>
-          ${state.time < 3 ? `<div style="font-size:0.65rem;color:var(--danger);margin-top:2px">${ic('warning')} 闲暇不足（当前${state.time}h），无法亲参</div>` : ''}
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-5 · 闲暇≥3天 · 路费+住宿餐饮+摊位≈¥${event.travelCost + Math.round(event.travelCost * 1.2 + 200)} · 连续参展有疲劳</div>
+          ${(state.time - (state.monthTimeSpent || 0)) < 3 ? `<div style="font-size:0.65rem;color:var(--danger);margin-top:2px">${ic('warning')} 闲暇不足（剩余${state.time - (state.monthTimeSpent || 0)}天），无法亲参</div>` : ''}
         </div>
         <div class="price-btn mode-btn" data-mode="consign" style="padding:12px;cursor:pointer">
           <div style="font-weight:700;font-size:0.9rem">${ic('package')} 寄售委托</div>
           <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">委托朋友或摊主代售，无需亲自到场。销量由市场供需模型决定。</div>
-          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-2 · 闲暇≥1h · 邮费¥${Math.round(event.travelCost * 0.3)} · 无参展疲劳</div>
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">热情-2 · 闲暇≥1天 · 邮费¥${Math.round(event.travelCost * 0.3)} · 无参展疲劳</div>
         </div>
       </div>
       <div style="font-size:0.68rem;color:var(--text-muted);text-align:center;margin-bottom:8px;line-height:1.4">${ic('lightbulb')} 不想玩小游戏？选择寄售可跳过，直接按市场模型结算</div>
@@ -1770,12 +2004,13 @@ export function renderEventSelector(state, onSelect, onCancel) {
       <div class="event-title">选择同人展</div>
       <div class="event-desc" style="margin-bottom:8px">本月有${events.length}个同人展可以参加（一个月只能去一个）</div>
       <div style="font-size:0.8rem;padding:6px 10px;background:#F0F7FF;border-radius:6px;margin-bottom:12px">${ic('package')} 当前库存：同人本×${state.inventory.hvpStock} 谷子×${state.inventory.lvpStock}</div>
-      ${events.map((e, i) => `
-        <div class="price-btn" data-idx="${i}" style="margin-bottom:8px;text-align:left;padding:12px">
-          <div style="font-weight:700">${e.size === 'mega' ? ic('star-four') : e.size === 'big' ? ic('tent') : ic('note-pencil')} ${e.name}</div>
+      ${events.map((e, i) => {
+        const attended = (state.eventsAttendedThisMonth || []).includes(e.name);
+        return `<div class="price-btn${attended ? ' disabled' : ''}" data-idx="${i}" style="margin-bottom:8px;text-align:left;padding:12px;${attended ? 'opacity:0.4;pointer-events:none;' : ''}">
+          <div style="font-weight:700">${e.size === 'mega' ? ic('star-four') : e.size === 'big' ? ic('tent') : ic('note-pencil')} ${e.name}${attended ? ' ✓ 已参加' : ''}</div>
           <div style="font-size:0.8rem;color:var(--text-light)">${ic('map-pin')}${e.city} · 路费¥${e.travelCost} · 销量×${e.salesBoost} · 声誉+${e.reputationBoost}</div>
-        </div>
-      `).join('')}
+        </div>`;
+      }).join('')}
       <div class="tip-box" style="text-align:left;margin-bottom:0">
         <div class="tip-label">同人展经济学</div>
         <div class="tip-text">大型展会销量倍率高但路费贵（机会成本）。本市小展路费便宜但销量加成低。选择取决于你当前的资金和库存状态。</div>
@@ -1998,7 +2233,7 @@ function buildNarrativeSections(state) {
   // === Turn 0 special case ===
   if (state.turn === 0) {
     personal.push('高考终于结束了！这个暑假，你决定把一直以来的同人创作梦想付诸行动，成立了自己的社团。');
-    personal.push(`<span style="color:var(--text-muted);font-size:0.8rem">提示：暑假时间充裕(${state.time}h/天)，是起步的好时机。注意管理热情值——它会随着时间推移越来越难维持。</span>`);
+    personal.push(`<span style="color:var(--text-muted);font-size:0.8rem">提示：暑假时间充裕，做同人时间有(${state.time}天/月)，是起步的好时机。注意管理热情值——它会随着时间推移越来越难维持。</span>`);
     return { alerts, spotlight, personal, world };
   }
 

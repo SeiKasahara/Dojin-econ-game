@@ -104,65 +104,17 @@ function getRealityDrain(turn) {
   return 2.0 + ((turn - 50) / 12) * 0.3;
 }
 
-// === Partner Types ===
-// feeRange: [min, max] — cost to hire. 15% chance of fee=0 (人好)
-export const PARTNER_TYPES = {
-  supportive: { id: 'supportive', name: '默契搭档', emoji: 'smiley', desc: '合作愉快，效率提升', salesBonus: 1.3, passionPerTurn: 2, dramaChance: 0, feeRange: [600, 1000] },
-  demanding:  { id: 'demanding',  name: '严格搭档', emoji: 'smiley-angry', desc: '要求极高，出品精良但压力大', salesBonus: 1.5, passionPerTurn: -3, dramaChance: 0.12, feeRange: [1000, 1500] },
-  unreliable: { id: 'unreliable', name: '不靠谱搭档', emoji: 'smiley-nervous', desc: '有时很给力，有时完全消失', salesBonus: 0.9, passionPerTurn: -1, dramaChance: 0.25, feeRange: [400, 800] },
-  toxic:      { id: 'toxic',      name: '有毒搭档', emoji: 'skull', desc: '经常制造矛盾，但就是甩不掉...', salesBonus: 1.1, passionPerTurn: -6, dramaChance: 0.35, feeRange: [800, 1200] },
-};
-
-function rollPartnerType(social = 0) {
-  const r = Math.random();
-  // social charm shifts probability toward supportive, away from toxic
-  const supportiveThresh = 0.50 + social * 0.05;
-  const toxicThresh = Math.max(0.95, 0.92 + social * 0.02);
-  if (r < supportiveThresh) return 'supportive';
-  if (r < 0.75 + social * 0.02) return 'demanding';
-  if (r < toxicThresh) return 'unreliable';
-  return 'toxic';
+// All passion recovery decays with years in the hobby
+// Y0=100%, Y3=82%, Y5=70%, Y10+=35%
+function applyPassionDecay(turn, rawAmount) {
+  const yearsIn = turn / 12;
+  const mult = Math.max(0.35, 1 - yearsIn * 0.06);
+  return Math.max(1, Math.round(rawAmount * mult));
 }
 
-// === Partner Candidate Generation ===
-const PARTNER_NAMES = [
-  '星野碧', '墨染', '月见里', '七色的猫窝', '画不完的鱼',
-  '雪代薰', '桃乐丝', '玻璃鞋', '黑猫', '夕颜',
-  '柚子茶', '蓝莓酱', '小透明', '大触本触', '咸鱼太太',
-  '红茶很甜', '修罗场', '二次元住民', '深夜作画人', '社恐画师',
-];
-const PARTNER_BIOS = {
-  supportive: ['画风很稳的太太，合作过的人都说好', '效率很高，沟通也很顺畅', '人超好的！据说从来不催稿'],
-  demanding: ['据说出品质量极高但非常严格', '是个完美主义者，对细节要求很苛刻', '作品质量没话说，就是脾气有点大'],
-  unreliable: ['很有才华但好像不太靠谱', '上次展会临时消失过...但画真的好看', '回复消息时快时慢，令人捉摸不透'],
-  toxic: ['很健谈很热情，主动找你合作', '在圈里认识很多人，交际很广', '说话很直接，看起来是个有想法的人'],
-};
-
-export function generatePartnerCandidates(state) {
-  const social = state.endowments.social || 0;
-  let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + social * 0.08);
-  if (getLifeStage(state.turn) === 'work') prob *= 0.6;
-  const workYears = (state.turn - 50) / 12;
-  if (getLifeStage(state.turn) === 'work' && workYears > 3 && (state.turn - state.lastCreativeTurn) <= 6) prob += 0.1;
-
-  // Roll overall success first
-  if (Math.random() >= prob) return null; // no candidates this month
-
-  // Generate 2-3 candidates
-  const count = 2 + (Math.random() < 0.4 ? 1 : 0);
-  const usedNames = new Set();
-  const candidates = [];
-  for (let i = 0; i < count; i++) {
-    const type = rollPartnerType(social);
-    let name;
-    do { name = PARTNER_NAMES[Math.floor(Math.random() * PARTNER_NAMES.length)]; } while (usedNames.has(name));
-    usedNames.add(name);
-    const bios = PARTNER_BIOS[type];
-    const bio = bios[Math.floor(Math.random() * bios.length)];
-    candidates.push({ name, bio, _type: type }); // _type hidden from UI
-  }
-  return candidates;
-}
+// === Partner & Contacts — see partner.js ===
+import { PARTNER_TYPES, rollPartnerType, addContact, updateContactAffinity, generatePartnerCandidates, getContactBio, getContactTier, getVisibleType, tickContacts } from './partner.js';
+export { PARTNER_TYPES, addContact, generatePartnerCandidates };
 
 // === Work Subtypes ===
 export const HVP_SUBTYPES = {
@@ -411,6 +363,9 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     infoDisclosure: 0.2,
     hasPartner: false, partnerType: null, partnerTurns: 0,
     partnerFee: 0,      // ¥ per HVP project, 0 = free
+    contacts: [],        // 人脉池
+    contactNextId: 1,    // contact auto-increment ID
+    activeContactId: null, // ID of contact currently serving as partner (null = stranger)
     timeDebuffs: [],
     recessionTurnsLeft: 0,
     monthlyIncome: 0,
@@ -443,12 +398,17 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     // History for dashboard
     history: [],       // [{ turn, money, reputation, passion, revenue, sales, action }]
     eventLog: [],      // [{ turn, name, city, revenue, sold }]
+    idleMonthStreak: 0,  // consecutive months with leisure but no actions taken
     lastResult: null, lastEvent: null,
     achievements: [], gameOverReason: '',
     commercialOfferReceived: false, // true after publisher scouts you
     commercialTransition: false,    // true if player chose to go commercial (positive ending)
-    consecutiveRestTurns: 0,         // consecutive rest-only months (triggers exit at 12-16)
-    _restExitThreshold: 12 + Math.floor(Math.random() * 5), // random 12-16
+    monthTimeSpent: 0,              // leisure hours consumed this month
+    monthActions: [],               // [{actionId, timeCost}] actions taken this month
+    hvpWorkedThisMonth: false,      // HVP limited to once per month
+    eventsAttendedThisMonth: [],    // event names attended this month (prevent repeat)
+    lvpWorkedThisMonth: false,      // LVP limited to once per month
+    monthHadCreativeAction: false,  // for lastCreativeTurn tracking
     consecutiveConsigns: 0,         // tracks consecutive consignment events (resets on 亲参)
     creativeFatigue: 0,             // cumulative creative exhaustion (decays naturally, amplified by consecutive creation)
     equipmentLevel: 0,              // 0/1/2/3 — upgraded equipment improves quality & reduces passion cost
@@ -471,23 +431,23 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
 // HVP is multi-turn: solo 3 months, with partner 2 months
 export const ACTIONS = {
   hvp:         { id: 'hvp',         name: '创作同人本', emoji: 'book-open-text', type: 'hvp',
-                 costLabel: '热情-15/月 印刷¥2500~3000 需闲暇≥4(有搭档≥2)', requires: { passion: 15, time: 4 } },
+                 costLabel: '热情-15/月 印刷¥2500~3000 需闲暇≥4天(有搭档≥2天)', requires: { passion: 15, time: 4 } },
   lvp:         { id: 'lvp',         name: '制作谷子',   emoji: 'key', type: 'lvp',
-                 costLabel: '热情-8 资金-200 需闲暇≥2', requires: { passion: 10, time: 2 } },
+                 costLabel: '热情-8 资金-200 需闲暇≥2天', requires: { passion: 10, time: 2 } },
   rest:        { id: 'rest',        name: '休息充电',   emoji: 'coffee', type: 'rest',
                  costLabel: '热情+15~25', requires: {} },
   promote_light: { id: 'promote_light', name: '轻度宣发', emoji: 'megaphone', type: 'promote',
                    costLabel: '热情-3 小幅提升信息', requires: { passion: 3, time: 1 }, promoteIntensity: 'light' },
   promote_heavy: { id: 'promote_heavy', name: '全力宣发', emoji: 'megaphone-simple', type: 'promote',
-                   costLabel: '热情-8 大幅提升信息 需闲暇≥3', requires: { passion: 8, time: 3 }, promoteIntensity: 'heavy' },
+                   costLabel: '热情-8 大幅提升信息 需闲暇≥3天', requires: { passion: 8, time: 3 }, promoteIntensity: 'heavy' },
   findPartner: { id: 'findPartner', name: '寻找搭档',   emoji: 'handshake', type: 'social',
                  costLabel: '热情-3 搭档有稿费成本', requires: { passion: 3, time: 2 } },
   partTimeJob: { id: 'partTimeJob', name: '普通打工',   emoji: 'storefront', type: 'work',
-                 costLabel: '赚¥300~500 下月闲暇-1h 仅学生/失业', requires: { passion: 2, time: 3 } },
+                 costLabel: '赚¥300~500 下月闲暇-1天 仅学生/失业', requires: { passion: 2, time: 3 } },
   freelance:   { id: 'freelance',   name: '接稿赚钱',   emoji: 'paint-brush', type: 'freelance',
-                 costLabel: '热情-4 下月闲暇-2h 收入看声誉', requires: { passion: 4, time: 2 } },
+                 costLabel: '热情-4 下月闲暇-2天 收入看声誉', requires: { passion: 4, time: 2 } },
   attendEvent: { id: 'attendEvent', name: '参加同人展', emoji: 'tent', type: 'attendEvent',
-                 costLabel: '需有同人展·路费·亲参≥3h/寄售≥1h', requires: { passion: 5, time: 1 } },
+                 costLabel: '需有同人展·路费·亲参≥3天/寄售≥1天', requires: { passion: 5, time: 1 } },
   jobSearch:   { id: 'jobSearch',   name: '找工作',     emoji: 'briefcase', type: 'jobSearch',
                  costLabel: '热情-10 面试奔波', requires: { passion: 5 } },
   quitForDoujin: { id: 'quitForDoujin', name: '辞职全职同人', emoji: 'sparkle', type: 'quitForDoujin',
@@ -515,10 +475,11 @@ export function getActionDisplay(actionId, state) {
   if (actionId === 'rest') {
     const yearsIn = state.turn / 12;
     const eff = Math.max(35, Math.round((1 - yearsIn * 0.06) * 100));
+    const remaining = Math.max(0, state.time - (state.monthTimeSpent || 0));
     const idle = state.turn - state.lastCreativeTurn;
     let extra = '';
     if (idle >= 3) extra = ` ${ic('warning')}已${idle}月未活动`;
-    return { ...base, costLabel: `恢复效率${eff}%${extra}` };
+    return { ...base, costLabel: `自选时长(1-${remaining}天) 效率${eff}%${extra}` };
   }
   if (actionId === 'jobSearch') {
     return { ...base, costLabel: `已找${state.jobSearchTurns}月 成功率${Math.round(Math.min(85, (30 + state.jobSearchTurns * 10) * (state.recessionTurnsLeft > 0 ? 0.5 : 1)))}%` };
@@ -527,13 +488,13 @@ export function getActionDisplay(actionId, state) {
     const tc = getFreelanceTimeCost(state);
     const label = state.unemployed ? '失业接稿' : getLifeStage(state.turn) === 'university' ? '课余接稿' : '下班接稿';
     const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}-50%` : '';
-    return { ...base, costLabel: `热情-4 下月闲暇-2h 需≥${tc}h ${label}${recTag}` };
+    return { ...base, costLabel: `热情-4 下月闲暇-2天 需≥${tc}天 ${label}${recTag}` };
   }
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
     if (stage === 'work' && !state.unemployed) return { ...base, costLabel: '仅学生/失业可用' };
     const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
-    return { ...base, costLabel: `赚¥300~500 下月闲暇-1h${recTag}` };
+    return { ...base, costLabel: `赚¥300~500 下月闲暇-1天${recTag}` };
   }
   if (actionId === 'attendEvent') {
     if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) {
@@ -618,9 +579,31 @@ export function getFreelanceTimeCost(state) {
   return 5;                                               // 在职：下班后还要接稿，消耗大
 }
 
+export function getTimeCost(state, actionId) {
+  if (actionId === 'hvp') return state.hasPartner ? 2 : 4;
+  if (actionId === 'lvp') return 4;
+  if (actionId === 'rest') return state._restHours || 2; // player-selected, default 2
+  if (actionId === 'promote_light') return 1;
+  if (actionId === 'promote_heavy') return 3;
+  if (actionId === 'findPartner') return 2;
+  if (actionId === 'partTimeJob') return 3;
+  if (actionId === 'freelance') return getFreelanceTimeCost(state);
+  if (actionId === 'attendEvent') return state._eventMode === 'consign' ? 0 : 3; // 亲参3天，寄售0天
+  if (actionId === 'jobSearch') return Infinity;
+  if (actionId === 'reprint') return 1;
+  if (actionId === 'buyGoods') return 1;
+  if (actionId === 'sellGoods') return 1;
+  if (actionId === 'hireAssistant') return 1;
+  // 0-cost decisions: upgradeEquipment, sponsorCommunity, quitForDoujin, goCommercial
+  return 0;
+}
+
 export function canPerformAction(state, actionId) {
   const r = ACTIONS[actionId]?.requires;
   if (!r) return false;
+  const remaining = state.time - (state.monthTimeSpent || 0);
+  // No leisure left → all actions blocked (player must end month)
+  if (remaining <= 0) return false;
   // Unemployed: time is plentiful but anxiety drains passion fast — all actions allowed
   // (the real constraint is passion budget, not action locks)
   // jobSearch: when unemployed OR full-time doujin (wanting to go back)
@@ -641,10 +624,12 @@ export function canPerformAction(state, actionId) {
     const stage = getLifeStage(state.turn);
     if (stage === 'work' && !state.unemployed) return false;
   }
-  // attendEvent: need events available AND have inventory to sell
+  // attendEvent: need events available AND have inventory AND not all events attended this month
   if (actionId === 'attendEvent') {
     if (!state.availableEvents || state.availableEvents.length === 0) return false;
     if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) return false;
+    const attended = state.eventsAttendedThisMonth || [];
+    if (state.availableEvents.every(e => attended.includes(e.name))) return false;
   }
   // reprint: need at least one work in inventory (including sold-out qty=0)
   if (actionId === 'reprint') {
@@ -662,6 +647,13 @@ export function canPerformAction(state, actionId) {
   if (actionId === 'goCommercial') {
     if (!state.commercialOfferReceived) return false;
   }
+  // findPartner: can't find a new partner if you already have one
+  if (actionId === 'findPartner' && state.hasPartner) return false;
+  if (actionId === 'hvp' && state.hvpWorkedThisMonth) return false;
+  if (actionId === 'lvp' && state.lvpWorkedThisMonth) return false;
+  // Promote: only one promotion action per month (light OR heavy, not both)
+  if ((actionId === 'promote_light' || actionId === 'promote_heavy') &&
+      (state.monthActions || []).some(a => a.actionId === 'promote_light' || a.actionId === 'promote_heavy')) return false;
   // hireAssistant: need active HVP project, money, max 2 per project
   if (actionId === 'hireAssistant') {
     if (!state.hvpProject) return false;
@@ -682,14 +674,19 @@ export function canPerformAction(state, actionId) {
   if (r.passion && state.passion < r.passion) return false;
   // HVP: with partner, time requirement relaxed to 2h (partner shares workload)
   if (actionId === 'hvp' && state.hasPartner) {
-    if (state.time < 2) return false;
+    if (remaining < 2) return false;
     return true;
   }
   // Freelance: dynamic time requirement
   if (actionId === 'freelance') {
-    if (state.time < getFreelanceTimeCost(state)) return false;
+    if (remaining < getFreelanceTimeCost(state)) return false;
   } else {
-    if (r.time && state.time < r.time) return false;
+    if (r.time) {
+      const tc = getTimeCost(state, actionId);
+      if (!isFinite(tc)) {
+        if (remaining < 1) return false;
+      } else if (remaining < tc) return false;
+    }
   }
   return true;
 }
@@ -954,6 +951,12 @@ export function applyEvent(state, event) {
     }
   }
 
+  // Handle friend_intro flag → add contact to pool
+  if (state._pendingFriendIntro) {
+    state._pendingFriendIntro = false;
+    addContact(state, { source: 'friend_intro', affinity: 2.0, forceType: 'supportive' });
+  }
+
   state.reputation = Math.max(0, state.reputation);
   state.passion = Math.max(0, Math.min(100, state.passion));
   if (state.passion <= 0) {
@@ -962,53 +965,34 @@ export function applyEvent(state, event) {
   }
 }
 
-// === Execute Turn ===
-export function executeTurn(state, actionId) {
+// === Execute Action (action-only, no month-end processing) ===
+export function executeAction(state, actionId) {
   const action = ACTIONS[actionId];
   const result = { action: actionId, actionName: action.name, actionEmoji: action.emoji, deltas: [], salesInfo: null, supplyDemand: null, feedback: 0, tip: null, partnerDrama: null };
 
-  // --- Show savings dip from last turn's event (if any) ---
-  if (state._pendingEventDip) {
+  // Cache timeCost BEFORE action logic (some actions consume _restHours etc.)
+  const _cachedTimeCost = getTimeCost(state, actionId);
+
+  // --- Show savings dip from last turn's event (only on first action of month) ---
+  if (state.monthActions.length === 0 && state._pendingEventDip) {
     const d = state._pendingEventDip;
     result.deltas.push({ icon: 'money', label: `上月"${d.label}"导致挪用同人存款`, value: `-¥${d.amount}`, positive: false });
     state._pendingEventDip = null;
   }
 
-  // --- Track consecutive rest ---
-  if (action.type === 'rest') {
-    state.consecutiveRestTurns++;
-  } else {
-    state.consecutiveRestTurns = 0;
-  }
-
   // --- Process action ---
   if (action.type === 'rest') {
-    // Consecutive rest warning & exit (only before 3 years of work — after that, resting is a valid lifestyle choice)
-    const workYearsForRest = getLifeStage(state.turn) === 'work' ? (state.turn - 50) / 12 : 0;
-    const restMonths = state.consecutiveRestTurns;
-    if (workYearsForRest < 3) {
-      if (restMonths >= state._restExitThreshold) {
-        state.passion = 0;
-        state.phase = 'gameover';
-        state.gameOverReason = '连续休息了太久，你渐渐忘记了为什么要创作……同人的热情在无所事事中悄悄熄灭了。';
-        return result;
-      }
-      if (restMonths >= 8) {
-        const left = state._restExitThreshold - restMonths;
-        result.deltas.push({ icon: 'warning', label: '长期休息警告', value: `已连续休息${restMonths}个月！`, positive: false });
-        if (left <= 4) {
-          result.deltas.push({ icon: 'smiley-x-eyes', label: '再不行动就要退坑了', value: `预计还剩${left}个月`, positive: false });
-        }
-      }
-    }
-
+    // Rest scales with hours invested (1h = minimal, full day = maximum)
+    const restHours = state._restHours || 2;
+    state._restHours = null; // consume
+    const hourScale = restHours / 5; // 5h = 100% base, 1h = 20%, 10h = 200%
     // Rest effectiveness decays with years in the hobby
     const yearsIn = state.turn / 12;
-    const basRestore = 15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3; // stamina bonus
+    const basRestore = (15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3) * hourScale;
     const fatigueMult = Math.max(0.35, 1 - yearsIn * 0.06);   // Y0=100%, Y3=82%, Y5=70%, Y10+=35%
-    const restore = Math.max(3, Math.round(basRestore * fatigueMult));
+    const restore = Math.max(2, Math.round(basRestore * fatigueMult));
     state.passion = Math.min(100, state.passion + restore);
-    result.deltas.push({ icon: 'heart', label: '热情恢复', value: `+${restore}`, positive: true });
+    result.deltas.push({ icon: 'heart', label: `休息${restHours}天`, value: `热情+${restore}`, positive: true });
     if (fatigueMult < 0.8) {
       result.deltas.push({ icon: 'smiley-sad', label: '长期疲惫', value: `恢复效率${Math.round(fatigueMult * 100)}%`, positive: false });
     }
@@ -1041,9 +1025,9 @@ export function executeTurn(state, actionId) {
       rawGain = mgResult.infoGain;
       repBonus = mgResult.repBonus || 0;
     } else {
-      // Default formula (light promote, or skipped minigame)
+      // Default formula (light promote, or skipped heavy minigame)
       rawGain = intensity === 'heavy'
-        ? 0.45 + Math.random() * 0.20
+        ? 0.25 + Math.random() * 0.10   // skipped: 25-35%, below minigame average (~50-60%)
         : 0.12 + Math.random() * 0.12;  // light: 12-24%, always below heavy minigame floor (30%)
     }
 
@@ -1070,6 +1054,12 @@ export function executeTurn(state, actionId) {
     if (repBonus > 0) {
       state.reputation += repBonus;
       result.deltas.push({ icon: 'star', label: '互动声誉', value: `+${repBonus.toFixed(2)}`, positive: true });
+    }
+
+    // 20% chance to gain a contact from online promotion
+    if (mgResult && Math.random() < 0.2) {
+      const c = addContact(state, { source: 'online', affinity: 0.5 });
+      if (c) result.deltas.push({ icon: 'address-book', label: `${c.name}关注了你`, value: '网络人脉+1', positive: true });
     }
 
     if (sigCost > 1.2) result.deltas.push({ icon: 'megaphone-simple', label: '信号通胀', value: `效果${Math.round(gain / rawGain * 100)}%（保底${Math.round(minGain * 100)}%）`, positive: false });
@@ -1101,17 +1091,58 @@ export function executeTurn(state, actionId) {
       const pt = PARTNER_TYPES[pType];
       state.hasPartner = true;
       state.partnerType = pType;
-      state.partnerTurns = pType === 'unreliable' ? (1 + Math.floor(Math.random() * 3)) : (3 + Math.floor(Math.random() * 4));
+      state.activeContactId = candidate.contactId || null;
+
+      // If there's an ongoing HVP project, recalculate needed months with partner
+      if (state.hvpProject) {
+        const sub = HVP_SUBTYPES[state.hvpProject.subtype] || HVP_SUBTYPES.manga;
+        const partnerNeeded = sub.monthsPartner;
+        if (partnerNeeded < state.hvpProject.needed) {
+          const oldNeeded = state.hvpProject.needed;
+          // Don't reduce below current progress (already done work counts)
+          state.hvpProject.needed = Math.max(Math.ceil(state.hvpProject.progress), partnerNeeded);
+          if (state.hvpProject.needed < oldNeeded) {
+            result.deltas.push({ icon: 'handshake', label: '搭档加入加速创作！', value: `工期 ${oldNeeded}月→${state.hvpProject.needed}月`, positive: true });
+          }
+        }
+      }
+
+      // Duration: trusted contacts get longer collaboration
+      if (candidate.tier === 'trusted') {
+        state.partnerTurns = pType === 'unreliable' ? (2 + Math.floor(Math.random() * 3)) : (4 + Math.floor(Math.random() * 4));
+      } else {
+        state.partnerTurns = pType === 'unreliable' ? (1 + Math.floor(Math.random() * 3)) : (3 + Math.floor(Math.random() * 4));
+      }
+
+      // Fee: trusted + supportive = 50% discount
       const isFree = Math.random() < 0.15;
       if (isFree) {
         state.partnerFee = 0;
-        result.deltas.push({ icon: pt.emoji, label: `"${candidate.name}"原来是${pt.name}！`, value: `${state.partnerTurns}回合`, positive: true });
-        result.deltas.push({ icon: 'hand-heart', label: '人好！不要稿费', value: '免费合作', positive: true });
       } else {
         const [fmin, fmax] = pt.feeRange;
-        state.partnerFee = fmin + Math.floor(Math.random() * (fmax - fmin));
+        let fee = fmin + Math.floor(Math.random() * (fmax - fmin));
+        if (candidate.tier === 'trusted' && pType === 'supportive') fee = Math.round(fee * 0.5);
+        state.partnerFee = fee;
+      }
+
+      // Type reveal depends on visibility
+      if (candidate.visibleType) {
+        result.deltas.push({ icon: pt.emoji, label: `"${candidate.name}"是${pt.name}`, value: `${state.partnerTurns}回合`, positive: pType === 'supportive' });
+      } else {
         result.deltas.push({ icon: pt.emoji, label: `"${candidate.name}"原来是${pt.name}！`, value: `${state.partnerTurns}回合`, positive: pType === 'supportive' });
+        // Toxic revealed for first time → force contact to trusted tier
+        if (pType === 'toxic' && candidate.contactId) {
+          const c = (state.contacts || []).find(x => x.id === candidate.contactId);
+          if (c && c.tier !== 'trusted') { c.tier = 'trusted'; c.affinity = Math.max(c.affinity, 4); c.bio = getContactBio('toxic', 'trusted'); }
+        }
+      }
+      if (isFree) {
+        result.deltas.push({ icon: 'hand-heart', label: '人好！不要稿费', value: '免费合作', positive: true });
+      } else {
         result.deltas.push({ icon: 'coins', label: '搭档稿费', value: `¥${state.partnerFee}/本`, positive: false });
+      }
+      if (candidate.tier === 'trusted') {
+        result.deltas.push({ icon: 'users', label: '老朋友加成', value: `合作期${state.partnerTurns}月${pType === 'supportive' ? ' 稿费优惠' : ''}`, positive: true });
       }
       result.deltas.push({ icon: 'note-pencil', label: pt.desc, value: '', positive: false });
       result.tip = pType === 'toxic' ? TIPS.partnerToxic : pType === 'supportive' ? TIPS.partnerFound : TIPS.partnerRisk;
@@ -1132,7 +1163,7 @@ export function executeTurn(state, actionId) {
     const wage = Math.floor(baseWage * recessionCut);
     state.money += wage;
     state.timeDebuffs.push({ id: 'tired_work', reason: '打工疲惫', turnsLeft: 1, delta: -1 });
-    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-1h', positive: false });
+    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-1天', positive: false });
     result.deltas.push({ icon: 'coins', label: '打工收入', value: `+¥${wage}`, positive: true });
     if (recessionCut < 1) result.deltas.push({ icon: 'trend-down', label: '经济下行压低工资', value: '-40%', positive: false });
     result.tip = TIPS.partTimeJob;
@@ -1149,7 +1180,7 @@ export function executeTurn(state, actionId) {
     state.reputation += repGain;
     state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: -2 });
     result.deltas.push({ icon: 'heart', label: '创作精力', value: '-4', positive: false });
-    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-2h', positive: false });
+    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-2天', positive: false });
     result.deltas.push({ icon: 'coins', label: '接稿收入', value: `+¥${income}`, positive: true });
     if (recessionCut < 1) result.deltas.push({ icon: 'trend-down', label: '经济下行需求萎缩', value: '-50%', positive: false });
     result.deltas.push({ icon: 'star', label: '商业声誉', value: `+${repGain.toFixed(2)}`, positive: true });
@@ -1439,6 +1470,15 @@ export function executeTurn(state, actionId) {
         }
       }
 
+      // Convert minigame card exchanges to contacts
+      if (isAttend && mg && mg.cardsExchanged > 0) {
+        const newContacts = Math.min(mg.cardsExchanged, 3);
+        for (let i = 0; i < newContacts; i++) {
+          const c = addContact(state, { source: 'event_card', affinity: 1.0 });
+          if (c) result.deltas.push({ icon: 'address-book', label: `认识了${c.name}`, value: '加入人脉池', positive: true });
+        }
+      }
+
       // Clear event (selling happens immediately at the event)
       state.attendingEvent = null;
       result.tip = TIPS.doujinEvent;
@@ -1598,7 +1638,7 @@ export function executeTurn(state, actionId) {
         // Time debuff from fatigue
         if (state.creativeFatigue >= 4) {
           state.timeDebuffs.push({ id: 'creative_exhaust_' + state.turn, reason: '创作透支', turnsLeft: 2, delta: -1 });
-          result.deltas.push({ icon: 'battery-medium', label: '连续创作身体吃不消', value: '时间-1h(2回合)', positive: false });
+          result.deltas.push({ icon: 'battery-medium', label: '连续创作身体吃不消', value: '时间-1天(2回合)', positive: false });
         }
         // Clear project FIRST to prevent stuck state if anything below errors
         const savedProject = { ...p };
@@ -1918,7 +1958,13 @@ export function executeTurn(state, actionId) {
     result.deltas.push({ icon: 'star', label: '社区好感', value: `声誉+${repGain.toFixed(2)}`, positive: true });
     result.deltas.push({ icon: 'heart', label: '回馈的满足感', value: '热情+8', positive: true });
     result.deltas.push({ icon: 'megaphone', label: '曝光度提升', value: '+15%', positive: true });
-    result.tip = { label: '社区赞助', text: '赞助同人展或社区活动是建立口碑的有效方式。不仅提升声誉和曝光度，回馈圈子本身也会带来热情回复。冷却6个月。' };
+    // Add contacts from community sponsorship
+    const sponsorContacts = 2 + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < sponsorContacts; i++) {
+      const c = addContact(state, { source: 'sponsor', affinity: 1.5 });
+      if (c) result.deltas.push({ icon: 'address-book', label: `认识了${c.name}`, value: '赞助活动结识', positive: true });
+    }
+    result.tip = { label: '社区赞助', text: '赞助同人展或社区活动是建立口碑的有效方式。不仅提升声誉和曝光度，还能认识新朋友扩展人脉。冷却6个月。' };
   }
 
   // --- Commercial transition: player accepts publisher offer ---
@@ -1936,10 +1982,10 @@ export function executeTurn(state, actionId) {
     state.time = Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)));
     state.passion = Math.min(100, state.passion + (wasUnemployed ? 15 : 10));
     if (wasUnemployed) {
-      result.deltas.push({ icon: 'sparkle', label: '不找工作了！全职搞同人！', value: '闲暇→7h', positive: true });
+      result.deltas.push({ icon: 'sparkle', label: '不找工作了！全职搞同人！', value: '闲暇拉满', positive: true });
       result.deltas.push({ icon: 'heart', label: '把失业变成机遇', value: `热情+15`, positive: true });
     } else {
-      result.deltas.push({ icon: 'sparkle', label: '辞职了！全身心投入同人创作！', value: '闲暇→7h 月收入→0', positive: true });
+      result.deltas.push({ icon: 'sparkle', label: '辞职了！全身心投入同人创作！', value: '闲暇拉满 月收入→0', positive: true });
       result.deltas.push({ icon: 'heart', label: '自由的感觉真好', value: '热情+10', positive: true });
     }
     result.deltas.push({ icon: 'warning', label: '每月生活费¥800自动扣除', value: '没有固定收入了', positive: false });
@@ -1956,8 +2002,78 @@ export function executeTurn(state, actionId) {
     state.gameOverReason = generateCommercialEnding(state);
     result.deltas.push({ icon: 'star', label: '商业出道！', value: '告别同人，踏入商业创作', positive: true });
     result.tip = { label: '从同人到商业', text: '许多传奇创作者都走过这条路——从Comiket的小摊位到出版社的签约作者。同人创作培养的技能、积累的粉丝、锻炼的市场嗅觉，都是商业化最好的基础。你不是在"离开"同人圈，而是在"毕业"。' };
-    state.lastResult = result;
-    return result;
+  }
+
+  // --- Track action in month ---
+  const timeCost = _cachedTimeCost;
+  const isAllTime = !isFinite(timeCost);
+  const remaining = state.time - state.monthTimeSpent;
+  const actualCost = isAllTime ? remaining : Math.min(timeCost, remaining);
+  state.monthTimeSpent += actualCost;
+  state.monthActions.push({ actionId, timeCost: actualCost });
+
+  if (actionId === 'hvp') state.hvpWorkedThisMonth = true;
+  if (actionId === 'lvp') state.lvpWorkedThisMonth = true;
+  if (actionId === 'attendEvent' && state.attendingEvent) {
+    if (!state.eventsAttendedThisMonth) state.eventsAttendedThisMonth = [];
+    state.eventsAttendedThisMonth.push(state.attendingEvent.name);
+  }
+  if (['hvp', 'lvp', 'attendEvent', 'promote_heavy'].includes(actionId) ||
+      (actionId === 'findPartner' && state.hasPartner)) {
+    state.monthHadCreativeAction = true;
+  }
+
+  const monthOver = (state.time - state.monthTimeSpent) <= 0 || isAllTime || state.phase === 'gameover' || state.passion <= 0;
+
+  state.lastResult = result;
+  return { result, monthOver };
+}
+
+// === End Month (all month-end processing) ===
+export function endMonth(state) {
+  const result = { deltas: [], officialEvents: [], advancedMsgs: [] };
+
+  // Passive rest at month end
+  const remainingDays = Math.max(0, state.time - (state.monthTimeSpent || 0));
+  const yearsIn = state.turn / 12;
+  const fatigueMult = Math.max(0.35, 1 - yearsIn * 0.06);
+
+  if (remainingDays > 0) {
+    // Player ended month early with leisure left → convert remaining days to rest
+    const hourScale = remainingDays / 5;
+    const basRestore = (15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3) * hourScale;
+    const restore = Math.max(2, Math.round(basRestore * fatigueMult));
+    state.passion = Math.min(100, state.passion + restore);
+    result.deltas.push({ icon: 'coffee', label: `剩余${remainingDays}天自动休息`, value: `热情+${restore}`, positive: true });
+  } else if (state.time <= 0 || (state.monthActions || []).length === 0) {
+    // 0 leisure month or no actions → full passive rest (equivalent to old per-turn rest)
+    const basRestore = 15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3;
+    const restore = Math.max(3, Math.round(basRestore * fatigueMult));
+    state.passion = Math.min(100, state.passion + restore);
+    result.deltas.push({ icon: 'coffee', label: state.time <= 0 ? '忙碌中偷闲' : '悠闲的一个月', value: `热情+${restore}`, positive: true });
+    if (fatigueMult < 0.8) {
+      result.deltas.push({ icon: 'smiley-sad', label: '长期疲惫', value: `恢复效率${Math.round(fatigueMult * 100)}%`, positive: false });
+    }
+  }
+
+  // --- Idle month streak: had leisure but wasted it (did nothing OR only rested) → eventually quit ---
+  const hadLeisure = state.time > 0;
+  const actions = state.monthActions || [];
+  const didNothing = actions.length === 0;
+  const onlyRested = actions.length > 0 && actions.every(a => a.actionId === 'rest');
+  if (hadLeisure && (didNothing || onlyRested)) {
+    state.idleMonthStreak = (state.idleMonthStreak || 0) + 1;
+    if (state.idleMonthStreak >= 8) {
+      result.deltas.push({ icon: 'warning', label: '连续摆烂中', value: `已${state.idleMonthStreak}个月只在休息`, positive: false });
+    }
+    if (state.idleMonthStreak >= 12) {
+      state.passion = 0;
+      state.phase = 'gameover';
+      state.gameOverReason = '连续一整年有时间却只是在休息……你渐渐忘记了当初为什么要搞同人。热情在无所事事中悄悄熄灭了。';
+      return result;
+    }
+  } else {
+    state.idleMonthStreak = 0;
   }
 
   // --- Partner effects (low resilience amplifies negative interpersonal impact) ---
@@ -1987,19 +2103,30 @@ export function executeTurn(state, actionId) {
     state.partnerTurns--;
     if (state.partnerTurns <= 0) {
       const wasType = state.partnerType;
-      state.hasPartner = false; state.partnerType = null;
+
+      // Update contact affinity based on collaboration outcome
+      if (state.activeContactId) {
+        const affinityDelta = wasType === 'toxic' ? -1 : 2;
+        updateContactAffinity(state, state.activeContactId, affinityDelta);
+
+        // Trusted + non-toxic: offer renewal next turn
+        const contact = (state.contacts || []).find(c => c.id === state.activeContactId);
+        if (contact && contact.tier === 'trusted' && wasType !== 'toxic') {
+          state._partnerRenewalOffer = state.activeContactId;
+          result.deltas.push({ icon: 'arrows-clockwise', label: `${contact.name}愿意继续合作`, value: '下月可续约', positive: true });
+        }
+      }
+
+      state.hasPartner = false; state.partnerType = null; state.activeContactId = null;
       result.deltas.push({ icon: 'handshake', label: wasType === 'toxic' ? '终于摆脱了有毒搭档...' : '搭档合作期结束', value: '', positive: wasType === 'toxic' });
     }
   }
 
+  // --- Contacts pool maintenance: cap + natural decay ---
+  tickContacts(state, result);
+
   // --- Track creative activity (resets inactivity counter) ---
-  // Creating, attending events, finding partners, heavy promotion all count as "active in the scene"
-  // Only actual creative/community actions reset the inactivity counter
-  // buyGoods/reprint/sellGoods are NOT creative activity — buying stuff doesn't count as creating
-  const isCreative = ['hvp', 'lvp', 'attendEvent'].includes(actionId)
-    || (actionId === 'promote_heavy') // heavy promotion shows creative intent
-    || (actionId === 'findPartner' && state.hasPartner);
-  if (isCreative) state.lastCreativeTurn = state.turn;
+  if (state.monthHadCreativeAction) state.lastCreativeTurn = state.turn;
 
   // --- Reality drain (with income/savings buffer during work stage) ---
   const rawDrain = getRealityDrain(state.turn);
@@ -2235,11 +2362,10 @@ export function executeTurn(state, actionId) {
   }
 
   // --- Creative fatigue decay ---
-  const isCreativeAction = ['hvp', 'lvp'].includes(actionId);
-  if (!isCreativeAction && state.creativeFatigue > 0) {
+  if (state.creativeFatigue > 0) {
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 0.5);
   }
-  if (actionId === 'rest' && state.creativeFatigue > 0) {
+  if (state.monthActions.some(a => a.actionId === 'rest') && state.creativeFatigue > 0) {
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 1); // extra recovery on rest
     result.deltas.push({ icon: 'battery-medium', label: '创作疲劳缓解', value: `疲劳${state.creativeFatigue.toFixed(1)}`, positive: true });
   }
@@ -2249,12 +2375,14 @@ export function executeTurn(state, actionId) {
   state.infoDisclosure = Math.max(0.05, state.infoDisclosure - infoDecay);
 
   // --- Passive online sales (trickle from inventory each turn, affected by secondhand) ---
-  if ((state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) && action.type !== 'attendEvent') {
+  if ((state.inventory.hvpStock > 0 || state.inventory.lvpStock > 0) && !state.monthActions.some(a => a.actionId === 'attendEvent')) {
     const cs = state.market ? state.market.communitySize : 10000;
     const nHVP = state.market?.nHVP || 9;
     const nLVP = state.market?.nLVP || 55;
     const baseConv = Math.min(0.95, 0.20 + state.infoDisclosure * 0.50);
-    const onlineFactor = 0.12; // online sales are ~12% of full market demand
+    // High info bonus: 60%+ info → online sales boost (well-known creators sell more online)
+    const infoBonus = state.infoDisclosure >= 0.6 ? 1 + (state.infoDisclosure - 0.6) * 1.5 : 1; // 60%→1x, 80%→1.3x, 100%→1.6x
+    const onlineFactor = 0.12 * infoBonus;
     const onlineShModHVP = getSecondHandModifier(state.official, 'hvp');
     const onlineShModLVP = getSecondHandModifier(state.official, 'lvp');
 
@@ -2291,6 +2419,10 @@ export function executeTurn(state, actionId) {
       }
     }
 
+    // Show info bonus on online sales
+    if (infoBonus > 1) {
+      result.deltas.push({ icon: 'megaphone', label: '高曝光通贩加成', value: `+${Math.round((infoBonus - 1) * 100)}%`, positive: true });
+    }
     // Show secondhand impact on online sales
     const worstShMod = Math.min(onlineShModHVP, onlineShModLVP);
     if (worstShMod < 0.9) {
@@ -2335,13 +2467,14 @@ export function executeTurn(state, actionId) {
 
   // --- Record history snapshot ---
   const prevRev = state.history.length > 0 ? state.history[state.history.length - 1].cumRevenue : 0;
+  const lastActionId = state.monthActions.length > 0 ? state.monthActions[state.monthActions.length - 1].actionId : 'rest';
   state.history.push({
     turn: state.turn, money: state.money,
     reputation: Math.round(state.reputation * 100) / 100,
     passion: Math.round(state.passion),
     turnRevenue: state.totalRevenue - prevRev,
     cumRevenue: state.totalRevenue,
-    action: actionId,
+    action: lastActionId,
     hvpStock: state.inventory.hvpStock, lvpStock: state.inventory.lvpStock,
   });
 
@@ -2350,6 +2483,14 @@ export function executeTurn(state, actionId) {
   state.time = (state.unemployed || state.fullTimeDoujin)
     ? Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)))
     : computeEffectiveTime(state.turn, state.timeDebuffs);
+
+  // --- Reset month state ---
+  state.monthTimeSpent = 0;
+  state.monthActions = [];
+  state.hvpWorkedThisMonth = false;
+  state.lvpWorkedThisMonth = false;
+  state.eventsAttendedThisMonth = [];
+  state.monthHadCreativeAction = false;
 
   // --- Generate available doujin events for next turn ---
   state.availableEvents = generateEvents(state);
@@ -2369,6 +2510,17 @@ export function executeTurn(state, actionId) {
   return result;
 }
 
+// === Execute Turn (backward-compatible wrapper) ===
+export function executeTurn(state, actionId) {
+  const { result } = executeAction(state, actionId);
+  const monthResult = endMonth(state);
+  // Merge action deltas into month result
+  result.deltas.push(...monthResult.deltas);
+  result.officialEvents = monthResult.officialEvents;
+  result.advancedMsgs = monthResult.advancedMsgs;
+  return result;
+}
+
 // === Partner Drama ===
 // === Personalized Ending Generator ===
 // generateEnding, generateCommercialEnding — see endings.js
@@ -2378,7 +2530,7 @@ export { _getAchievementInfo as getAchievementInfo };
 
 // === Tips ===
 const TIPS = {
-  hvpStart: { label: '长期项目', text: '同人本是多月项目——独自需要3个月，有搭档可缩短到2个月。印刷成本¥800-1000在完成时支付。搭档有稿费成本，但可以加速进度。' },
+  hvpStart: { label: '长期项目', text: '同人本是多月项目——独自需要3个月，有搭档可缩短到2个月。搭档可以加速进度。' },
   hvpContinue: { label: '坚持创作', text: '同人本创作需要持续投入。每个月都在消耗热情，但完成后的声誉积累远高于谷子。中途放弃意味着前期投入全部沉没。' },
   hvpComplete: { label: `${ic('confetti')} 作品完成·入库`, text: '同人本完成并入库！现在去参加同人展售卖，或等待网上零售慢慢出货。同时携带同人本和谷子参展会触发联动加成。记得关注库存——卖光了要追加印刷！' },
   lvp: { label: '谷子入库', text: '同人谷一个月就能完成并入库，低门槛低风险。去同人展售卖可以一次卖出大量库存。网上也会有少量零售。注意库存管理——制作太多会积压资金，太少则展会上供不应求。' },

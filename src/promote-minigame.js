@@ -234,7 +234,7 @@ function addPlayerPost(state, type, text, reach, maxLife) {
     type,
     text,
     author: '我',
-    avatarImg: 'prop-npc/player.png',
+    avatarImg: 'prop-npc/player.webp',
     avatarColor: '#C73E3A',
     reach,
     life: maxLife,

@@ -160,7 +160,7 @@ const MINIGAME_EVENTS = [
         }
       }
     }, weight: 2 },
-  { emoji: '🔋', text: '手机没电，暂时不能发动态',
+  { emoji: '🔋', text: '累了，吃个饭……',
     apply(mg) { // brief cooldown spike on all actions
       for (const k of Object.keys(mg.cooldowns)) {
         mg.cooldowns[k] = Math.max(mg.cooldowns[k], 1500);

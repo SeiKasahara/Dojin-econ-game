@@ -44,7 +44,7 @@ export const SCHEDULED_EVENTS = [
     event: {
       id: 'uni_exam', emoji: 'note-pencil', title: '期末考试周',
       desc: '期末考试来了！接下来要全力复习，创作只能暂停...',
-      effect: '时间-3h（持续2回合）', effectClass: 'negative',
+      effect: '时间-3天（持续2回合）', effectClass: 'negative',
       apply: (s) => { s.timeDebuffs.push({ id: 'exam', reason: '期末考试', turnsLeft: 2, delta: -3 }); s.time = computeTime(s.turn, s.timeDebuffs); },
       tip: '考试是周期性的外生时间冲击。大学生创作者的产出呈明显的学期周期——寒暑假是同人产出的高峰期，考试月是低谷。',
     },
@@ -83,7 +83,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'family_emergency', emoji: 'first-aid', title: '家人生病了',
     desc: '家里突然有人生病需要照顾，接下来几个月你的空闲时间会大幅减少，医疗费也是一大笔...',
-    effect: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.8 + Math.random() * 0.7)); return `时间-3h(3回合) 资金-¥${cost}`; }, effectClass: 'negative',
+    effect: (s) => { const cost = Math.round((s.monthlyIncome || 800) * (0.8 + Math.random() * 0.7)); return `时间-3天(3回合) 资金-¥${cost}`; }, effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'family', reason: '照顾家人', turnsLeft: 3, delta: -3 }); s.time = computeTime(s.turn, s.timeDebuffs); const cost = Math.round((s.monthlyIncome || 800) * (0.8 + Math.random() * 0.7)); s.money -= cost; },
     tip: '外生冲击可以让时间降到0。一半创作者退出是因为"现实太忙"——时间约束独立于热情预算，是最硬的硬约束。',
     weight: 4, when: () => true, maxTotal: 2,
@@ -91,7 +91,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'overtime', emoji: 'clock', title: '连续加班/赶论文',
     desc: '这段时间完全被工作或学业占满，几乎没有私人时间...',
-    effect: '时间-4h（持续2回合）', effectClass: 'negative',
+    effect: '时间-4天（持续2回合）', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'overtime', reason: '加班/赶DDL', turnsLeft: 2, delta: -4 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '当时间降到0时，什么创作也做不了，只能选择休息等待忙碌过去。',
     weight: 7, when: (s) => s.turn > 1, maxTotal: Infinity,
@@ -99,7 +99,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'holiday', emoji: 'tree-palm', title: '一段悠闲时光',
     desc: '难得的闲暇，可以专心创作。',
-    effect: '时间+2h(2回合) 热情+8', effectClass: 'positive',
+    effect: '时间+2天(2回合) 热情+8', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'holiday', reason: '悠闲时光', turnsLeft: 2, delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
     tip: '同人本创作需要"成块的连续时间"。',
     weight: 10, when: () => true, maxTotal: Infinity,
@@ -155,7 +155,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'work_raise', emoji: 'trend-up', title: '升职加薪！',
     desc: '工作表现不错，获得了加薪。但责任更重，时间更少...',
-    effect: '资金+1000 时间-1h（12~18月）', effectClass: 'neutral',
+    effect: '资金+1000 时间-1天（12~18月）', effectClass: 'neutral',
     apply: (s) => { s.money += 1000; s.timeDebuffs.push({ id: 'promotion', reason: '升职加责', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '高收入者的时间机会成本更高。',
     weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: 3,
@@ -163,7 +163,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'work_996', emoji: 'building-office', title: '996加班季',
     desc: '项目紧急，公司要求全员加班。几乎没有私人时间...',
-    effect: '时间-4h(3回合) 资金+500', effectClass: 'negative',
+    effect: '时间-4天(3回合) 资金+500', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: '996', reason: '996加班', turnsLeft: 3, delta: -4 }); s.time = computeTime(s.turn, s.timeDebuffs); s.money += 500; },
     tip: '滞胀特征：需要更多工作时间维持生活',
     weight: 7, when: (s) => {
@@ -191,7 +191,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'health_issue', emoji: 'thermometer', title: '身体不适',
     desc: '最近免疫力下降，生了一场病，看病买药花了不少...',
-    effect: '热情-5 时间-2h(2回合) 资金-¥500~800', effectClass: 'negative',
+    effect: '热情-5 时间-2天(2回合) 资金-¥500~800', effectClass: 'negative',
     apply: (s) => { s.passion = Math.max(0, s.passion - 5); s.timeDebuffs.push({ id: 'sick', reason: '身体不适', turnsLeft: 2, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.money -= 500 + Math.floor(Math.random() * 300); },
     tip: '体力精力低的创作者更容易生病。身体是革命的本钱。',
     weight: 4, when: (s) => (s.endowments.stamina || 0) <= 1, maxTotal: 3,
@@ -206,11 +206,11 @@ export const RANDOM_EVENTS = [
   },
   {
     id: 'friend_intro', emoji: 'chat-circle', title: '朋友介绍了靠谱搭档',
-    desc: '你的社交圈帮你找到了一位口碑很好的创作者，TA愿意合作！',
-    effect: '自动获得优质搭档(3个月·免稿费)', effectClass: 'positive',
-    apply: (s) => { if (!s.hasPartner) { s.hasPartner = true; s.partnerType = 'supportive'; s.partnerTurns = 3; s.partnerFee = 0; } },
-    tip: '社交魅力高→搜寻成本低。协作可得性随社交网络递增。',
-    weight: 3, when: (s) => (s.endowments.social || 0) >= 2 && !s.hasPartner, maxTotal: 2,
+    desc: '你的社交圈帮你找到了一位口碑很好的创作者——加个好友先！',
+    effect: '人脉+1（高亲密度·默契搭档）', effectClass: 'positive',
+    apply: (s) => { s._pendingFriendIntro = true; },
+    tip: '社交魅力高→搜寻成本低。通过朋友介绍认识的人通常更可靠，初始亲密度也更高。',
+    weight: 3, when: (s) => (s.endowments.social || 0) >= 2, maxTotal: 2,
   },
   {
     id: 'viral_post', emoji: 'phone', title: '帖子意外火了！',
@@ -271,7 +271,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'work_burnout', emoji: 'smiley-sad', title: '职业倦怠',
     desc: '每天重复的工作内容让你感到麻木，回到家只想瘫着什么都不做，还忍不住冲动消费...',
-    effect: '热情-8 时间-2h(3回合) 资金-¥300~600', effectClass: 'negative',
+    effect: '热情-8 时间-2天(3回合) 资金-¥300~600', effectClass: 'negative',
     apply: (s) => { s.passion = Math.max(0, s.passion - 8); s.money -= 300 + Math.floor(Math.random() * 300); s.timeDebuffs.push({ id: 'burnout_' + s.turn, reason: '职业倦怠', turnsLeft: 3, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '职业倦怠不是懒——是长期高强度低回报工作的心理防御机制。',
     weight: 6, when: (s) => {
@@ -283,7 +283,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'social_obligation', emoji: 'beer-stein', title: '社交应酬',
     desc: '公司团建、同事聚餐、客户应酬……这些"不得不去"的社交活动占据了你的创作时间。',
-    effect: '时间-2h(2回合) 资金-200 热情-2', effectClass: 'negative',
+    effect: '时间-2天(2回合) 资金-200 热情-2', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'social_' + s.turn, reason: '社交应酬', turnsLeft: 2, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.money -= 200; s.passion = Math.max(0, s.passion - 2); },
     tip: '职场社交是一种"强制消费"——你用时间和金钱购买的不是快乐，而是职场关系的维护成本。',
     weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
@@ -291,7 +291,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'commute_hell', emoji: 'train', title: '通勤地狱',
     desc: '公司搬了办公地点，或者你不得不搬到更远的地方住。每天通勤时间大幅增加...',
-    effect: '时间-1h（6~12月）', effectClass: 'negative',
+    effect: '时间-1天（6~12月）', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'commute_' + s.turn, reason: '通勤时间增加', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '通勤是城市生活最大的时间黑洞。',
     weight: 3, when: (s) => {
@@ -303,7 +303,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'life_admin', emoji: 'clipboard', title: '生活琐事',
     desc: '交费、修电器、跑手续……生活充满了琐碎但不得不做的事情，还得花钱。',
-    effect: (s) => { const cost = getLifeStage(s.turn) === 'work' ? '200~500' : '50~150'; return `时间-2h(2回合) 热情-3 资金-¥${cost}`; }, effectClass: 'negative',
+    effect: (s) => { const cost = getLifeStage(s.turn) === 'work' ? '200~500' : '50~150'; return `时间-2天(2回合) 热情-3 资金-¥${cost}`; }, effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'admin_' + s.turn, reason: '生活琐事', turnsLeft: 2, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); const cost = getLifeStage(s.turn) === 'work' ? 200 + Math.floor(Math.random() * 300) : 50 + Math.floor(Math.random() * 100); s.money -= cost; s.passion = Math.max(0, s.passion - 3); },
     tip: '生活管理成本是成年后的隐性税。',
     weight: 7, when: () => true, maxTotal: Infinity,
@@ -358,7 +358,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'remote_work', emoji: 'desktop', title: '公司开始推行居家办公',
     desc: '公司调整了办公政策，每周有几天可以在家工作。省去通勤时间，创作时间多了不少！',
-    effect: '时间+2h（6~12月）热情+5', effectClass: 'positive',
+    effect: '时间+2天（6~12月）热情+5', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'remote_' + s.turn, reason: '居家办公', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 5); },
     tip: '远程办公是职场创作者最大的福音——每天省下的通勤时间足够画一张草稿。',
     weight: 8, when: (s) => {
@@ -370,7 +370,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'work_efficiency', emoji: 'rocket', title: '工作越来越熟练了',
     desc: '在公司待了几年，业务流程已经烂熟于心。同样的工作量用更少的时间就能完成，摸出来的空闲时间用来构思创作。',
-    effect: '时间+1h（12~18月）', effectClass: 'positive',
+    effect: '时间+1天（12~18月）', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'efficient_' + s.turn, reason: '高效摸鱼', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '工作熟练度是时间的朋友——入职初期忙得焦头烂额，几年后同样的活半天就做完了。省下的时间就是你的创作本钱。',
     weight: 10, when: (s) => {
@@ -382,7 +382,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'annual_leave', emoji: 'sun-horizon', title: '年假攒够了！',
     desc: '工龄越长年假越多，你决定把假期集中起来，给自己一段专注创作的时光。',
-    effect: '时间+3h（3回合）热情+8', effectClass: 'positive',
+    effect: '时间+3天（3回合）热情+8', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'annual_leave_' + s.turn, reason: '年假创作', turnsLeft: 3, delta: 3 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
     tip: '年假是打工人最宝贵的时间资产。有经验的创作者会把年假攒到展会前集中使用——备货、赶稿、参展一气呵成。',
     weight: 12, when: (s) => {
@@ -394,7 +394,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'dept_transfer', emoji: 'arrows-clockwise', title: '调岗到清闲部门',
     desc: '公司内部调整，你被调到了一个相对清闲的部门。虽然薪资不变，但工作压力小了很多，下班后终于有精力画画了。',
-    effect: '时间+2h（12~18月）热情+5', effectClass: 'positive',
+    effect: '时间+2天（12~18月）热情+5', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'transfer_' + s.turn, reason: '清闲部门', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 5); },
     tip: '不是所有职场变动都是坏事。有时候"被边缘化"反而是创作者的隐性福利——你要的不是升职加薪，是下班后的精力。',
     weight: 5, when: (s) => {
@@ -406,7 +406,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'flexible_hours', emoji: 'clock', title: '弹性工作制',
     desc: '公司开始试行弹性工时，不用再朝九晚六了。你把工作时间调到早上，下午和晚上都可以用来创作。',
-    effect: '时间+1h（6~12月）', effectClass: 'positive',
+    effect: '时间+1天（6~12月）', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'flex_' + s.turn, reason: '弹性工时', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '弹性工时让创作者能按自己的生物钟安排创作。有人是夜猫子型，有人是早起型——找到自己的节奏比加班更重要。',
     weight: 8, when: (s) => {
@@ -418,7 +418,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'partner_support', emoji: 'heart', title: '另一半很支持你的创作',
     desc: '生活中的伴侣非常理解你的同人爱好，主动分担了家务和生活琐事，让你有更多时间创作。',
-    effect: '时间+1h（12月）热情+10', effectClass: 'positive',
+    effect: '时间+1天（12月）热情+10', effectClass: 'positive',
     apply: (s) => { s.timeDebuffs.push({ id: 'partner_support_' + s.turn, reason: '伴侣支持', turnsLeft: 12, delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 10); },
     tip: '同人创作者最大的幸运之一就是遇到理解自己爱好的人。"你去画吧，碗我来洗"——这句话的含金量超过任何商业合作。',
     weight: 5, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) / 12 >= 5, maxTotal: 1,

@@ -39,6 +39,16 @@ export function loadGame() {
     if (!data?.state) return null;
     // Restore _prevAchievementCount so achievements don't re-announce
     data.state._prevAchievementCount = data.state.achievements?.length || 0;
+    // Migrate: contacts pool (added in v5.x)
+    if (!data.state.contacts) data.state.contacts = [];
+    if (!data.state.contactNextId) data.state.contactNextId = 1;
+    if (data.state.activeContactId === undefined) data.state.activeContactId = null;
+    // Migrate: multi-action per month (added in v6.x)
+    if (data.state.monthTimeSpent === undefined) data.state.monthTimeSpent = 0;
+    if (!data.state.monthActions) data.state.monthActions = [];
+    if (data.state.hvpWorkedThisMonth === undefined) data.state.hvpWorkedThisMonth = false;
+    if (data.state.lvpWorkedThisMonth === undefined) data.state.lvpWorkedThisMonth = false;
+    if (data.state.monthHadCreativeAction === undefined) data.state.monthHadCreativeAction = false;
     return data.state;
   } catch (e) {
     return null;
