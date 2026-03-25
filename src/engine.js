@@ -646,9 +646,9 @@ export function canPerformAction(state, actionId) {
     if (!state.availableEvents || state.availableEvents.length === 0) return false;
     if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) return false;
   }
-  // reprint: need at least one work ever created
+  // reprint: need at least one work in inventory (including sold-out qty=0)
   if (actionId === 'reprint') {
-    if (state.totalHVP === 0 && state.totalLVP === 0) return false;
+    if (!state.inventory.works || state.inventory.works.length === 0) return false;
   }
   // buyGoods: need money
   if (actionId === 'buyGoods') {
@@ -1793,31 +1793,35 @@ export function executeTurn(state, actionId) {
 
   } else if (action.type === 'reprint') {
     // === REPRINT: add more copies to selected works ===
-    state.passion -= 3;
-    result.deltas.push({ icon: 'heart', label: '安排印刷', value: '-3', positive: false });
-
     const workIds = state._reprintWorkIds || [];
     state._reprintWorkIds = null;
-    let totalReprintCost = 0;
 
-    for (const workId of workIds) {
-      const work = state.inventory.works.find(w => w.id === workId);
-      if (!work) continue;
-      const isHVP = work.type === 'hvp';
-      const sub = isHVP ? (HVP_SUBTYPES[work.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[work.subtype] || LVP_SUBTYPES.acrylic);
-      const qty = isHVP ? 30 : 20;
-      const unitCost = isHVP ? 40 : 6;
-      const cost = qty * unitCost;
-      state.money -= cost;
-      totalReprintCost += cost;
-      work.qty += qty;
-      result.deltas.push({ icon: 'printer', label: `追印${sub.name} +${qty}`, value: `-¥${cost}`, positive: false });
-    }
-    syncInventoryAggregates(state);
-    if (totalReprintCost > 0) {
-      result.deltas.push({ icon: 'package', label: '追印完成', value: `总计-¥${totalReprintCost}`, positive: true });
-    } else {
+    if (workIds.length === 0) {
       result.deltas.push({ icon: 'warning', label: '没有选择追印的作品', value: '', positive: false });
+      result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。' };
+    } else {
+      state.passion -= 3;
+      result.deltas.push({ icon: 'heart', label: '安排印刷', value: '-3', positive: false });
+
+      let totalReprintCost = 0;
+
+      for (const workId of workIds) {
+        const work = state.inventory.works.find(w => w.id === workId);
+        if (!work) continue;
+        const isHVP = work.type === 'hvp';
+        const sub = isHVP ? (HVP_SUBTYPES[work.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[work.subtype] || LVP_SUBTYPES.acrylic);
+        const qty = isHVP ? 30 : 20;
+        const unitCost = isHVP ? 40 : 6;
+        const cost = qty * unitCost;
+        state.money -= cost;
+        totalReprintCost += cost;
+        work.qty += qty;
+        result.deltas.push({ icon: 'printer', label: `追印${sub.name} +${qty}`, value: `-¥${cost}`, positive: false });
+      }
+      syncInventoryAggregates(state);
+      if (totalReprintCost > 0) {
+        result.deltas.push({ icon: 'package', label: '追印完成', value: `总计-¥${totalReprintCost}`, positive: true });
+      }
     }
     result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。' };
 
