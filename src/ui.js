@@ -1371,38 +1371,55 @@ export function renderAppPage(appId, state, onAction, onBack) {
       const cid = parseInt(btn.dataset.cid);
       const affinity = parseFloat(btn.dataset.affinity) || 0;
       const cname = btn.dataset.name || '';
+      const row = btn.closest('.contact-row');
       // High affinity = severe reputation penalty (betrayal of trust)
       // familiar(2~4): -0.5~-1.5, trusted(4+): -1.5~-3.0
       const repPenalty = affinity >= 2 ? Math.min(3, (affinity - 1) * 0.75) : 0;
-      if (repPenalty > 0) {
-        const row = btn.closest('.contact-row');
-        // Confirm dialog for good relationships
-        if (!btn._confirmed) {
-          const warn = document.createElement('div');
-          warn.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 8px;margin-top:4px;background:#FDE8E8;border-radius:8px;font-size:0.7rem;color:var(--danger)';
-          warn.innerHTML = `${ic('warning','0.7rem')} 和${cname}关系不错，强行断联会损害声誉(${repPenalty.toFixed(1)}) <button class="contact-remove-confirm" style="margin-left:auto;background:var(--danger);color:#fff;border:none;border-radius:6px;padding:2px 10px;font-size:0.68rem;cursor:pointer">确认断联</button>`;
-          row?.appendChild(warn);
-          btn._confirmed = true;
-          warn.querySelector('.contact-remove-confirm').addEventListener('click', () => {
-            state.reputation = Math.max(0, state.reputation - repPenalty);
-            state.contacts = state.contacts.filter(c => c.id !== cid);
-            if (state.activeContactId === cid) {
-              state.hasPartner = false; state.partnerType = null; state.partnerTurns = 0; state.activeContactId = null;
-            }
-            row?.remove();
-            const countEl = overlay.querySelector('.contact-pool-count');
-            if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
-          });
-          return;
+      const doRemove = (deductRep) => {
+        if (deductRep) state.reputation = Math.max(0, state.reputation - repPenalty);
+        state.contacts = state.contacts.filter(c => c.id !== cid);
+        if (state.activeContactId === cid) {
+          state.hasPartner = false; state.partnerType = null; state.partnerTurns = 0; state.activeContactId = null;
         }
+        row?.remove();
+        const countEl = overlay.querySelector('.contact-pool-count');
+        if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
+      };
+      // Show confirmation modal
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center';
+      const backdrop = document.createElement('div');
+      backdrop.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.45)';
+      const panel = document.createElement('div');
+      panel.style.cssText = 'position:relative;background:var(--card-bg,#fff);border-radius:16px;padding:24px 20px 16px;max-width:300px;width:85%;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center';
+      if (repPenalty > 0) {
+        panel.innerHTML = `
+          <div style="font-size:1.5rem;margin-bottom:8px">${ic('warning','1.5rem')}</div>
+          <div style="font-size:0.9rem;font-weight:700;margin-bottom:6px">确认断联？</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px">你和 <b>${cname}</b> 关系不错</div>
+          <div style="font-size:0.78rem;color:var(--danger);font-weight:600;margin-bottom:16px">强行断联将损失 ${repPenalty.toFixed(1)} 声誉</div>
+          <div style="display:flex;gap:10px;justify-content:center">
+            <button class="confirm-modal-cancel" style="flex:1;padding:8px 0;border-radius:10px;border:1px solid var(--border);background:var(--bg,#f5f5f5);color:var(--text);font-size:0.8rem;cursor:pointer">取消</button>
+            <button class="confirm-modal-ok" style="flex:1;padding:8px 0;border-radius:10px;border:none;background:var(--danger);color:#fff;font-size:0.8rem;font-weight:600;cursor:pointer">确认断联</button>
+          </div>`;
+      } else {
+        panel.innerHTML = `
+          <div style="font-size:0.9rem;font-weight:700;margin-bottom:6px">确认断联？</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px">将 <b>${cname}</b> 从人脉池中移除</div>
+          <div style="display:flex;gap:10px;justify-content:center">
+            <button class="confirm-modal-cancel" style="flex:1;padding:8px 0;border-radius:10px;border:1px solid var(--border);background:var(--bg,#f5f5f5);color:var(--text);font-size:0.8rem;cursor:pointer">取消</button>
+            <button class="confirm-modal-ok" style="flex:1;padding:8px 0;border-radius:10px;border:none;background:var(--danger);color:#fff;font-size:0.8rem;font-weight:600;cursor:pointer">确认</button>
+          </div>`;
       }
-      state.contacts = state.contacts.filter(c => c.id !== cid);
-      if (state.activeContactId === cid) {
-        state.hasPartner = false; state.partnerType = null; state.partnerTurns = 0; state.activeContactId = null;
-      }
-      btn.closest('.contact-row')?.remove();
-      const countEl = overlay.querySelector('.contact-pool-count');
-      if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
+      modal.appendChild(backdrop);
+      modal.appendChild(panel);
+      document.body.appendChild(modal);
+      backdrop.addEventListener('click', () => modal.remove());
+      panel.querySelector('.confirm-modal-cancel').addEventListener('click', () => modal.remove());
+      panel.querySelector('.confirm-modal-ok').addEventListener('click', () => {
+        doRemove(repPenalty > 0);
+        modal.remove();
+      });
     });
   });
   // Bind event calendar month switching (漫展年历)
