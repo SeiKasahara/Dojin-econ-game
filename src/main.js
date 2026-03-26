@@ -544,6 +544,7 @@ function afterMonthTransition(monthResult) {
     if (event) {
       let displayEvent = typeof event.effect === 'function' ? { ...event, effect: event.effect(state) } : event;
       if (typeof displayEvent.desc === 'function') displayEvent = { ...displayEvent, desc: displayEvent.desc(state) };
+      if (typeof displayEvent.tip === 'function') displayEvent = { ...displayEvent, tip: displayEvent.tip(state) };
       state.lastEvent = displayEvent;
       renderEvent(displayEvent, () => {
         applyEvent(state, event);

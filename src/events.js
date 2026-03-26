@@ -76,10 +76,10 @@ export const SCHEDULED_EVENTS = [
 export const RANDOM_EVENTS = [
   {
     id: 'boom', emoji: 'fire', title: '圈内大佬出圈了！',
-    desc: '一位知名创作者的作品在社交媒体上爆火，整个圈子的关注度都上升了。',
-    effect: '声誉+0.3 热情+10', effectClass: 'positive',
-    apply: (s) => { s.reputation += 0.3; s.passion = Math.min(100, s.passion + 10); },
-    tip: '在无干预的同人市场中，任何创作者的出圈都是正外部性——别人把盘子做大了，你不花任何成本就能享受流量红利。',
+    desc: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; return big ? '一位知名创作者的作品在社交媒体上爆火，但无标度网络中流量集中在头部，你很难分到红利。' : '一位知名创作者的作品在社交媒体上爆火，整个圈子的关注度都上升了。'; },
+    effect: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; return big ? '热情+10' : '声誉+0.3 热情+10'; }, effectClass: 'positive',
+    apply: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; if (!big) s.reputation += 0.3; s.passion = Math.min(100, s.passion + 10); },
+    tip: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; return big ? '无标度网络中度分布服从幂律——少数超级节点占据绝大多数连接。普通创作者几乎分不到热度红利。' : '在无干预的同人市场中，任何创作者的出圈都是正外部性——别人把盘子做大了，你不花任何成本就能享受流量红利。'; },
     weight: 12, when: () => true, maxTotal: Infinity,
   },
   {

@@ -120,6 +120,9 @@ export function loadGame() {
       state.totalHVP = state.totalHVP ?? works.filter(w => w.type === 'hvp').length;
       state.totalLVP = state.totalLVP ?? works.filter(w => w.type === 'lvp').length;
     }
+    // Migrate skillExp for saves from before the experience-based skill system
+    // getCreativeSkill will handle the actual migration on first call
+    if (state.skillExp == null) state.skillExp = 0;
 
     return state;
   } catch (e) {

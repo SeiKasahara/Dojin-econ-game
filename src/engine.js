@@ -81,11 +81,46 @@ function computeEffectiveTime(turn, debuffs) {
 setComputeEffectiveTime(computeEffectiveTime);
 
 // === Creative Skill: Learning by Doing (Arrow 1962) ===
-// Skill grows logarithmically with cumulative output: HVP counts 3× more than LVP
-// Effects: cost↓, reputation↑, speed↑ at mastery, breakthrough chance
+// Experience-driven, quality-weighted, exponential staircase
+// Each level requires ~3x the exp of the previous; talent multiplies all exp gains
+const SKILL_THRESHOLDS = [0, 30, 100, 300, 800];
+
 export function getCreativeSkill(state) {
-  const raw = Math.log2(1 + (state.totalHVP || 0) * 3 + (state.totalLVP || 0));
-  return Math.round(raw * 10) / 10; // 1 decimal
+  let exp = state.skillExp;
+  // Migration: old saves without skillExp
+  if (exp == null) {
+    exp = migrateSkillExp(state);
+    state.skillExp = exp;
+  }
+  for (let i = SKILL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (exp >= SKILL_THRESHOLDS[i]) {
+      if (i >= SKILL_THRESHOLDS.length - 1) {
+        // Beyond max threshold: asymptotic approach to 5.0
+        const over = exp - SKILL_THRESHOLDS[i];
+        return Math.round(Math.min(5.0, 4 + over / (over + 400)) * 10) / 10;
+      }
+      const base = SKILL_THRESHOLDS[i];
+      const next = SKILL_THRESHOLDS[i + 1];
+      return Math.round((i + (exp - base) / (next - base)) * 10) / 10;
+    }
+  }
+  return 0;
+}
+
+// Convert old cumulative-output skill to new exp (for save migration)
+function migrateSkillExp(state) {
+  const cumulative = (state.totalHVP || 0) * 3 + (state.totalLVP || 0);
+  if (cumulative === 0) return 0;
+  // Estimate old skill value (the log2 formula that was used before)
+  const oldSkill = Math.min(4.0, Math.log2(1 + cumulative));
+  // Inverse: convert skill level to exp via threshold interpolation
+  const level = Math.floor(Math.min(oldSkill, 4));
+  const frac = oldSkill - level;
+  if (level >= SKILL_THRESHOLDS.length - 1) {
+    const cf = Math.min(frac, 0.95);
+    return SKILL_THRESHOLDS[level] + 400 * cf / (1 - cf);
+  }
+  return SKILL_THRESHOLDS[level] + frac * (SKILL_THRESHOLDS[level + 1] - SKILL_THRESHOLDS[level]);
 }
 export function getSkillEffects(skill) {
   return {
@@ -307,14 +342,24 @@ export function syncInventoryAggregates(state) {
 }
 
 // Sell N items of a type from works array (FIFO: oldest first), returns { sold, revenue, details[] }
+// Secondhand pressure caps how many old copies can sell per turn:
+//   effectiveQty = qty × max(0.1, 1 - shPressure × ageFactor)
+//   ageFactor grows with months since creation (new works are protected)
 function sellFromWorks(state, type, count) {
+  const shPressure = state.official?.secondHandPressure?.[type] || 0;
   const works = state.inventory.works.filter(w => w.type === type && w.qty > 0);
   let remaining = count;
   let totalRev = 0;
   const details = []; // { work, sold, rev }
   for (const w of works) {
     if (remaining <= 0) break;
-    const sell = Math.min(remaining, w.qty);
+    // Age penalty: older works are more substitutable by secondhand copies
+    // ageFactor: 0 at creation month, ramps to 1.0 over 12 months
+    const age = Math.max(0, state.turn - (w.turn || state.turn));
+    const ageFactor = Math.min(1, age / 12);
+    const sellableFrac = Math.max(0.1, 1 - shPressure * ageFactor);
+    const effectiveQty = Math.max(1, Math.round(w.qty * sellableFrac));
+    const sell = Math.min(remaining, effectiveQty);
     const rev = sell * w.price;
     w.qty -= sell;
     remaining -= sell;
@@ -409,7 +454,7 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     eventCounts: {},
     scheduledFired: {},
     // Cumulative
-    totalHVP: 0, totalLVP: 0, totalRevenue: 0, totalSales: 0, maxReputation: 0.3,
+    totalHVP: 0, totalLVP: 0, skillExp: 0, totalRevenue: 0, totalSales: 0, maxReputation: 0.3,
     recentEventTurns: [],  // turns when events were attended (for fatigue tracking)
     // History for dashboard
     history: [],       // [{ turn, money, reputation, passion, revenue, sales, action }]
@@ -625,15 +670,14 @@ export function canPerformAction(state, actionId) {
   // (the real constraint is passion budget, not action locks)
   // jobSearch: when unemployed OR full-time doujin (wanting to go back)
   if (actionId === 'jobSearch' && !state.unemployed && !state.fullTimeDoujin) return false;
-  // quitForDoujin: work stage, not already full-time doujin, rep≥3, money≥25000, 5+ events
-  // Unemployed players can also go full-time doujin (they already have no job to quit)
+  // quitForDoujin: work stage, not already full-time doujin, some experience
+  // No rep/money gates — player bears the risk themselves
   if (actionId === 'quitForDoujin') {
     if (getLifeStage(state.turn) !== 'work' || state.fullTimeDoujin) return false;
     if (state.unemployed) {
-      // Unemployed: lower threshold — no job to lose, but still need financial viability
-      if (state.reputation < 2 || state.money < 15000 || (state.eventLog?.length || 0) < 3) return false;
+      if ((state.eventLog?.length || 0) < 3) return false;
     } else {
-      if (state.reputation < 3 || state.money < 25000 || (state.eventLog?.length || 0) < 5) return false;
+      if ((state.eventLog?.length || 0) < 5) return false;
     }
   }
   // partTimeJob: only students or unemployed
@@ -677,11 +721,9 @@ export function canPerformAction(state, actionId) {
     if (state.money < 800) return false;
     if ((state.hvpProject._assistantCount || 0) >= 2) return false;
   }
-  // upgradeEquipment: need money and not maxed
+  // upgradeEquipment: not maxed (player bears financial risk)
   if (actionId === 'upgradeEquipment') {
-    const costs = [3000, 5000, 8000];
     if (state.equipmentLevel >= 3) return false;
-    if (state.money < costs[state.equipmentLevel]) return false;
   }
   // sponsorCommunity: need money and cooldown
   if (actionId === 'sponsorCommunity') {
@@ -697,6 +739,9 @@ export function canPerformAction(state, actionId) {
   // Freelance: dynamic time requirement
   if (actionId === 'freelance') {
     if (remaining < getFreelanceTimeCost(state)) return false;
+  } else if (actionId === 'attendEvent') {
+    // Mode not yet chosen: allow if consign (0 days) is possible, i.e. remaining >= 1
+    if (remaining < 1) return false;
   } else {
     if (r.time) {
       const tc = getTimeCost(state, actionId);
@@ -1830,7 +1875,9 @@ export function executeAction(state, actionId) {
         state.totalHVP++;
 
         // Breakthrough chance — skill makes occasional masterpieces possible
+        let wasBreakthrough = false;
         if (Math.random() < fx.breakthroughChance) {
+          wasBreakthrough = true;
           const bkRep = 0.3 + skill * 0.1;
           const bkPassion = 10 + Math.round(skill * 2);
           state.reputation += bkRep;
@@ -1841,6 +1888,11 @@ export function executeAction(state, actionId) {
         } else {
           result.tip = TIPS.hvpComplete;
         }
+
+        // Skill experience: quality-weighted, talent-scaled
+        const hvpExpBase = 10 * Math.pow(savedProject.workQuality || 1, 1.5);
+        const hvpExpTalent = 1 + (state.endowments.talent || 0) * 0.35;
+        state.skillExp = (state.skillExp || 0) + (hvpExpBase + (wasBreakthrough ? 15 : 0)) * hvpExpTalent;
         if (state.passion < 30) result.tip = TIPS.burnout;
       } else {
         result.deltas.push({ icon: 'book-open-text', label: '继续创作中...', value: `进度 ${Math.floor(p.progress)}/${p.needed}`, positive: true });
@@ -1920,7 +1972,9 @@ export function executeAction(state, actionId) {
     result.deltas.push({ icon: 'chat-circle', label: '社群反馈', value: `热情+${feedback.toFixed(1)}`, positive: feedback > 0 });
 
     // LVP breakthrough (rarer than HVP, half chance)
+    let lvpBreakthrough = false;
     if (Math.random() < fx.breakthroughChance * 0.5) {
+      lvpBreakthrough = true;
       const bkRep = 0.15 + skill * 0.05;
       const bkPassion = 6 + Math.round(skill);
       state.reputation += bkRep;
@@ -1928,6 +1982,12 @@ export function executeAction(state, actionId) {
       state.passion = Math.min(100, state.passion + bkPassion);
       result.deltas.push({ icon: 'sparkle', label: '精品谷子！超出预期的品质', value: `声誉+${bkRep.toFixed(1)} 热情+${bkPassion}`, positive: true });
     }
+
+    // Skill experience: quality-weighted, talent-scaled
+    const lvpExpBase = 3 * Math.pow(lvpQuality || 1, 1.5);
+    const lvpExpTalent = 1 + (state.endowments.talent || 0) * 0.35;
+    state.skillExp = (state.skillExp || 0) + (lvpExpBase + (lvpBreakthrough ? 5 : 0)) * lvpExpTalent;
+
     result.tip = TIPS.lvp;
 
   } else if (action.type === 'reprint') {
@@ -2096,7 +2156,7 @@ export function executeAction(state, actionId) {
     }
     result.deltas.push({ icon: 'warning', label: '每月生活费¥800自动扣除', value: '没有固定收入了', positive: false });
     result.tip = wasUnemployed
-      ? { label: '化危为机', text: '失业不一定是坏事——你已经有了足够的积蓄和声誉，不如把这当作转型的契机。全职同人创作，时间完全自由，但一切靠自己。存款低于¥5000时焦虑会侵蚀热情。撑不住随时可以重新找工作。' }
+      ? { label: '化危为机', text: '失业不是问题，我们还有另一条路，全职同人创作，时间完全自由，但一切靠自己。存款低于¥5000时焦虑会严重侵蚀热情。撑不住随时可以重新找工作。' }
       : { label: '全职同人创作者', text: '你选择了最勇敢的道路——辞掉工作，全身心投入同人创作。时间自由了，但收入完全靠自己。存款就是你的安全线，低于¥5000时焦虑会开始侵蚀热情。如果撑不住，随时可以回去找工作——但薪资要从头开始。' };
   }
 
