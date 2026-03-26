@@ -1415,10 +1415,6 @@ export function executeAction(state, actionId) {
         }
       } else {
         // === 寄售 (consignment) ===
-        if (state._leaveDenied) {
-          result.deltas.push({ icon: 'building-office', label: '请假被拒！无法亲自参展', value: '降级为寄售', positive: false });
-          state._leaveDenied = null;
-        }
         state.consecutiveConsigns++;
         const shipCost = Math.round(evt.travelCost * 0.3);
         state.passion -= 2;

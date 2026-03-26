@@ -177,21 +177,6 @@ function handleAction(actionId) {
           return;
         }
 
-        // Work stage leave check: need to take time off to attend in person
-        if (mode === 'attend' && getLifeStage(state.turn) === 'work' && !state.unemployed) {
-          // Base 70%, drops during active time debuffs (996, burnout, etc.)
-          const busyDebuffs = state.timeDebuffs.filter(d => d.delta < 0).length;
-          const leaveProb = Math.max(0.25, 0.70 - busyDebuffs * 0.15);
-          if (Math.random() >= leaveProb) {
-            // Leave denied → forced consignment
-            state._eventMode = 'consign';
-            state._minigameResult = null;
-            state._leaveDenied = true; // flag for result display
-            executeInMonth(actionId);
-            return;
-          }
-        }
-
         state._eventMode = mode;
         if (mode === 'attend') {
           // 亲参 → play minigame
