@@ -36,7 +36,7 @@ export function renderTitle(onStart, onContinue) {
           第${save.turn + 1}回合 · ${save.age}岁${save.stage} · ¥${save.money?.toLocaleString()} · ${ic('heart')} ${save.passion}
         </div>
       </button>` : ''}
-      <div style="margin-bottom:20px;width:100%;max-width:340px">
+      <div class="title-reveal-4" style="margin-bottom:20px;width:100%;max-width:340px">
         <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px;text-align:center">你喜欢什么样的作品？</div>
         <div class="price-selector">
           <div class="price-btn selected" data-fandom="niche">
@@ -49,18 +49,27 @@ export function renderTitle(onStart, onContinue) {
           </div>
         </div>
       </div>
-      <button class="btn ${save ? 'btn-secondary' : 'btn-primary'}" id="btn-start" style="width:100%;max-width:340px">${save ? '开始新游戏' : '开始创作之旅'}</button>
-      <p class="tagline mt-16" style="font-size:0.7rem">
+      <div class="title-reveal-5"><button class="btn ${save ? 'btn-secondary' : 'btn-primary'}" id="btn-start" style="width:100%;max-width:340px">${save ? '开始新游戏' : '开始创作之旅'}</button></div>
+      <p class="tagline mt-16 title-reveal-6" style="font-size:0.7rem">
         玩法：每回合选择行动，管理热情·声誉·资金<br/>
         热情归零 = 游戏结束
       </p>
-      <button id="btn-mute" style="margin-top:10px;background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button>
-      <p class="tagline" style="font-size:0.65rem;margin-top:8px">
+      <div class="title-reveal-6"><button id="btn-mute" style="margin-top:10px;background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button></div>
+      <p class="tagline title-reveal-6" style="font-size:0.65rem;margin-top:8px">
         作者博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a><br/>
         音乐：<a href="https://amachamusic.chagasi.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">甘茶音乐工坊</a><br/>
         像素素材：<a href="https://www.avatarsinpixels.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Pixels © MostlyPixels</a><br/>
         背景美术：<a href="https://www.deviantart.com/coolarts223/gallery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">coolarts223</a><br/>
       </p>
+      ${[0,1,2,3,4,5,6,7].map(i => {
+        const left = 8 + i * 11;
+        const dur = 9 + (i % 5) * 1.4;
+        const delay = i * 1.1;
+        const size = 6 + (i % 3) * 3;
+        const colors = ['#5BCFB5', '#FF6B9D', '#00A8E8', '#F5A623'];
+        const bg = colors[i % colors.length];
+        return `<span class="title-particle" style="left:${left}%;animation-duration:${dur}s;animation-delay:${delay}s;width:${size}px;height:${size}px;background:${bg};opacity:0.5"></span>`;
+      }).join('')}
     </div>
   `;
   let selectedFandom = 'niche';
@@ -132,16 +141,17 @@ export function renderEndowments(onConfirm) {
     const rem = remaining();
     const keys = Object.keys(ENDOWMENTS);
     const rating = rollRating(totalPoints);
+    const isLegendary = totalPoints >= 12;
     app().innerHTML = `
-      <div class="screen" style="padding:16px">
+      <div class="screen endowment-screen">
         <h2 style="text-align:center;margin-bottom:4px">角色禀赋</h2>
         <p style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-bottom:8px">
           先抽取天赋点数，再自由分配（每项至少1，上限${MAX}）
         </p>
         <div style="display:flex;justify-content:center;gap:16px;margin-bottom:12px">
           <div style="text-align:center;flex:1">
-            <div style="font-size:1.8rem;font-weight:700;color:${rating.color}">${totalPoints}</div>
-            <div style="font-size:0.75rem;color:${rating.color};font-weight:600">${rating.text}</div>
+            <div class="endow-total-num" data-target="${totalPoints}" style="font-size:1.8rem;font-weight:700;color:${rating.color}">0</div>
+            <div class="endow-rating${isLegendary ? ' endow-rating--legendary' : ''}" style="font-size:0.75rem;color:${rating.color};font-weight:600">${rating.text}</div>
             <div style="font-size:0.65rem;color:var(--text-muted)">天赋点数</div>
           </div>
           <div style="text-align:center;flex:1">
@@ -154,14 +164,14 @@ export function renderEndowments(onConfirm) {
           ${!rolled ? `<button class="btn btn-secondary" id="btn-reroll" style="padding:4px 20px;font-size:0.82rem">${ic('dice-five')} 重新抽取（仅1次）</button>` : `<div style="font-size:0.7rem;color:var(--text-muted)">已用完重抽机会</div>`}
         </div>
         <div style="text-align:center;margin-bottom:8px">
-          <span style="font-size:0.9rem;font-weight:700;color:${rem > 0 ? 'var(--primary)' : 'var(--success)'}">剩余: ${rem}</span>
+          <span class="endow-remaining--${rem > 0 ? 'pending' : 'done'}" style="font-size:0.9rem;font-weight:700;color:${rem > 0 ? 'var(--primary)' : 'var(--success)'}">剩余: ${rem}</span>
         </div>
-        <div style="max-width:360px;margin:0 auto">
+        <div class="endow-stats-frame">
           ${keys.map(k => {
             const e = ENDOWMENTS[k];
             const v = pts[k];
             return `
-            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div class="endow-trait-row" data-key="${k}">
               <span style="font-size:1.3rem;width:28px;text-align:center">${ic(e.emoji)}</span>
               <div style="flex:1;min-width:0">
                 <div style="font-weight:700;font-size:0.85rem">${e.name}</div>
@@ -171,8 +181,8 @@ export function renderEndowments(onConfirm) {
               <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
                 <button class="endow-btn" data-key="${k}" data-dir="-1" ${v <= 1 ? 'disabled' : ''} style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:1rem;cursor:pointer">−</button>
                 <div style="width:60px;text-align:center">
-                  <div style="font-size:1.1rem;font-weight:700">${v}</div>
-                  <div style="display:flex;gap:2px;justify-content:center">${Array.from({length: MAX}, (_, i) => `<div style="width:12px;height:4px;border-radius:2px;background:${i < v ? 'var(--primary)' : '#E0E0E0'}"></div>`).join('')}</div>
+                  <div class="endow-val" style="font-size:1.1rem;font-weight:700">${v}</div>
+                  <div style="display:flex;gap:2px;justify-content:center">${Array.from({length: MAX}, (_, i) => `<div class="endow-bar-pip${i < v ? ' filled' : ''}" style="background:${i < v ? 'var(--primary)' : '#E0E0E0'}"></div>`).join('')}</div>
                 </div>
                 <button class="endow-btn" data-key="${k}" data-dir="1" ${v >= MAX || rem <= 0 ? 'disabled' : ''} style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:1rem;cursor:pointer">+</button>
               </div>
@@ -188,16 +198,78 @@ export function renderEndowments(onConfirm) {
         </div>
       </div>
     `;
+    // Animate total points counter (roll effect)
+    const numEl = document.querySelector('.endow-total-num');
+    if (numEl) {
+      const target = parseInt(numEl.dataset.target);
+      let current = 0;
+      const step = () => {
+        current += 1;
+        numEl.textContent = current;
+        if (current < target) requestAnimationFrame(step);
+      };
+      setTimeout(() => requestAnimationFrame(step), 200);
+    }
+
+    // Incremental DOM update instead of full re-render
+    function updateTraitUI(key) {
+      const rem = remaining();
+      const keys = Object.keys(ENDOWMENTS);
+
+      // Update the changed trait's value + bar pips
+      const row = document.querySelector(`.endow-trait-row[data-key="${key}"]`);
+      if (row) {
+        const v = pts[key];
+        row.querySelector('.endow-val').textContent = v;
+        row.querySelectorAll('.endow-bar-pip').forEach((pip, i) => {
+          const shouldFill = i < v;
+          pip.classList.toggle('filled', shouldFill);
+          pip.style.background = shouldFill ? 'var(--primary)' : '#E0E0E0';
+        });
+        // Update +/- button disabled states for this row
+        row.querySelector('[data-dir="-1"]').disabled = v <= 1;
+        row.querySelector('[data-dir="1"]').disabled = v >= MAX || rem <= 0;
+      }
+
+      // Update all other rows' + buttons (rem might have changed)
+      keys.forEach(k => {
+        if (k === key) return;
+        const r = document.querySelector(`.endow-trait-row[data-key="${k}"] [data-dir="1"]`);
+        if (r) r.disabled = pts[k] >= MAX || rem <= 0;
+      });
+
+      // Update remaining display
+      const remEl = document.querySelector('[class*="endow-remaining"]');
+      if (remEl) {
+        remEl.className = rem > 0 ? 'endow-remaining--pending' : 'endow-remaining--done';
+        remEl.style.color = rem > 0 ? 'var(--primary)' : 'var(--success)';
+        remEl.textContent = `剩余: ${rem}`;
+      }
+
+      // Update confirm button
+      const cfm = document.getElementById('btn-endow-confirm');
+      if (cfm) {
+        cfm.disabled = rem !== 0;
+        cfm.style.opacity = rem !== 0 ? '0.5' : '1';
+        cfm.textContent = `确认禀赋 (${rem === 0 ? '✓' : `还剩${rem}点`})`;
+        // Re-bind click if just became enabled
+        if (rem === 0) {
+          cfm.onclick = () => onConfirm({ ...pts }, bgId);
+        } else {
+          cfm.onclick = null;
+        }
+      }
+    }
 
     document.querySelectorAll('.endow-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const k = btn.dataset.key;
         const dir = parseInt(btn.dataset.dir);
         const newVal = pts[k] + dir;
-        if (newVal < 1 || newVal > MAX) return; // min 1 per trait
+        if (newVal < 1 || newVal > MAX) return;
         if (dir > 0 && remaining() <= 0) return;
         pts[k] = newVal;
-        render();
+        updateTraitUI(k);
       });
     });
     const confirmBtn = document.getElementById('btn-endow-confirm');
@@ -207,10 +279,12 @@ export function renderEndowments(onConfirm) {
     document.getElementById('btn-reroll')?.addEventListener('click', () => {
       if (rolled) return;
       rolled = true;
+      // Shake the button before re-rendering
+      document.getElementById('btn-reroll')?.classList.add('shake-anim');
       totalPoints = rollTotal();
       bgId = rollBackground();
       pts.talent = 1; pts.stamina = 1; pts.social = 1; pts.marketing = 1; pts.resilience = 1;
-      render();
+      setTimeout(() => render(), 150);
     });
   }
   render();
@@ -826,7 +900,7 @@ export function openBrowserApp() {
           <div style="color:var(--text-muted)">${ic('arrow-right')}</div>
         </a>
         <a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" class="app-action-card" style="text-decoration:none;color:inherit;margin-bottom:10px">
-          <div class="app-action-icon" style="color:#E8605C">${ic('notebook', '1.3rem')}</div>
+          <div class="app-action-icon" style="color:#2A9D8F">${ic('notebook', '1.3rem')}</div>
           <div class="app-action-body">
             <div class="app-action-name">同人经济学理论</div>
             <div class="app-action-cost">seikasahara.com/zh/</div>
@@ -1040,7 +1114,7 @@ function renderSNSButton(state) {
 export function openSNSPanel(state) {
   const typeIcon = { npc: 'sparkle', trend: 'chart-bar', fan: 'heart', market: 'package', flavor: 'chat-circle-dots', drama: 'lightning' };
   const typeHandle = { npc: '创作者', trend: '趋势话题', fan: '粉丝', market: '市场观察', flavor: '闲聊', drama: '热搜' };
-  const avatarColor = { npc: '#2C3E50', trend: '#E6A817', fan: '#C73E3A', market: '#3498DB', flavor: '#8B7355', drama: '#E74C3C' };
+  const avatarColor = { npc: '#264653', trend: '#F5A623', fan: '#FF6B9D', market: '#00A8E8', flavor: '#6B8A7A', drama: '#E76F51' };
   const timeLabels = ['刚刚', '3分钟前', '8分钟前', '15分钟前', '28分钟前', '1小时前', '2小时前', '3小时前'];
 
   // Build feed HTML
@@ -1138,7 +1212,7 @@ export function openSNSPanel(state) {
 
 // === App Desktop ===
 export const APP_DEFS = [
-  { id: 'enzao', name: '嗯造', icon: 'palette', color: '#E8605C', actions: ['hvp', 'lvp', 'reprint'], logo: 'app logos/嗯造.avif' },
+  { id: 'enzao', name: '嗯造', icon: 'palette', color: '#2A9D8F', actions: ['hvp', 'lvp', 'reprint'], logo: 'app logos/嗯造.avif' },
   { id: 'xuanfa', name: '次元宣发机', icon: 'megaphone', color: '#E6A817', actions: ['promote_light', 'promote_heavy'], logo: 'app logos/次元宣发机.jpg' },
   { id: 'miaohuashi', name: '喵画师', icon: 'paint-brush', color: '#9B59B6', actions: ['freelance'], logo: 'app logos/喵画师.avif' },
   { id: 'miaosi', name: '喵丝职聘', icon: 'briefcase', color: '#5B7DB1', actions: ['partTimeJob', 'jobSearch', 'quitForDoujin'], logo: 'app logos/喵丝职聘.avif' },
@@ -1660,7 +1734,7 @@ function renderActionCard(action, state) {
     } else if (r.passion && state.passion < r.passion) disableReason = '热情不足';
   }
   // Highlight if HVP in progress
-  const highlight = action.id === 'hvp' && state.hvpProject ? 'border-color:var(--primary);background:#FFF5F5;' : '';
+  const highlight = action.id === 'hvp' && state.hvpProject ? 'border-color:var(--primary);background:#F0FAF8;' : '';
 
   return `
     <div class="action-card ${disabled ? 'disabled' : ''}" data-action="${action.id}" style="${highlight}">
@@ -1732,7 +1806,7 @@ export function renderResult(state, result, onContinue) {
 
   const achieveHtml = newAchievements.map(id => {
     const a = getAchievementInfo(id);
-    return `<div style="text-align:center;padding:8px;background:#FFF8E8;border-radius:8px;margin-bottom:8px;animation:slideUp 0.4s ease">
+    return `<div style="text-align:center;padding:8px;background:#FFF8E8;border-radius:8px;margin-bottom:8px;animation:achievePop 0.6s cubic-bezier(0.34,1.56,0.64,1)">
       <span style="font-size:1.5rem">${ic(a.emoji)}</span>
       <div style="font-weight:700;font-size:0.85rem;margin-top:4px">${a.name}</div>
       <div style="font-size:0.75rem;color:var(--text-light)">${a.desc}</div>
@@ -1777,16 +1851,16 @@ export function renderResult(state, result, onContinue) {
             <div style="display:flex;gap:8px;margin-bottom:8px">
               <div style="flex:1;text-align:center;padding:8px;border-radius:8px;background:#E8F8F0">
                 <div style="font-size:0.65rem;color:var(--text-muted)">收入</div>
-                <div style="font-size:1rem;font-weight:700;color:#27AE60">+¥${f.income.toLocaleString()}</div>
+                <div class="result-counter" data-count-to="${f.income}" data-prefix="+¥" style="font-size:1rem;font-weight:700;color:#27AE60">+¥0</div>
               </div>
               <div style="flex:1;text-align:center;padding:8px;border-radius:8px;background:#FDF0F0">
                 <div style="font-size:0.65rem;color:var(--text-muted)">支出</div>
-                <div style="font-size:1rem;font-weight:700;color:#E74C3C">-¥${f.expense.toLocaleString()}</div>
+                <div class="result-counter" data-count-to="${f.expense}" data-prefix="-¥" style="font-size:1rem;font-weight:700;color:#E74C3C">-¥0</div>
               </div>
             </div>
-            <div style="text-align:center;padding:8px;border-radius:8px;background:var(--bg-card);border:2px solid ${profitColor}">
+            <div class="result-profit--${profit > 0 ? 'positive' : profit < 0 ? 'negative' : ''}" style="text-align:center;padding:8px;border-radius:8px;background:var(--bg-card);border:2px solid ${profitColor}">
               <div style="font-size:0.65rem;color:var(--text-muted)">毛利</div>
-              <div style="font-size:1.1rem;font-weight:700;color:${profitColor}">${profitSign}¥${Math.abs(profit).toLocaleString()}</div>
+              <div class="result-counter" data-count-to="${Math.abs(profit)}" data-prefix="${profitSign}¥" style="font-size:1.1rem;font-weight:700;color:${profitColor}">${profitSign}¥0</div>
             </div>
           </div>`;
         })() : ''}
@@ -1795,11 +1869,27 @@ export function renderResult(state, result, onContinue) {
         ${tipHtml}
       </div>
 
-      <div class="bottom-bar">
+      <div class="bottom-bar result-bottom-bar">
         <button class="btn btn-primary btn-block" id="btn-continue">继续 →</button>
       </div>
     </div>
   `;
+
+  // Animate financial counters
+  document.querySelectorAll('.result-counter').forEach(el => {
+    const target = parseInt(el.dataset.countTo) || 0;
+    const prefix = el.dataset.prefix || '';
+    if (target === 0) { el.textContent = prefix + '0'; return; }
+    const duration = 600;
+    const start = performance.now();
+    const step = (now) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = prefix + Math.round(target * eased).toLocaleString();
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    setTimeout(() => requestAnimationFrame(step), 300);
+  });
 
   // Draw chart if applicable
   if (result.supplyDemand) {
@@ -1982,7 +2072,7 @@ export function renderPriceSelector(state, productType, onSelect, onCancel) {
       });
       // Highlight selected
       btn.style.border = '2px solid var(--primary)';
-      btn.style.background = '#F0F4FF';
+      btn.style.background = '#F0FAF8';
       selectedPrice = parseInt(btn.dataset.price);
       // Enable confirm
       const cfm = overlay.querySelector('#btn-price-confirm');
@@ -2044,7 +2134,7 @@ export function renderSubtypeSelector(state, productType, onSelect, onCancel) {
     btn.addEventListener('click', () => {
       overlay.querySelectorAll('.subtype-btn').forEach(b => { if (b.dataset.locked !== '1') { b.style.border = '1px solid var(--border)'; b.style.background = ''; }});
       btn.style.border = '2px solid var(--primary)';
-      btn.style.background = '#F0F4FF';
+      btn.style.background = '#F0FAF8';
       selected = btn.dataset.subtype;
       const cfm = overlay.querySelector('#btn-subtype-confirm');
       cfm.disabled = false;
@@ -2122,7 +2212,7 @@ export function renderCreativeChoice(choiceData, onSelect, onCancel) {
     btn.addEventListener('click', () => {
       overlay.querySelectorAll('.choice-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
       btn.style.border = '2px solid var(--primary)';
-      btn.style.background = '#F0F4FF';
+      btn.style.background = '#F0FAF8';
       selected = btn.dataset.choice;
       const cfm = overlay.querySelector('#btn-choice-confirm');
       cfm.disabled = false;
@@ -2186,7 +2276,7 @@ export function renderStrategySelector(state, onSelect) {
     btn.addEventListener('click', () => {
       overlay.querySelectorAll('.strat-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
       btn.style.border = '2px solid var(--primary)';
-      btn.style.background = '#F0F4FF';
+      btn.style.background = '#F0FAF8';
       selected = btn.dataset.strat;
       const cfm = overlay.querySelector('#btn-strat-confirm');
       cfm.disabled = false;
@@ -2241,7 +2331,7 @@ export function renderEventModeSelector(state, event, onSelect, onCancel) {
       if (btn.dataset.mode === 'attend' && state.time < 3) return;
       overlay.querySelectorAll('.mode-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
       btn.style.border = '2px solid var(--primary)';
-      btn.style.background = '#F0F4FF';
+      btn.style.background = '#F0FAF8';
       selected = btn.dataset.mode;
       const cfm = overlay.querySelector('#btn-mode-confirm');
       cfm.disabled = false;
@@ -2365,7 +2455,7 @@ export function renderReprintSelector(state, onSelect, onCancel) {
       } else {
         selected.add(id);
         btn.style.borderColor = 'var(--primary)';
-        btn.style.background = '#FFF5F5';
+        btn.style.background = '#F0FAF8';
       }
       updateConfirm();
     });
