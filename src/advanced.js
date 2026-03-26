@@ -4,7 +4,7 @@
  * 
  */
 
-import { getLifeStage, activeCrisisCount } from './engine.js';
+import { getLifeStage, activeCrisisCount, addMoney } from './engine.js';
 import { ic } from './icons.js';
 
 // =============================================
@@ -288,7 +288,7 @@ export const ADVANCED_EVENTS = [
     id: 'veblen_hype', emoji: 'diamond', title: '你的旧作品成了"圣遗物"',
     desc: '你早期的一部作品因为绝版而被炒出高价。圈内开始有人把它当作"正统粉丝"的身份象征，价格越高反而越多人想要...',
     effect: '资金+800 声誉+0.3', effectClass: 'positive',
-    apply: (s) => { s.money += 800; s.reputation += 0.3; },
+    apply: (s) => { addMoney(s, 800); s.reputation += 0.3; },
     tip: '韦伯仑效应：价格越高需求越大。绝版同人制品从消费品相变为金融资产。购买者消费的不再是内容本身，而是"克服高昂交易成本的证明"和"文化正统性"。',
     weight: 2, when: (s) => s.reputation > 4 && s.totalHVP > 2 && s.turn > 24, maxTotal: 3,
   },

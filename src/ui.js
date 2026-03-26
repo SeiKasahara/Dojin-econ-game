@@ -3,7 +3,7 @@
  * Market ecosystem panel, pricing UI, diversity indicators
  */
 
-import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getLifeStageLabel, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground, HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES } from './engine.js';
+import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getLifeStageLabel, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground, HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, ensureEventCalendar } from './engine.js';
 import { createChartCanvas, drawSupplyDemand } from './chart.js';
 import { getMarketNarratives, getPriceTiers, calculatePricedSales, getMarketAvgPrice, IP_TYPES } from './market.js';
 import { getOfficialNarratives } from './official.js';
@@ -1249,6 +1249,27 @@ export function renderAppPage(appId, state, onAction, onBack) {
             <div style="max-height:200px;overflow-y:auto">${contactsList}</div>
           </div>`;
         })() : ''}
+        ${appId === 'manzhan' ? (() => {
+          ensureEventCalendar(state);
+          const cal = state.eventCalendar || [];
+          const MTAG = { 1: '寒假', 5: '五一', 7: '暑假', 8: '暑假', 10: '国庆' };
+          const curIdx = Math.max(0, cal.findIndex(e => e.turn === state.turn));
+          return `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border)">
+            <div style="font-size:0.8rem;font-weight:700;margin-bottom:8px">${ic('calendar-dots')} 漫展年历</div>
+            <div id="ecal-months" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch">
+              ${cal.map((entry, i) => {
+                const isCur = entry.turn === state.turn;
+                const has = entry.events.length > 0;
+                const tag = MTAG[entry.month] || '';
+                return `<span class="ecal-pill" data-idx="${i}" style="flex-shrink:0;padding:5px 10px;border-radius:14px;font-size:0.72rem;cursor:pointer;border:1.5px solid ${isCur ? '#E84393' : 'var(--border)'};background:${isCur ? '#E8439318' : 'var(--bg-card)'};text-align:center;position:relative;white-space:nowrap;user-select:none;line-height:1.3;transition:all 0.15s">
+                  ${entry.month}月${tag ? `<br><span style="font-size:0.55rem;opacity:0.6">${tag}</span>` : ''}
+                  ${has ? '<span style="position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:#E84393"></span>' : ''}
+                </span>`;
+              }).join('')}
+            </div>
+            <div id="ecal-body" data-default="${curIdx}"></div>
+          </div>`;
+        })() : ''}
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1270,6 +1291,52 @@ export function renderAppPage(appId, state, onAction, onBack) {
       if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
     });
   });
+  // Bind event calendar month switching (漫展年历)
+  if (appId === 'manzhan') {
+    const ecalBody = overlay.querySelector('#ecal-body');
+    const ecalPills = overlay.querySelectorAll('.ecal-pill');
+    if (ecalBody && ecalPills.length > 0) {
+      const cal = state.eventCalendar || [];
+      const attended = state.calendarEventsAttended || [];
+      const sIcon = { mega: ic('star-four'), big: ic('tent'), small: ic('note-pencil') };
+      const sLabel = { mega: '全国盛典', big: '大型展会', small: '小型展会' };
+
+      function showCalMonth(idx) {
+        ecalPills.forEach(p => {
+          const pi = parseInt(p.dataset.idx);
+          const sel = pi === idx;
+          const cur = cal[pi]?.turn === state.turn;
+          p.style.background = sel ? '#E84393' : (cur ? '#E8439318' : 'var(--bg-card)');
+          p.style.color = sel ? '#fff' : 'var(--text)';
+          p.style.borderColor = sel ? '#E84393' : (cur ? '#E84393' : 'var(--border)');
+        });
+        const entry = cal[idx];
+        if (!entry || entry.events.length === 0) {
+          ecalBody.innerHTML = `<div style="text-align:center;padding:20px 12px;color:var(--text-muted);font-size:0.78rem">${ic('calendar-x')} 本月无同人展安排</div>`;
+          return;
+        }
+        const isCur = entry.turn === state.turn;
+        ecalBody.innerHTML = `${isCur ? `<div style="font-size:0.65rem;color:#E84393;font-weight:600;margin-bottom:6px">${ic('map-pin-area', '0.65rem')} 当前月份</div>` : `<div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:6px">${entry.turn < state.turn ? '已过去' : `${entry.turn - state.turn}个月后`}</div>`}` +
+          entry.events.map(e => {
+            const done = attended.includes(e.calendarId);
+            const isPast = entry.turn < state.turn;
+            const dimmed = done || isPast;
+            const tag = done ? ' <span style="color:var(--text-muted)">✓ 已参加</span>' : isPast ? ' <span style="color:var(--text-muted)">已过期</span>' : '';
+            return `<div style="padding:10px 12px;margin-bottom:6px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);${dimmed ? 'opacity:0.4;' : ''}">
+              <div style="font-weight:600;font-size:0.8rem;margin-bottom:3px">${sIcon[e.size] || ''} ${e.name}${tag}</div>
+              <div style="font-size:0.7rem;color:var(--text-muted)">${ic('map-pin', '0.65rem')} ${e.city} · 路费¥${e.travelCost} · 销量×${e.salesBoost} · 声誉+${e.reputationBoost}</div>
+              <div style="font-size:0.62rem;color:var(--text-muted);margin-top:2px">${sLabel[e.size] || ''}</div>
+            </div>`;
+          }).join('');
+      }
+
+      ecalPills.forEach(p => p.addEventListener('click', () => showCalMonth(parseInt(p.dataset.idx))));
+      showCalMonth(parseInt(ecalBody.dataset.default || '0'));
+      // Scroll current month pill into view
+      const curPill = overlay.querySelector(`.ecal-pill[data-idx="${ecalBody.dataset.default}"]`);
+      if (curPill) setTimeout(() => curPill.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }), 50);
+    }
+  }
 }
 
 export function renderMessageApp(state, onAction, onBack) {
@@ -1687,6 +1754,30 @@ export function renderResult(state, result, onContinue) {
             声誉↑需求曲线右移 · 信息透明度↑转化率提升 · 绿色=你的收入
           </p>
         </div>` : ''}
+
+        ${result.monthFinancial ? (() => {
+          const f = result.monthFinancial;
+          const profit = f.income - f.expense;
+          const profitColor = profit > 0 ? 'var(--success, #27AE60)' : profit < 0 ? 'var(--danger, #E74C3C)' : 'var(--text-muted)';
+          const profitSign = profit > 0 ? '+' : profit < 0 ? '-' : '';
+          return `<div class="result-box" style="padding:12px">
+            <h3 style="font-size:0.85rem;margin-bottom:10px">${ic('chart-pie')} 本月盈亏汇总</h3>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <div style="flex:1;text-align:center;padding:8px;border-radius:8px;background:#E8F8F0">
+                <div style="font-size:0.65rem;color:var(--text-muted)">收入</div>
+                <div style="font-size:1rem;font-weight:700;color:#27AE60">+¥${f.income.toLocaleString()}</div>
+              </div>
+              <div style="flex:1;text-align:center;padding:8px;border-radius:8px;background:#FDF0F0">
+                <div style="font-size:0.65rem;color:var(--text-muted)">支出</div>
+                <div style="font-size:1rem;font-weight:700;color:#E74C3C">-¥${f.expense.toLocaleString()}</div>
+              </div>
+            </div>
+            <div style="text-align:center;padding:8px;border-radius:8px;background:var(--bg-card);border:2px solid ${profitColor}">
+              <div style="font-size:0.65rem;color:var(--text-muted)">毛利</div>
+              <div style="font-size:1.1rem;font-weight:700;color:${profitColor}">${profitSign}¥${Math.abs(profit).toLocaleString()}</div>
+            </div>
+          </div>`;
+        })() : ''}
 
         ${achieveHtml}
         ${tipHtml}
@@ -2275,8 +2366,9 @@ export function renderGameOver(state, onRestart) {
   const age = getAge(state.turn);
   const stage = getLifeStage(state.turn);
   const isCommercial = state.commercialTransition;
-  const title = isCommercial ? '商业出道' : survived >= 48 ? '传奇落幕' : survived >= 24 ? '旅程结束' : survived >= 12 ? '一段经历' : '遗憾退场';
-  const emoji = isCommercial ? 'star-four' : survived >= 48 ? 'trophy' : survived >= 24 ? 'book-open-text' : survived >= 12 ? 'star-four' : 'smiley-sad';
+  const isTampered = state.tampered;
+  const title = isTampered ? '叙事崩溃' : isCommercial ? '商业出道' : survived >= 48 ? '传奇落幕' : survived >= 24 ? '旅程结束' : survived >= 12 ? '一段经历' : '遗憾退场';
+  const emoji = isTampered ? 'bug' : isCommercial ? 'star-four' : survived >= 48 ? 'trophy' : survived >= 24 ? 'book-open-text' : survived >= 12 ? 'star-four' : 'smiley-sad';
 
   const stageText = stage === 'work' ? '工作后' : stage === 'university' ? '大学期间' : '暑假';
 

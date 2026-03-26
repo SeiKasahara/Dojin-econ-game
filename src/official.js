@@ -5,6 +5,7 @@
  */
 
 import { ic } from './icons.js';
+import { addMoney } from './engine.js';
 
 // === IP Heat System (hsls.md: dK/dt = I_official + θ·N_D - λ·K) ===
 export function createOfficialState(ipType = 'normal') {
@@ -97,7 +98,7 @@ export function tickOfficial(official, market, playerState) {
           s.official.shadowPrice = -0.2;
           s.reputation += 0.2;
           s.market.nLVP += 5;
-          s.money += 300; // subsidy equivalent
+          addMoney(s, 300); // subsidy equivalent
         },
       });
     }

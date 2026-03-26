@@ -8,9 +8,16 @@ import { createMarketState, tickMarket, getCompetitionModifier } from './market.
 import { createOfficialState, tickOfficial, getSecondHandModifier, recordPlayerWork } from './official.js';
 import { createAdvancedState, tickAdvanced, getAdvancedCostMod, getAdvancedSalesMod, getSignalCost, ADVANCED_EVENTS } from './advanced.js';
 import { SCHEDULED_EVENTS, RANDOM_EVENTS, setComputeEffectiveTime } from './events.js';
-import { generateEnding, generateCommercialEnding } from './endings.js';
+import { generateEnding, generateCommercialEnding, generateCheatEnding } from './endings.js';
 import { rollPartnerDrama } from './partner-drama.js';
 import { checkAchievements, getAchievementInfo as _getAchievementInfo } from './achievements.js';
+
+// === Money tracking helper (gross income/expense for monthly summary) ===
+export function addMoney(state, amount) {
+  state.money += amount;
+  if (amount > 0) state._monthIncome = (state._monthIncome || 0) + amount;
+  else if (amount < 0) state._monthExpense = (state._monthExpense || 0) + Math.abs(amount);
+}
 
 // === Crisis counter: max 2 simultaneous economic crises ===
 export function activeCrisisCount(s) {
@@ -379,6 +386,9 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     // Doujin events (同人展)
     attendingEvent: null,     // current event being attended: { name, salesBoost, cost }
     availableEvents: [],      // events available this month
+    eventCalendar: null,      // 12-month pre-generated calendar [{turn, month, events}]
+    eventCalendarStart: -1,   // first turn of current calendar cycle
+    calendarEventsAttended: [], // calendarIds of attended events (for calendar gray-out)
     // Inventory system (库存管理)
     inventory: { hvpStock: 0, lvpStock: 0, hvpPrice: 50, lvpPrice: 15, works: [], nextWorkId: 1 },
     // Personal goods collection (as consumer)
@@ -697,9 +707,7 @@ const EVENT_TRAVEL_COST = { '本市': 50, '邻市': 200, '省会': 500, '一线�
 const EVENT_NAMES_BIG = ['CP大展', '同人祭', '创作者之夜', '超级同人嘉年华'];
 const EVENT_NAMES_SMALL = ['同好交流会', '小型贩售会', '创作者市集', '主题Only'];
 
-export function generateEvents(state) {
-  const cs = state.market ? state.market.communitySize : 10000;
-  const month = ((state.turn + 6) % 12) + 1;
+function generateEventsForMonth(cs, month) {
   const events = [];
 
   // Big events: ~3/year for small communities, more for large
@@ -748,6 +756,45 @@ export function generateEvents(state) {
   }
 
   return events;
+}
+
+export function generateEvents(state) {
+  const cs = state.market ? state.market.communitySize : 10000;
+  const month = ((state.turn + 6) % 12) + 1;
+  return generateEventsForMonth(cs, month);
+}
+
+/**
+ * Generate a 12-month event calendar starting from startTurn.
+ * Each event gets a unique calendarId for attendance tracking.
+ */
+export function generateEventCalendar(state, startTurn) {
+  const cs = state.market ? state.market.communitySize : 10000;
+  const calendar = [];
+  let nextId = 0;
+  for (let i = 0; i < 12; i++) {
+    const turn = startTurn + i;
+    const month = ((turn + 6) % 12) + 1;
+    const events = generateEventsForMonth(cs, month);
+    events.forEach(e => { e.calendarId = nextId++; });
+    calendar.push({ turn, month, events });
+  }
+  return calendar;
+}
+
+/**
+ * Ensure event calendar exists and covers the current turn.
+ * Called from endMonth and can be called from UI for lazy init.
+ */
+export function ensureEventCalendar(state) {
+  if (!state.eventCalendar || state.turn >= state.eventCalendarStart + 12) {
+    state.eventCalendar = generateEventCalendar(state, state.turn);
+    state.eventCalendarStart = state.turn;
+    state.calendarEventsAttended = [];
+    // Sync current turn's events so availableEvents matches the calendar
+    const curEntry = state.eventCalendar.find(e => e.turn === state.turn);
+    if (curEntry) state.availableEvents = curEntry.events;
+  }
 }
 
 // === Community Feedback B (Inverted-U) ===
@@ -945,7 +992,7 @@ export function applyEvent(state, event) {
       const rate = cfg.rateMin + Math.random() * (cfg.rateMax - cfg.rateMin);
       const dip = Math.round(state.money * rate);
       if (dip > 0) {
-        state.money -= dip;
+        addMoney(state, -dip);
         state._pendingEventDip = { label: event.title, amount: dip }; // picked up by next executeTurn
       }
     }
@@ -1161,7 +1208,7 @@ export function executeAction(state, actionId) {
     const baseWage = 300 + Math.floor(Math.random() * 200);
     const recessionCut = state.recessionTurnsLeft > 0 ? 0.6 : 1.0;
     const wage = Math.floor(baseWage * recessionCut);
-    state.money += wage;
+    addMoney(state, wage);
     state.timeDebuffs.push({ id: 'tired_work', reason: '打工疲惫', turnsLeft: 1, delta: -1 });
     result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-1天', positive: false });
     result.deltas.push({ icon: 'coins', label: '打工收入', value: `+¥${wage}`, positive: true });
@@ -1175,7 +1222,7 @@ export function executeAction(state, actionId) {
     const rawIncome = base + repBonus + Math.floor(Math.random() * 150);
     const recessionCut = state.recessionTurnsLeft > 0 ? 0.5 : 1.0;
     const income = Math.floor(rawIncome * recessionCut);
-    state.money += income;
+    addMoney(state, income);
     const repGain = 0.02 + state.reputation * 0.005;
     state.reputation += repGain;
     state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: -2 });
@@ -1196,6 +1243,13 @@ export function executeAction(state, actionId) {
       if (!state.eventsAttendedThisMonth.includes(evt.name)) {
         state.eventsAttendedThisMonth.push(evt.name);
       }
+      // Track in calendar for year-view gray-out
+      if (evt.calendarId != null) {
+        if (!state.calendarEventsAttended) state.calendarEventsAttended = [];
+        if (!state.calendarEventsAttended.includes(evt.calendarId)) {
+          state.calendarEventsAttended.push(evt.calendarId);
+        }
+      }
 
       // Read and consume mode/minigame state BEFORE branching (shared by cancelled + normal paths)
       const mode = state._eventMode || 'attend';
@@ -1208,7 +1262,7 @@ export function executeAction(state, actionId) {
       if (evt.condition === 'cancelled') {
         if (isAttend) {
           const cancelLodging = Math.round(evt.travelCost * 1.2 + 200);
-          state.money -= evt.travelCost + cancelLodging;
+          addMoney(state, -(evt.travelCost + cancelLodging));
           state.passion = Math.max(0, state.passion - 5);
           result.deltas.push({ icon: 'smiley-x-eyes', label: `${evt.name}@${evt.city} 流展！`, value: '白跑一趟', positive: false });
           result.deltas.push({ icon: 'coins', label: '路费+住宿（沉没成本）', value: `-¥${evt.travelCost + cancelLodging}`, positive: false });
@@ -1216,7 +1270,7 @@ export function executeAction(state, actionId) {
         } else {
           // 寄售流展：货还在手里，只损失邮费
           const shipCost = Math.round(evt.travelCost * 0.3);
-          state.money -= shipCost;
+          addMoney(state, -shipCost);
           state.passion = Math.max(0, state.passion - 1);
           result.deltas.push({ icon: 'package', label: `${evt.name}@${evt.city} 流展！`, value: '寄售取消，货物退回', positive: false });
           result.deltas.push({ icon: 'coins', label: '邮费（沉没成本）', value: `-¥${shipCost}`, positive: false });
@@ -1246,7 +1300,7 @@ export function executeAction(state, actionId) {
         // === 亲参 with minigame ===
         state.consecutiveConsigns = 0; // reset on attend
         state.passion -= 5;
-        state.money -= evt.travelCost + lodgingCost + mg.moneySpent;
+        addMoney(state, -(evt.travelCost + lodgingCost + mg.moneySpent));
         const fatiguePassion = Math.round(mg.passionDelta * eventFatigue);
         state.passion = Math.min(100, state.passion + fatiguePassion);
         state.reputation += mg.reputationDelta;
@@ -1271,7 +1325,7 @@ export function executeAction(state, actionId) {
         // === 亲参 but skipped minigame ===
         state.consecutiveConsigns = 0; // reset on attend
         state.passion -= 5;
-        state.money -= evt.travelCost + lodgingCost;
+        addMoney(state, -(evt.travelCost + lodgingCost));
         const fatigueBoost = Math.round(evt.passionBoost * eventFatigue);
         state.passion = Math.min(100, state.passion + fatigueBoost);
         state.reputation += evt.reputationBoost;
@@ -1292,7 +1346,7 @@ export function executeAction(state, actionId) {
         state.consecutiveConsigns++;
         const shipCost = Math.round(evt.travelCost * 0.3);
         state.passion -= 2;
-        state.money -= shipCost;
+        addMoney(state, -shipCost);
         state.attendingEvent = evt; // for calculateSales event boost
         result.deltas.push({ icon: 'package', label: `寄售 ${evt.name}@${evt.city}`, value: '委托代售', positive: true });
         result.deltas.push({ icon: 'coins', label: '邮寄费用', value: `-¥${shipCost}`, positive: false });
@@ -1428,7 +1482,7 @@ export function executeAction(state, actionId) {
         }
       }
 
-      state.money += eventRevenue;
+      addMoney(state, eventRevenue);
       state.totalRevenue += eventRevenue;
 
       if (eventRevenue > 0) {
@@ -1660,7 +1714,7 @@ export function executeAction(state, actionId) {
         const printCost = Math.round(savedProject.printCost * costMult * talentDiscount * skillDiscount);
         const partnerCost = state.hasPartner ? state.partnerFee : 0;
         const totalCost = printCost + partnerCost;
-        state.money -= totalCost;
+        addMoney(state, -totalCost);
 
         // Calculate batch size and add to inventory
         const batchQty = Math.max(20, Math.round(printCost / 50));
@@ -1722,7 +1776,7 @@ export function executeAction(state, actionId) {
           // 同时发电子版：内容效用被低成本满足，投机买家减少
           if (state.official) state.official.secondHandPool.hvp = Math.floor(state.official.secondHandPool.hvp * 0.8);
           const digiRev = Math.round(batchQty * state.inventory.hvpPrice * 0.3);
-          state.money += digiRev;
+          addMoney(state, digiRev);
           result.deltas.push({ icon: 'phone', label: '同步电子版', value: `电子版收入+¥${digiRev}`, positive: true });
         }
 
@@ -1786,7 +1840,7 @@ export function executeAction(state, actionId) {
     const costMult = state.recessionTurnsLeft > 0 ? 1.2 : 1.0;
     const skillDiscount = 1 - fx.costReduction;
     const actualCost = Math.round(sub.cost * (pfx.costMod || 1.0) * costMult * skillDiscount);
-    state.money -= actualCost;
+    addMoney(state, -actualCost);
     result.deltas.push({ icon: 'heart', label: '创作消耗', value: '-8', positive: false });
     const lvpCostLabels = [];
     if (costMult > 1) lvpCostLabels.push('下行+20%');
@@ -1859,7 +1913,7 @@ export function executeAction(state, actionId) {
         const qty = isHVP ? 30 : 20;
         const unitCost = isHVP ? 40 : 6;
         const cost = qty * unitCost;
-        state.money -= cost;
+        addMoney(state, -cost);
         totalReprintCost += cost;
         work.qty += qty;
         result.deltas.push({ icon: 'printer', label: `追印${sub.name} +${qty}`, value: `-¥${cost}`, positive: false });
@@ -1875,7 +1929,7 @@ export function executeAction(state, actionId) {
     // === BUY GOODS AS CONSUMER: cost scales with wealth, passion stays constant ===
     const m = Math.max(0, state.money);
     const cost = m < 3000 ? 200 : m < 6000 ? 600 : m < 9000 ? 1500 : m < 15000 ? 3000 : 5000;
-    state.money -= cost;
+    addMoney(state, -cost);
     result.deltas.push({ icon: 'coins', label: `购买谷子${cost > 200 ? '(眼光变高了)' : ''}`, value: `-¥${cost}`, positive: false });
 
     // Fixed passion gain — buying goods always feels good
@@ -1909,7 +1963,7 @@ export function executeAction(state, actionId) {
       const unitPrice = Math.max(50, Math.round(120 * (1 - shPressure * 0.5)));
       const revenue = sellQty * unitPrice;
       state.goodsCollection -= sellQty;
-      state.money += revenue;
+      addMoney(state, revenue);
       state.passion = Math.max(0, state.passion - 3); // slight emotional cost of letting go
 
       // Feeds secondhand pool
@@ -1927,7 +1981,7 @@ export function executeAction(state, actionId) {
   // --- Hire assistant (outsource for current HVP project) ---
   if (action.type === 'hireAssistant' && state.hvpProject) {
     const assistCost = 800 + Math.floor(Math.random() * 700);
-    state.money -= assistCost;
+    addMoney(state, -assistCost);
     state.hvpProject.progress += 0.5;
     state.hvpProject._assistantCount = (state.hvpProject._assistantCount || 0) + 1;
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 1);
@@ -1941,7 +1995,7 @@ export function executeAction(state, actionId) {
   if (action.type === 'upgradeEquipment') {
     const costs = [3000, 5000, 8000];
     const cost = costs[state.equipmentLevel];
-    state.money -= cost;
+    addMoney(state, -cost);
     state.equipmentLevel++;
     result.deltas.push({ icon: 'desktop', label: `设备升级到Lv${state.equipmentLevel}！`, value: `-¥${cost}`, positive: false });
     result.deltas.push({ icon: 'sparkle', label: '作品质量永久提升', value: `+${(state.equipmentLevel * 0.08 * 100).toFixed(0)}%`, positive: true });
@@ -1953,7 +2007,7 @@ export function executeAction(state, actionId) {
   if (action.type === 'sponsorCommunity') {
     const cs = state.market ? state.market.communitySize : 10000;
     const cost = Math.round(1500 + cs / 10000 * 1500);
-    state.money -= cost;
+    addMoney(state, -cost);
     state.lastSponsorTurn = state.turn;
     const repGain = 0.12 + Math.min(0.08, state.reputation * 0.01);
     state.reputation += repGain;
@@ -2189,7 +2243,7 @@ export function endMonth(state) {
       if (!state._debtFinalWarning) {
         // First hit: warning + small help
         state._debtFinalWarning = true;
-        state.money += 3000; // 家里东拼西凑了一点
+        addMoney(state, 3000); // 家里东拼西凑了一点
         state.passion = Math.max(0, state.passion - 20);
         result.deltas.push({ icon: 'house-simple', label: '家里来电话了…', value: '东拼西凑帮你还了¥3000', positive: false });
         result.deltas.push({ icon: 'smiley-sad', label: '"家里实在拿不出更多了"', value: '热情-20', positive: false });
@@ -2219,7 +2273,7 @@ export function endMonth(state) {
       // 书香门第/富裕/超级富哥：兜底 + 额外支持
       state.money = 0;
       const support = bg === 'wealthy' ? 3000 : bg === 'tycoon' ? 8000 : 1500;
-      state.money += support;
+      addMoney(state, support);
       result.deltas.push({ icon: BACKGROUNDS[bg].emoji, label: '家里帮你还清了欠款', value: `¥${debt}`, positive: false });
       if (bg === 'educated') {
         result.deltas.push({ icon: 'books', label: '"创作是好事，但要量力而行"', value: `额外给了¥${support}支持`, positive: true });
@@ -2268,8 +2322,8 @@ export function endMonth(state) {
     // else 50%: no extra spending
 
     const allowance = Math.max(0, baseAllowance - spending);
-    state.money += allowance;
-    if (dip > 0) state.money -= dip;
+    addMoney(state, allowance);
+    if (dip > 0) addMoney(state, -dip);
 
     if (spending > 0 || dip > 0) {
       result.deltas.push({ icon: 'house', label: '生活费结余', value: `+¥${baseAllowance}`, positive: true });
@@ -2302,14 +2356,14 @@ export function endMonth(state) {
       const impliedLiving = (state.lastSalary || 800) * 2; // implied full living cost ≈ surplus × 2
       const erosionRate = Math.min(0.6, 0.15 + state.jobSearchTurns * 0.08); // 15%→60% over months
       const unemployedExpense = Math.round(impliedLiving * erosionRate);
-      state.money -= unemployedExpense;
+      addMoney(state, -unemployedExpense);
       result.deltas.push({ icon: 'house', label: `生活费侵蚀同人资金(${Math.round(erosionRate * 100)}%)`, value: `-¥${unemployedExpense}`, positive: false });
     } else if (state.fullTimeDoujin) {
       // Full-time doujin: no salary, fixed living cost, anxiety based on savings
       state.doujinMonths = (state.doujinMonths || 0) + 1;
       state.monthlyIncome = 0;
       const livingCost = 800;
-      state.money -= livingCost;
+      addMoney(state, -livingCost);
       result.deltas.push({ icon: 'house', label: '生活费', value: `-¥${livingCost}`, positive: false });
 
       // Anxiety based on savings level
@@ -2323,7 +2377,7 @@ export function endMonth(state) {
       const workStart = state.doujinWorkYearReset > 0 ? state.doujinWorkYearReset : 50; // reset if returned from doujin
       const baseSalary = Math.round((800 + Math.max(0, Math.floor((state.turn - workStart) / 12)) * 200) * bgSalaryMult);
       const salary = state.recessionTurnsLeft > 0 ? Math.floor(baseSalary * 0.8) : baseSalary; // recession cuts salary
-      state.money += salary;
+      addMoney(state, salary);
       state.monthlyIncome = salary;
       result.deltas.push({ icon: 'briefcase', label: `工资${state.recessionTurnsLeft > 0 ? '(下行-20%)' : ''}`, value: `+¥${salary}`, positive: true });
 
@@ -2358,7 +2412,7 @@ export function endMonth(state) {
         ? Math.round(state.lastSalary * 0.3) // 失业: 消费降级有延迟，仍按30%扣
         : Math.round(salaryRef * spendRate);
       if (lifestyleCost > 0) {
-        state.money -= lifestyleCost;
+        addMoney(state, -lifestyleCost);
         result.deltas.push({ icon: 'shopping-cart', label: `消费升级${state.unemployed ? '(惯性)' : ''}`, value: `-¥${lifestyleCost}`, positive: false });
       }
     }
@@ -2398,7 +2452,7 @@ export function endMonth(state) {
       const sold = Math.min(demand, state.inventory.hvpStock);
       if (sold > 0) {
         const hvpResult = sellFromWorks(state, 'hvp', sold);
-        state.money += hvpResult.revenue;
+        addMoney(state, hvpResult.revenue);
         state.totalRevenue += hvpResult.revenue;
         state.totalSales += hvpResult.sold;
         const repGain = (0.02 + 0.06 * state.infoDisclosure) * hvpResult.sold * 0.03;
@@ -2415,7 +2469,7 @@ export function endMonth(state) {
       const sold = Math.min(demand, state.inventory.lvpStock);
       if (sold > 0) {
         const lvpResult = sellFromWorks(state, 'lvp', sold);
-        state.money += lvpResult.revenue;
+        addMoney(state, lvpResult.revenue);
         state.totalRevenue += lvpResult.revenue;
         state.totalSales += lvpResult.sold;
         result.deltas.push({ icon: 'globe-simple', label: `网上售出谷子×${lvpResult.sold}`, value: `+¥${lvpResult.revenue}`, positive: true });
@@ -2487,6 +2541,9 @@ export function endMonth(state) {
     ? Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)))
     : computeEffectiveTime(state.turn, state.timeDebuffs);
 
+  // Capture month financial summary BEFORE reset
+  result.monthFinancial = { income: state._monthIncome || 0, expense: state._monthExpense || 0 };
+
   // --- Reset month state ---
   state.monthTimeSpent = 0;
   state.monthActions = [];
@@ -2494,6 +2551,8 @@ export function endMonth(state) {
   state.lvpWorkedThisMonth = false;
   state.eventsAttendedThisMonth = [];
   state.monthHadCreativeAction = false;
+  state._monthIncome = 0;
+  state._monthExpense = 0;
   // Reset chat usage (monthly cooldowns)
   if (state._chatUsage) state._chatUsage.bestie = 0; // reset bestie round count (cooldown checked separately)
   // Don't reset goddess usage — it persists per event until new event triggers
@@ -2504,11 +2563,30 @@ export function endMonth(state) {
   }
   // Goddess history: never cleared (persists until game end)
 
-  // --- Generate available doujin events for next turn ---
-  state.availableEvents = generateEvents(state);
+  // --- Generate available doujin events for next turn (from calendar) ---
+  ensureEventCalendar(state);
+  const calEntry = state.eventCalendar.find(e => e.turn === state.turn);
+  state.availableEvents = calEntry ? calEntry.events : generateEvents(state);
 
   // --- Achievements ---
   checkAchievements(state);
+
+  // --- Tamper detection (delayed) ---
+  if (state.tampered) {
+    if (state._tamperCountdown == null) {
+      // First detection: start countdown (1-2 months)
+      state._tamperCountdown = 1 + Math.floor(Math.random() * 2);
+    } else {
+      state._tamperCountdown--;
+    }
+    if (state._tamperCountdown <= 0) {
+      state.passion = 0;
+      state.phase = 'gameover';
+      state.gameOverReason = generateCheatEnding(state);
+      state.lastResult = result;
+      return result;
+    }
+  }
 
   // --- Game over check ---
   if (state.passion <= 0) {

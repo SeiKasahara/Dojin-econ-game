@@ -511,12 +511,12 @@ function finishMonth() {
   }
 
   // Show month-end result page → transition animation → events → next month
-  if (monthResult.deltas.length > 0) {
+  // Always show the settlement page (even with 0 deltas) so the financial summary is visible
+  if (monthResult.deltas.length > 0 || monthResult.monthFinancial) {
     renderResult(state, monthResult, () => {
       showMonthTransition(state, () => afterMonthTransition(monthResult));
     });
   } else {
-    // No deltas to show, skip straight to transition
     showMonthTransition(state, () => afterMonthTransition(monthResult));
   }
 }
@@ -535,6 +535,9 @@ function afterMonthTransition(monthResult) {
         if (macroIds.includes(event.id)) {
           import('./chat-npc.js').then(({ triggerGoddessEvent }) => triggerGoddessEvent(state, event.id));
         }
+        // Reset monthly accumulators so event money doesn't leak into next month's report
+        state._monthIncome = 0;
+        state._monthExpense = 0;
         if (state.phase === 'gameover') { deleteSave(); syncBGM('gameover'); renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
         state.phase = 'action';
         syncBGM('game');
