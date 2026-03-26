@@ -123,29 +123,30 @@ export const NOISE_COLORS = [
 ];
 
 export const PLAYER_WORK_TEXTS = [
+  // 通用（任何作品类型都适用）
+  { text: '新作预告！这次挑战了不一样的风格', for: null },
   // 同人本相关
-  '新刊试阅公开！故事从这里开始…',
-  '角色立绘完成！大家觉得怎么样？',
-  '封面定稿！期待拿到实物的那天',
-  '内页预览！这一段画得很满意',
-  '新作预告！这次挑战了不一样的风格',
-  '试阅放出前10页，完整版展会见！',
-  '新本的人设图公开，猜猜这次是什么故事？',
-  '最终版封面和封底的对比预览',
-  '分镜完成了！接下来就是上色地狱',
-  '小说新刊的开头三千字放出来试试水',
+  { text: '新刊试阅公开！故事从这里开始…', for: ['manga', 'novel'] },
+  { text: '角色立绘完成！大家觉得怎么样？', for: ['manga', 'artbook'] },
+  { text: '封面定稿！期待拿到实物的那天', for: ['manga', 'novel', 'artbook', 'lorebook'] },
+  { text: '内页预览！这一段画得很满意', for: ['manga', 'artbook'] },
+  { text: '试阅放出前10页，完整版展会见！', for: ['manga', 'novel'] },
+  { text: '新本的人设图公开，猜猜这次是什么故事？', for: ['manga', 'novel'] },
+  { text: '最终版封面和封底的对比预览', for: ['manga', 'novel', 'artbook', 'lorebook'] },
+  { text: '分镜完成了！接下来就是上色地狱', for: ['manga'] },
+  { text: '小说新刊的开头三千字放出来试试水', for: ['novel'] },
   // 谷子&周边
-  '新谷子设计图公开！大家想要哪款？',
-  '亚克力立牌的线稿完成了，即将打样',
-  '吧唧最终配色确认！准备下单',
-  '色纸新系列预览，这次画了6款',
-  '明信片套组封面设计，极简风尝试',
-  '周边打样实物图！颜色比预想的好',
-  '新做的镭射亚克力效果太美了',
+  { text: '新谷子设计图公开！大家想要哪款？', for: ['acrylic', 'badge', 'shikishi', 'postcard'] },
+  { text: '亚克力立牌的线稿完成了，即将打样', for: ['acrylic'] },
+  { text: '吧唧最终配色确认！准备下单', for: ['badge'] },
+  { text: '色纸新系列预览，这次画了6款', for: ['shikishi'] },
+  { text: '明信片套组封面设计，极简风尝试', for: ['postcard'] },
+  { text: '周边打样实物图！颜色比预想的好', for: ['acrylic', 'badge', 'shikishi', 'postcard'] },
+  { text: '新做的镭射亚克力效果太美了', for: ['acrylic'] },
   // 音乐&其他
-  '新专辑的第一首demo放出来了！',
-  '设定集排版完成，信息量超大',
-  '绘本新作的世界观设定公开',
+  { text: '新专辑的第一首demo放出来了！', for: ['music'] },
+  { text: '设定集排版完成，信息量超大', for: ['lorebook'] },
+  { text: '绘本新作的世界观设定公开', for: ['artbook'] },
 ];
 
 export const PLAYER_CASUAL_TEXTS = [

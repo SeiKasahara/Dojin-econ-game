@@ -146,7 +146,10 @@ function performAction(state, actionId) {
     state.stickinessStacks = 0;
     state.totalReach += reach;
 
-    addPlayerPost(state, 'player_work', pick(PLAYER_WORK_TEXTS), reach, 12000);
+    const matchedTexts = PLAYER_WORK_TEXTS
+      .filter(t => !t.for || t.for.some(f => state.playerSubtypes.has(f)))
+      .map(t => t.text);
+    addPlayerPost(state, 'player_work', pick(matchedTexts), reach, 12000);
     state.cooldowns.postWork = Math.max(500, act.baseCd - state.cdReduction);
 
     // Spam check
