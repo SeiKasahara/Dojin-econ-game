@@ -54,6 +54,9 @@ export function preloadSprites() {
   load('bg1', 'minigame-background/bg.png');
   load('bg2', 'minigame-background/bg2.png');
   load('desk', 'minigame-background/desk.png');
+  // Settlement screens
+  load('jiesuan', 'jiesuan/jiesuan.webp');
+  load('jiesuan2', 'jiesuan/jiesuan2.webp');
 
   return Promise.all(promises).then(() => { spritesLoaded = true; });
 }
@@ -396,25 +399,61 @@ export function renderScoring(ctx, result, canvas) {
   const W = CW, H = CH;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-  // Semi-transparent overlay
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  // Draw jiesuan image as full background (cover): good vs bad result
+  const jImg = spriteImages[result.performance < 40 ? 'jiesuan2' : 'jiesuan'];
+  if (jImg) {
+    const imgAspect = jImg.naturalWidth / jImg.naturalHeight;
+    const canvasAspect = W / H;
+    let sx = 0, sy = 0, sw = jImg.naturalWidth, sh = jImg.naturalHeight;
+    if (imgAspect > canvasAspect) {
+      sw = jImg.naturalHeight * canvasAspect;
+      sx = (jImg.naturalWidth - sw) / 2;
+    } else {
+      sh = jImg.naturalWidth / canvasAspect;
+      sy = (jImg.naturalHeight - sh) / 2;
+    }
+    ctx.drawImage(jImg, sx, sy, sw, sh, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Gradient overlay: transparent at top → dark at bottom for text readability
+  const grad = ctx.createLinearGradient(0, H * 0.2, 0, H);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(0.35, 'rgba(0,0,0,0.4)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.8)');
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Score card
-  ctx.fillStyle = '#FFF';
-  roundRect(ctx, 60, 40, W - 120, H - 80, 16);
-  ctx.fill();
-
-  ctx.fillStyle = '#3D2B1F';
-  ctx.font = 'bold 18px sans-serif';
+  // Title with shadow for contrast over the illustration
   ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 6;
 
   const emoji = result.performance >= 70 ? '🎉' : result.performance >= 40 ? '📊' : '😅';
-  ctx.fillText(`${emoji} 展会结束！`, W / 2, 75);
+  ctx.fillStyle = '#FFF';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText(`${emoji} 展会结束！`, W / 2, 35);
 
-  ctx.font = '13px sans-serif';
-  ctx.fillText(`表现评分: ${result.performance}分`, W / 2, 105);
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillStyle = '#FFD700';
+  ctx.fillText(`表现评分: ${result.performance}分`, W / 2, 60);
+  ctx.shadowBlur = 0;
 
+  // Score panel — semi-transparent card at bottom portion
+  const panelX = 50, panelY = H * 0.42, panelW = W - 100, panelH = H * 0.50;
+  ctx.fillStyle = 'rgba(30, 20, 15, 0.7)';
+  roundRect(ctx, panelX, panelY, panelW, panelH, 12);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,215,0,0.4)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, panelX, panelY, panelW, panelH, 12);
+  ctx.stroke();
+
+  // Score lines
+  ctx.fillStyle = '#F0E6D3';
+  ctx.font = '12px sans-serif';
   const lines = [
     `招呼: ${result.greeted}次  售出: ${result.sold}份`,
     `无料: ${result.freebiesGiven}次  名片: ${result.cardsExchanged}次`,
@@ -422,14 +461,13 @@ export function renderScoring(ctx, result, canvas) {
     `热情变化: ${result.passionDelta > 0 ? '+' : ''}${result.passionDelta}`,
     `声誉变化: +${result.reputationDelta.toFixed(2)}`,
   ];
-  ctx.font = '11px sans-serif';
   lines.forEach((line, i) => {
-    ctx.fillText(line, W / 2, 135 + i * 22);
+    ctx.fillText(line, W / 2, panelY + 28 + i * 22);
   });
 
   ctx.font = '10px sans-serif';
-  ctx.fillStyle = '#888';
-  ctx.fillText('即将返回主游戏...', W / 2, H - 55);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillText('即将返回主游戏...', W / 2, panelY + panelH - 10);
 }
 
 // === Helper: Draw booth ===

@@ -187,6 +187,7 @@ function handleAction(actionId) {
             removeLoadingOverlay();
             startMinigame(state, chosenEvent, (mgResult) => {
               state._minigameResult = mgResult || null;
+              syncBGM('game');
               executeInMonth(actionId);
             });
           });

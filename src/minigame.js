@@ -858,7 +858,7 @@ export function startMinigame(mainState, event, onComplete) {
           mg.phase = 'done';
           cleanup();
           onComplete(result);
-        }, 2500);
+        }, 4000);
       }
     }
 
