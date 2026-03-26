@@ -8,7 +8,7 @@ import { createMarketState, tickMarket, getCompetitionModifier } from './market.
 import { createOfficialState, tickOfficial, getSecondHandModifier, recordPlayerWork } from './official.js';
 import { createAdvancedState, tickAdvanced, getAdvancedCostMod, getAdvancedSalesMod, getSignalCost, ADVANCED_EVENTS } from './advanced.js';
 import { SCHEDULED_EVENTS, RANDOM_EVENTS, setComputeEffectiveTime } from './events.js';
-import { generateEnding, generateCommercialEnding, generateCheatEnding } from './endings.js';
+import { generateEnding, generateCommercialEnding, generateCheatEnding, generateOpenEnding } from './endings.js';
 import { rollPartnerDrama } from './partner-drama.js';
 import { checkAchievements, getAchievementInfo as _getAchievementInfo } from './achievements.js';
 
@@ -2639,6 +2639,15 @@ export function endMonth(state) {
       state.lastResult = result;
       return result;
     }
+  }
+
+  // --- Age 42: open ending (story continues beyond the game) ---
+  if (getAge(state.turn) >= 42) {
+    state.phase = 'gameover';
+    state.openEnding = true;
+    state.gameOverReason = generateOpenEnding(state);
+    state.lastResult = result;
+    return result;
   }
 
   // --- Game over check ---

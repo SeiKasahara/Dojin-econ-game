@@ -2499,12 +2499,18 @@ export function renderGameOver(state, onRestart) {
   const stage = getLifeStage(state.turn);
   const isCommercial = state.commercialTransition;
   const isTampered = state.tampered;
-  const title = isTampered ? '叙事崩溃' : isCommercial ? '商业出道' : survived >= 48 ? '传奇落幕' : survived >= 24 ? '旅程结束' : survived >= 12 ? '一段经历' : '遗憾退场';
-  const emoji = isTampered ? 'bug' : isCommercial ? 'star-four' : survived >= 48 ? 'trophy' : survived >= 24 ? 'book-open-text' : survived >= 12 ? 'star-four' : 'smiley-sad';
+  const isOpenEnding = state.openEnding;
+  const title = isTampered ? '叙事崩溃' : isOpenEnding ? '待续……' : isCommercial ? '商业出道' : survived >= 48 ? '传奇落幕' : survived >= 24 ? '旅程结束' : survived >= 12 ? '一段经历' : '遗憾退场';
+  const emoji = isTampered ? 'bug' : isOpenEnding ? 'shooting-star' : isCommercial ? 'star-four' : survived >= 48 ? 'trophy' : survived >= 24 ? 'book-open-text' : survived >= 12 ? 'star-four' : 'smiley-sad';
 
   const stageText = stage === 'work' ? '工作后' : stage === 'university' ? '大学期间' : '暑假';
 
-  const shareText = isCommercial
+  const shareText = isOpenEnding
+    ? `我在「同人社团物语」中从18岁暑假到42岁，走过了24年的同人创作之路！` +
+      `声誉最高${state.maxReputation.toFixed(1)}，` +
+      `制作了${state.totalHVP}本同人志和${state.totalLVP}批谷子，累计销售额¥${state.totalRevenue.toLocaleString()}。` +
+      `故事还在继续——你的同人人生会是什么样？`
+    : isCommercial
     ? `我在「同人社团物语」中从18岁暑假开始创作，` +
       `在${age}岁时成功商业出道！` +
       `声誉最高${state.maxReputation.toFixed(1)}，` +

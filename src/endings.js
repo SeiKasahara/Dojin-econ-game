@@ -3,7 +3,7 @@
  * Generates ending text based on player journey
  */
 
-import { getLifeStage, getAge } from './engine.js';
+import { getLifeStage, getAge, getCreativeSkill } from './engine.js';
 
 export function generateEnding(state) {
   const stage = getLifeStage(state.turn);
@@ -72,4 +72,33 @@ export function generateCommercialEnding(state) {
     return `累计¥${rev.toLocaleString()}的同人销售额证明了你的商业潜力。出版社看中的不只是你的创作能力，更是你对市场的敏锐嗅觉。从"为爱发电"到"以此为业"，这不是梦想的终结，而是梦想的升级。`;
   }
   return `${hvp}本同人志、无数个深夜的创作、大大小小的展会——这些经历铸就了今天的你。当出版社编辑递来合约时，你知道这不是终点。同人时代教会你的一切——对作品的执着、对读者的理解、对市场的把握——将在商业舞台上绽放更耀眼的光芒。`;
+}
+
+export function generateOpenEnding(state) {
+  const rep = state.maxReputation;
+  const hvp = state.totalHVP;
+  const lvp = state.totalLVP;
+  const rev = state.totalRevenue;
+  const events = state.eventLog?.length || 0;
+  const skill = getCreativeSkill(state);
+
+  const journeySummary = hvp >= 8 && rep >= 5
+    ? `${hvp}本同人志、声誉${rep.toFixed(1)}——你已经是圈内有分量的名字了。`
+    : hvp >= 4
+    ? `${hvp}本同人志的积累，让你从青涩的新人成长为了有自己风格的创作者。`
+    : lvp >= 10
+    ? `你用一批又一批精心制作的谷子，在圈内建立了自己独特的存在感。`
+    : events >= 10
+    ? `${events}场展会的历练，让你对同人创作这件事有了远超同龄人的理解。`
+    : `虽然创作产出不算多，但这些年的经历已经悄然改变了你看待世界的方式。`;
+
+  const futureTease = state.fullTimeDoujin
+    ? '全职同人的路走到这里，前方是更大的舞台还是更难的抉择？只有继续走下去才知道。'
+    : rep >= 5
+    ? '商业出版社的邀约、海外展会的机会、全职创作的可能性……42岁的你，面前的路比18岁时更宽。'
+    : rev >= 20000
+    ? '同人创作早已不只是"用爱发电"——它教会了你经营、判断和坚持。这些能力，会带你走向更远的地方。'
+    : '42岁，你的故事远没有结束。无论同人是主业还是爱好，它已经成为了你生命的一部分。';
+
+  return `从18岁高考后的暑假到现在，二十四年过去了。\n\n${journeySummary}\n\n${futureTease}\n\n故事还在继续——`;
 }
