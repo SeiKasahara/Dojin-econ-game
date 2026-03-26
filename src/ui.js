@@ -1238,6 +1238,8 @@ function renderAppDesktop(state) {
       disabled = false; // always available (闺蜜 + 女神 always there)
     } else if (app.id === 'manzhan') {
       disabled = false; // always available (漫展日历不需要条件)
+    } else if (app.id === 'ciyuanbi') {
+      disabled = false; // always available (赞助社群随时可用)
     } else {
       disabled = !app.actions.some(a => canPerformAction(state, a));
     }
