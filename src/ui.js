@@ -1371,6 +1371,12 @@ export function renderAppPage(appId, state, onAction, onBack) {
       e.stopPropagation();
       const cid = parseInt(btn.dataset.cid);
       state.contacts = state.contacts.filter(c => c.id !== cid);
+      if (state.activeContactId === cid) {
+        state.hasPartner = false;
+        state.partnerType = null;
+        state.partnerTurns = 0;
+        state.activeContactId = null;
+      }
       btn.closest('.contact-row')?.remove();
       // Update count
       const countEl = overlay.querySelector('.app-page-body [style*="人脉池"]');

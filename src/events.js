@@ -343,7 +343,7 @@ export const RANDOM_EVENTS = [
     tip: '从同人到商业是许多创作者的自然进化路径。',
     weight: 15,
     when: (s) => {
-      if (s.commercialOfferReceived || s.reputation < 10 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
+      if (s.commercialOfferReceived || s.reputation < 16 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
       if (s.recessionTurnsLeft > 0 || (s.advanced && (s.advanced.stagflationTurnsLeft > 0 || s.advanced.debtCrisisActive))) return Math.random() < 0.3;
       return true;
     },

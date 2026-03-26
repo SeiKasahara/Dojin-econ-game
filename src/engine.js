@@ -1249,11 +1249,11 @@ export function executeAction(state, actionId) {
     // Freelance: creative labor → some passion drain + energy (time debuff)
     state.passion -= 4; // uses creative energy, but less than original creation
     const base = 200, repBonus = Math.floor(state.reputation * 150);
-    const rawIncome = base + repBonus + Math.floor(Math.random() * 150);
+    const rawIncome = Math.min(3500, base + repBonus + Math.floor(Math.random() * 150));
     const recessionCut = state.recessionTurnsLeft > 0 ? 0.5 : 1.0;
     const income = Math.floor(rawIncome * recessionCut);
     addMoney(state, income);
-    const repGain = 0.02 + state.reputation * 0.005;
+    const repGain = 0.02;
     state.reputation += repGain;
     state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: -2 });
     result.deltas.push({ icon: 'heart', label: '创作精力', value: '-4', positive: false });
