@@ -146,22 +146,36 @@ function handleAction(actionId) {
       const condRoll = Math.random();
       if (condRoll < cancelChance) {
         chosenEvent.condition = 'cancelled';
-        state.attendingEvent = chosenEvent;
-        state._minigameResult = null;
-        state._eventMode = 'attend';
-        renderEvent({
-          emoji: 'smiley-x-eyes', title: '展会流展了！',
-          desc: `${chosenEvent.name}@${chosenEvent.city}因故取消，到了现场才知道消息……路费白花了。`,
-          effect: `路费-¥${chosenEvent.travelCost} 热情-5`, effectClass: 'negative',
-          tip: '流展是同人展会的现实风险之一。路费变成沉没成本，只能认栽。',
-        }, () => executeInMonth(actionId));
-        return;
+      } else {
+        chosenEvent.condition = condRoll < 0.30 ? 'popular' : 'normal';
       }
-      chosenEvent.condition = condRoll < 0.30 ? 'popular' : 'normal';
 
       // Show attend mode selector: 亲参 vs 寄售
       renderEventModeSelector(state, chosenEvent, (mode) => {
         state.attendingEvent = chosenEvent;
+
+        // --- 流展：根据参展模式展示不同的损失信息 ---
+        if (chosenEvent.condition === 'cancelled') {
+          state._minigameResult = null;
+          state._eventMode = mode;
+          if (mode === 'attend') {
+            renderEvent({
+              emoji: 'smiley-x-eyes', title: '展会流展了！',
+              desc: `${chosenEvent.name}@${chosenEvent.city}因故取消，到了现场才知道消息……路费白花了。`,
+              effect: `路费-¥${chosenEvent.travelCost} 热情-5`, effectClass: 'negative',
+              tip: '流展是同人展会的现实风险之一。路费变成沉没成本，只能认栽。',
+            }, () => executeInMonth(actionId));
+          } else {
+            const shipCost = Math.round(chosenEvent.travelCost * 0.3);
+            renderEvent({
+              emoji: 'smiley-x-eyes', title: '展会流展了！',
+              desc: `${chosenEvent.name}@${chosenEvent.city}因故取消，寄出的货物被退回，只损失了邮费。`,
+              effect: `邮费-¥${shipCost} 热情-1`, effectClass: 'negative',
+              tip: '流展是同人展会的现实风险之一。好在是寄售，损失比亲自到场小得多。',
+            }, () => executeInMonth(actionId));
+          }
+          return;
+        }
 
         // Work stage leave check: need to take time off to attend in person
         if (mode === 'attend' && getLifeStage(state.turn) === 'work' && !state.unemployed) {
