@@ -1320,18 +1320,17 @@ export function renderAppPage(appId, state, onAction, onBack) {
             .map(c => {
               const tc = tierColors[c.tier] || '#95a5a6';
               const tl = tierLabels[c.tier] || '';
-              const isToxicRevealed = c.pType === 'toxic' && c.tier === 'trusted';
               return `<div class="contact-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
                 <img src="partner/${c.avatarIdx}.webp" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid ${tc}">
                 <div style="flex:1;min-width:0">
                   <div style="font-size:0.78rem;font-weight:600;display:flex;gap:4px;align-items:center">${c.name} <span style="font-size:0.58rem;padding:0 4px;border-radius:6px;background:${tc}18;color:${tc}">${tl}</span></div>
                   <div style="font-size:0.65rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.bio}</div>
                 </div>
-                ${isToxicRevealed ? `<button class="contact-remove" data-cid="${c.id}" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:0.8rem" title="断联">${ic('trash', '0.8rem')}</button>` : ''}
+                <button class="contact-remove" data-cid="${c.id}" data-affinity="${c.affinity}" data-name="${c.name}" style="background:none;border:none;color:var(--danger);cursor:pointer;padding:4px;font-size:0.8rem" title="断联">${ic('trash', '0.8rem')}</button>
               </div>`;
             }).join('');
           return `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border)">
-            <div style="font-size:0.8rem;font-weight:700;margin-bottom:8px">${ic('users')} 人脉池 (${state.contacts.length})</div>
+            <div class="contact-pool-count" style="font-size:0.8rem;font-weight:700;margin-bottom:8px">${ic('users')} 人脉池 (${state.contacts.length})</div>
             <div style="max-height:200px;overflow-y:auto">${contactsList}</div>
           </div>`;
         })() : ''}
@@ -1365,21 +1364,44 @@ export function renderAppPage(appId, state, onAction, onBack) {
   overlay.querySelectorAll('.app-action-card:not(.disabled)').forEach(el => {
     el.addEventListener('click', () => { overlay.remove(); onAction(el.dataset.action); });
   });
-  // Bind toxic contact removal
+  // Bind contact removal (断联)
   overlay.querySelectorAll('.contact-remove').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const cid = parseInt(btn.dataset.cid);
+      const affinity = parseFloat(btn.dataset.affinity) || 0;
+      const cname = btn.dataset.name || '';
+      // High affinity = severe reputation penalty (betrayal of trust)
+      // familiar(2~4): -0.5~-1.5, trusted(4+): -1.5~-3.0
+      const repPenalty = affinity >= 2 ? Math.min(3, (affinity - 1) * 0.75) : 0;
+      if (repPenalty > 0) {
+        const row = btn.closest('.contact-row');
+        // Confirm dialog for good relationships
+        if (!btn._confirmed) {
+          const warn = document.createElement('div');
+          warn.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 8px;margin-top:4px;background:#FDE8E8;border-radius:8px;font-size:0.7rem;color:var(--danger)';
+          warn.innerHTML = `${ic('warning','0.7rem')} 和${cname}关系不错，强行断联会损害声誉(${repPenalty.toFixed(1)}) <button class="contact-remove-confirm" style="margin-left:auto;background:var(--danger);color:#fff;border:none;border-radius:6px;padding:2px 10px;font-size:0.68rem;cursor:pointer">确认断联</button>`;
+          row?.appendChild(warn);
+          btn._confirmed = true;
+          warn.querySelector('.contact-remove-confirm').addEventListener('click', () => {
+            state.reputation = Math.max(0, state.reputation - repPenalty);
+            state.contacts = state.contacts.filter(c => c.id !== cid);
+            if (state.activeContactId === cid) {
+              state.hasPartner = false; state.partnerType = null; state.partnerTurns = 0; state.activeContactId = null;
+            }
+            row?.remove();
+            const countEl = overlay.querySelector('.contact-pool-count');
+            if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
+          });
+          return;
+        }
+      }
       state.contacts = state.contacts.filter(c => c.id !== cid);
       if (state.activeContactId === cid) {
-        state.hasPartner = false;
-        state.partnerType = null;
-        state.partnerTurns = 0;
-        state.activeContactId = null;
+        state.hasPartner = false; state.partnerType = null; state.partnerTurns = 0; state.activeContactId = null;
       }
       btn.closest('.contact-row')?.remove();
-      // Update count
-      const countEl = overlay.querySelector('.app-page-body [style*="人脉池"]');
+      const countEl = overlay.querySelector('.contact-pool-count');
       if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
     });
   });

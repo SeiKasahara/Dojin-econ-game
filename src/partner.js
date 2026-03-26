@@ -130,7 +130,6 @@ export function generatePartnerCandidates(state) {
   if (state.contacts && state.contacts.length > 0) {
     return [...state.contacts]
       .sort((a, b) => b.affinity - a.affinity)
-      .slice(0, 5)
       .map(c => ({
         name: c.name,
         bio: c.bio,
