@@ -2020,7 +2020,7 @@ export function executeAction(state, actionId) {
       if (state.goodsCollection > 0) {
         result.deltas.push({ icon: 'package', label: '剩余收藏', value: `${state.goodsCollection}件`, positive: true });
       }
-      result.tip = { label: '二手回血 (frmn.md)', text: `二手市场是跨期预算调节器。大部分会转化为对A类新作的购买力。二手价格受市场压力影响：当前同人谷二手压力${Math.round(shPressure * 100)}%，压力越大价格越低。` };
+      result.tip = { label: '二手回血', text: `二手市场是跨期预算调节器。大部分会转化为对本子新作的购买力。二手价格受市场压力影响：当前同人谷二手压力${Math.round(shPressure * 100)}%，压力越大价格越低。` };
     }
   }
 
