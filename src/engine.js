@@ -321,6 +321,12 @@ function sellFromWorks(state, type, count) {
     totalRev += rev;
     details.push({ work: w, sold: sell, rev });
   }
+  // Stamp sold-out turn on newly emptied works
+  for (const d of details) {
+    if (d.work.qty === 0 && !d.work.soldOutSinceTurn) {
+      d.work.soldOutSinceTurn = state.turn;
+    }
+  }
   // Keep sold-out works in array (qty=0) so they can be reprinted
   syncInventoryAggregates(state);
   return { sold: count - remaining, revenue: totalRev, details };
@@ -944,6 +950,29 @@ export function rollEvent(state) {
   // 1. Check scheduled events first (always fire)
   const scheduled = getScheduledEvent(state);
   if (scheduled) return { ...scheduled, isScheduled: true };
+
+  // 1.5. Dynamic scheduled: reprint crash (fires guaranteed)
+  if (state.reprintCrashTurn && state.turn >= state.reprintCrashTurn) {
+    const workName = state.reprintCrashWorkName || '旧作';
+    state.reprintCrashTurn = null;
+    state.reprintCrashWorkName = null;
+    return {
+      id: 'reprint_crash', emoji: 'trend-down', title: '海景房崩盘！',
+      desc: `你加印「${workName}」的消息传开了。投机客们发现"绝版"不再绝版，恐慌性抛售开始——二手市场上大量低价涌出，投机泡沫瞬间破裂。不过对真正喜欢你作品的读者来说，终于能以合理价格买到了。`,
+      effect: '二手压力大降 声誉+0.2', effectClass: 'positive',
+      apply: (s) => {
+        if (s.official) {
+          s.official.secondHandPool.hvp = Math.floor(s.official.secondHandPool.hvp * 0.3);
+          s.official.secondHandPool.lvp = Math.floor(s.official.secondHandPool.lvp * 0.7);
+          if (s.official.secondHandPressure) {
+            s.official.secondHandPressure.hvp = Math.max(0, (s.official.secondHandPressure.hvp || 0) - 0.2);
+          }
+        }
+        s.reputation += 0.2;
+      },
+      tip: '加印打破了"绝版溢价"：投机客押注的稀缺性归零。这是创作者对抗投机的核武器，真正的读者会感谢你。',
+    };
+  }
 
   // 2. Random events: 35% chance after turn 1
   if (state.turn < 1 || Math.random() > 0.35) return null;
@@ -1925,7 +1954,14 @@ export function executeAction(state, actionId) {
         const cost = qty * unitCost;
         addMoney(state, -cost);
         totalReprintCost += cost;
+        // Reprinting a marked rare work → schedule speculator crash
+        if (work.isRareWork) {
+          work.isRareWork = false;
+          state.reprintCrashTurn = state.turn + 2 + Math.floor(Math.random() * 3);
+          state.reprintCrashWorkName = sub.name + (work.name ? '·' + work.name : '');
+        }
         work.qty += qty;
+        work.soldOutSinceTurn = null;
         result.deltas.push({ icon: 'printer', label: `追印${sub.name}${work.name ? '·' + work.name : ''} +${qty}`, value: `-¥${cost}`, positive: false });
       }
       syncInventoryAggregates(state);

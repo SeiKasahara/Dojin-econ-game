@@ -190,6 +190,10 @@ function handleAction(actionId) {
               syncBGM('game');
               executeInMonth(actionId);
             });
+          }).catch(() => {
+            removeLoadingOverlay();
+            syncBGM('game');
+            executeInMonth(actionId);
           });
         } else {
           // 寄售 → skip minigame, use CES model
@@ -425,6 +429,10 @@ function handleAction(actionId) {
         syncBGM('game');
         executeInMonth(actionId);
       });
+    }).catch(() => {
+      removeLoadingOverlay();
+      syncBGM('game');
+      executeInMonth(actionId);
     });
     return;
   }
@@ -534,7 +542,8 @@ function afterMonthTransition(monthResult) {
   showEventChain([...officialEvts], () => {
     const event = rollEvent(state);
     if (event) {
-      const displayEvent = typeof event.effect === 'function' ? { ...event, effect: event.effect(state) } : event;
+      let displayEvent = typeof event.effect === 'function' ? { ...event, effect: event.effect(state) } : event;
+      if (typeof displayEvent.desc === 'function') displayEvent = { ...displayEvent, desc: displayEvent.desc(state) };
       state.lastEvent = displayEvent;
       renderEvent(displayEvent, () => {
         applyEvent(state, event);
@@ -598,3 +607,41 @@ preloadBGM();
 initAudioUnlock();
 syncBGM('title');
 renderTitle(startGame, continueGame);
+
+// === Staggered preloading for slow connections (GitHub Pages from China) ===
+// User spends 5-10s on title screen; use that time to warm caches.
+const preloadImg = (src) => { const i = new Image(); i.src = src; };
+const preloadChunk = (path) => import(path).catch(() => {});
+const idle = (fn, ms) => typeof requestIdleCallback === 'function' ? requestIdleCallback(fn) : setTimeout(fn, ms);
+
+// Phase 1 (~0s): JS chunks — most critical, unblocks minigame loading
+idle(() => {
+  preloadChunk('./minigame.js');
+  preloadChunk('./promote-minigame.js');
+  preloadChunk('./chat-npc.js');
+}, 1000);
+
+// Phase 2 (~3s): game screen images — needed right after clicking "start"
+setTimeout(() => {
+  preloadImg('background/background.webp');
+  preloadImg('Goddess/Guimi.jpg');
+  preloadImg('Goddess/goddess.jpg');
+  const logos = ['嗯造.avif','次元宣发机.jpg','喵画师.avif','喵丝职聘.avif','漫展通.avif','打破次元壁.jpg','休息.avif','Memu.avif','同人市场观察.jpg','Nyaner.avif','短信.png'];
+  logos.forEach(f => preloadImg(`app logos/${f}`));
+}, 3000);
+
+// Phase 3 (~6s): minigame assets — customers, backgrounds, settlement
+setTimeout(() => {
+  for (let i = 1; i <= 12; i++) preloadImg(`customers/${i}.png`);
+  preloadImg('player/player.png');
+  for (let i = 1; i <= 5; i++) preloadImg(`player/neighbor${i}.png`);
+  ['bg.png','bg2.png','desk.png'].forEach(f => preloadImg(`minigame-background/${f}`));
+  preloadImg('jiesuan/jiesuan.webp');
+  preloadImg('jiesuan/jiesuan2.webp');
+}, 6000);
+
+// Phase 4 (~9s): promote minigame NPC avatars (30 small webps)
+setTimeout(() => {
+  preloadImg('prop-npc/player.webp');
+  for (let i = 1; i <= 30; i++) preloadImg(`prop-npc/${i}.webp`);
+}, 9000);

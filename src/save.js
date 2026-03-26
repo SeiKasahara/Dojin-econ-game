@@ -114,6 +114,12 @@ export function loadGame() {
     if (state.hvpWorkedThisMonth === undefined) state.hvpWorkedThisMonth = false;
     if (state.lvpWorkedThisMonth === undefined) state.lvpWorkedThisMonth = false;
     if (state.monthHadCreativeAction === undefined) state.monthHadCreativeAction = false;
+    // Reconstruct cumulative counters from works array if missing
+    if (state.totalHVP == null || state.totalLVP == null) {
+      const works = state.inventory?.works || [];
+      state.totalHVP = state.totalHVP ?? works.filter(w => w.type === 'hvp').length;
+      state.totalLVP = state.totalLVP ?? works.filter(w => w.type === 'lvp').length;
+    }
 
     return state;
   } catch (e) {

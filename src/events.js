@@ -8,6 +8,16 @@ import { getLifeStage, getCreativeSkill, addMoney } from './engine.js';
 // Internal helper — calendar month from turn
 function getCalendarMonth(turn) { return ((turn + 6) % 12) + 1; }
 
+// Find an HVP work eligible to become a "rare work" (海景房):
+// sold out 12+ months, quality >= 1.0 or cult hit, not already marked
+function findRareWork(s) {
+  return (s.inventory?.works || []).find(w =>
+    w.type === 'hvp' && w.qty === 0 && !w.isRareWork &&
+    w.soldOutSinceTurn && (s.turn - w.soldOutSinceTurn) >= 12 &&
+    (w.workQuality >= 1.0 || w.isCultHit)
+  );
+}
+
 // Internal helper — count active crises
 function activeCrisisCount(s) {
   let c = 0;
@@ -230,7 +240,7 @@ export const RANDOM_EVENTS = [
   },
   {
     id: 'harsh_review', emoji: 'smiley-angry', title: '遭遇恶评',
-    desc: '有人公开发了一篇针对你的尖锐批评，言辞很伤人，还在圈子里传开了...',
+    desc: '你通过一些渠道知道了针对你的黑屁，言辞很伤人...',
     effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)} 声誉-${Math.round(15 * m)}%`; }, effectClass: 'negative',
     apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); s.reputation *= (1 - 0.15 * m); },
     tip: '恶评针对的是你个人，会直接损害声誉。心理韧性低的人受影响更大。和圈内塌方不同——塌方只伤心态，恶评伤口碑。',
@@ -254,11 +264,20 @@ export const RANDOM_EVENTS = [
   },
   {
     id: 'rare_work_found', emoji: 'diamond', title: '你的旧作成了海景房！',
-    desc: '你早期的一件作品因为绝版和声誉加持，在二手市场上被炒到了高价。有人愿意出高价向你求购签名版...',
+    desc: (s) => {
+      const w = findRareWork(s);
+      return `你的「${w?.name || '早期作品'}」因为绝版和声誉加持，在二手市场上被炒到了高价。有人愿意出高价向你求购签名版……要不要考虑加印？`;
+    },
     effect: '资金+声誉加成 声誉+0.3', effectClass: 'positive',
-    apply: (s) => { addMoney(s, 500 + Math.round(s.maxReputation * 200)); s.reputation += 0.3; },
-    tip: '当一手市场关闭（绝版），无套利上限被打破，商品从消费品相变为金融资产。声誉越高，基础定价F越高。',
-    weight: 2, when: (s) => s.maxReputation >= 2 && s.totalHVP >= 2 && s.turn > 24, maxTotal: 3,
+    apply: (s) => {
+      addMoney(s, 500 + Math.round(s.maxReputation * 200)); s.reputation += 0.3;
+      const w = findRareWork(s);
+      if (w) w.isRareWork = true;
+    },
+    tip: '当一手市场绝版，无套利上限被打破，商品从消费品突变为金融资产。声誉越高，基础定价越高。如果你选择加印，投机客手中的"绝版品"将失去稀缺溢价……',
+    weight: 2,
+    when: (s) => s.maxReputation >= 2 && s.totalHVP >= 2 && s.turn > 24 && !!findRareWork(s),
+    maxTotal: 3,
   },
   {
     id: 'rent_increase', emoji: 'house', title: '房租上涨',

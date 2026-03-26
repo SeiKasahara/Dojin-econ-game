@@ -67,8 +67,8 @@ function createPromoteState(mainState) {
     lastPostTime: -9999,
     spamPenalties: 0,
 
-    // Resources
-    workPostAmmo: mainState.totalHVP + mainState.totalLVP,
+    // Resources — use works array as primary source, counters as fallback
+    workPostAmmo: works.length || ((mainState.totalHVP || 0) + (mainState.totalLVP || 0)),
     stickinessStacks: 0, // 0-3
 
     // Player tags
