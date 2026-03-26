@@ -5,7 +5,7 @@
 
 import './style.css';
 import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost } from './engine.js';
-import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp } from './ui.js';
+import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderWorkNameInput, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp } from './ui.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES } from './engine.js';
 import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
 import { ic } from './icons.js';
@@ -218,13 +218,16 @@ function handleAction(actionId) {
   // === HVP flow: new project → subtype + theme choice; continue → execution/polish choice ===
   if (actionId === 'hvp' && !needsPricing(actionId)) {
     if (!state.hvpProject) {
-      // New project: select subtype → theme choice → proceed
+      // New project: select subtype → name → theme choice → proceed
       renderSubtypeSelector(state, 'hvp', (subtypeId) => {
         state._selectedHVPSubtype = subtypeId;
         const sub = HVP_SUBTYPES[subtypeId];
-        renderCreativeChoice(CREATIVE_CHOICES.theme, (themeId) => {
-          state._pendingChoices = [{ category: 'theme', optionId: themeId }];
-          executeInMonth(actionId);
+        renderWorkNameInput(sub.name, sub.emoji, (name) => {
+          state._hvpWorkName = name;
+          renderCreativeChoice(CREATIVE_CHOICES.theme, (themeId) => {
+            state._pendingChoices = [{ category: 'theme', optionId: themeId }];
+            executeInMonth(actionId);
+          }, cancelBack);
         }, cancelBack);
       }, cancelBack);
     } else {
@@ -252,7 +255,7 @@ function handleAction(actionId) {
         overlay.innerHTML = `
           <div class="event-card" style="max-width:340px">
             <div style="font-size:1.3rem">${ic(sub.emoji, '1.3rem')}</div>
-            <div style="font-weight:700;margin:4px 0">继续创作${sub.name}</div>
+            <div style="font-weight:700;margin:4px 0">继续创作${sub.name}${p.name ? '·' + p.name : ''}</div>
             <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">进度 ${p.progress}/${p.needed}</div>
             <button class="btn btn-primary btn-block" id="btn-hvp-go" style="margin-bottom:6px">继续创作</button>
             <button class="btn btn-block" id="btn-hvp-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
@@ -265,16 +268,20 @@ function handleAction(actionId) {
     return;
   }
 
-  // === LVP flow: select subtype → process choice → pricing ===
+  // === LVP flow: select subtype → name → process choice → pricing ===
   if (actionId === 'lvp') {
     renderSubtypeSelector(state, 'lvp', (subtypeId) => {
       state._selectedLVPSubtype = subtypeId;
-      renderCreativeChoice(CREATIVE_CHOICES.lvpProcess, (processId) => {
-        state._lvpProcessChoice = processId;
-        // Now pricing
-        renderPriceSelector(state, 'lvp', (chosenPrice) => {
-          state.playerPrice.lvp = chosenPrice;
-          executeInMonth(actionId);
+      const sub = LVP_SUBTYPES[subtypeId];
+      renderWorkNameInput(sub.name, sub.emoji, (name) => {
+        state._lvpWorkName = name;
+        renderCreativeChoice(CREATIVE_CHOICES.lvpProcess, (processId) => {
+          state._lvpProcessChoice = processId;
+          // Now pricing
+          renderPriceSelector(state, 'lvp', (chosenPrice) => {
+            state.playerPrice.lvp = chosenPrice;
+            executeInMonth(actionId);
+          }, cancelBack);
         }, cancelBack);
       }, cancelBack);
     }, cancelBack);

@@ -949,7 +949,7 @@ export function openMarketApp(state) {
             const qColor = w.workQuality >= 1.3 ? 'var(--success)' : w.workQuality < 0.8 ? 'var(--danger)' : 'var(--text-muted)';
             return `<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;padding:4px 0;border-bottom:1px dashed #eee">
               <span style="flex-shrink:0">${ic(sub.emoji)}</span>
-              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub.name}${w.isCultHit ? ' ★' : ''}</span>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub.name}${w.name ? '·' + w.name : ''}${w.isCultHit ? ' ★' : ''}</span>
               <span style="color:${qColor};flex-shrink:0">Q${(w.workQuality || 1).toFixed(1)}</span>
               <span style="flex-shrink:0;font-weight:600">×${w.qty}</span>
               <span style="flex-shrink:0;color:var(--primary)">¥${w.price}</span>
@@ -1154,6 +1154,8 @@ function renderAppDesktop(state) {
       disabled = false; // always available
     } else if (app.special === 'message') {
       disabled = false; // always available (闺蜜 + 女神 always there)
+    } else if (app.id === 'manzhan') {
+      disabled = false; // always available (漫展日历不需要条件)
     } else {
       disabled = !app.actions.some(a => canPerformAction(state, a));
     }
@@ -2049,6 +2051,36 @@ export function renderSubtypeSelector(state, productType, onSelect, onCancel) {
   overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => { overlay.remove(); if (onCancel) onCancel(); });
 }
 
+// === Work Naming Input ===
+export function renderWorkNameInput(subtypeName, emoji, onConfirm, onCancel) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:340px;text-align:center">
+      <div style="font-size:1.3rem;margin-bottom:4px">${ic(emoji, '1.3rem')}</div>
+      <div style="font-weight:700;font-size:1rem;margin-bottom:4px">为你的${subtypeName}起个名字</div>
+      <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">这个名字会显示在库存和销售记录中</div>
+      <input type="text" id="work-name-input" maxlength="20" placeholder="例：星之彼方、夏日限定…"
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:0.9rem;text-align:center;outline:none;margin-bottom:12px">
+      <button class="btn btn-primary btn-block" id="btn-name-confirm" style="margin-bottom:6px">确认</button>
+      <button class="btn btn-block" id="btn-name-skip" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.78rem">跳过（使用默认名称）</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const input = overlay.querySelector('#work-name-input');
+  setTimeout(() => input.focus(), 50);
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { overlay.remove(); onConfirm(input.value.trim() || null); }
+  });
+  overlay.querySelector('#btn-name-confirm').addEventListener('click', () => {
+    overlay.remove(); onConfirm(input.value.trim() || null);
+  });
+  overlay.querySelector('#btn-name-skip').addEventListener('click', () => {
+    overlay.remove(); onConfirm(null);
+  });
+}
+
 // === Creative Choice Overlay (VN-style, no numbers shown) ===
 export function renderCreativeChoice(choiceData, onSelect, onCancel) {
   const overlay = document.createElement('div');
@@ -2276,7 +2308,7 @@ export function renderReprintSelector(state, onSelect, onCancel) {
     return `<div class="app-action-card" data-work-id="${w.id}" style="cursor:pointer">
       <div class="app-action-icon" style="color:${isHVP ? 'var(--primary)' : 'var(--secondary)'}">${ic(sub.emoji, '1.1rem')}</div>
       <div class="app-action-body">
-        <div class="app-action-name">${sub.name}${w.isCultHit ? ' ★' : ''} <span style="font-weight:400;color:var(--text-muted);font-size:0.7rem">¥${w.price}/个</span></div>
+        <div class="app-action-name">${sub.name}${w.name ? '·' + w.name : ''}${w.isCultHit ? ' ★' : ''} <span style="font-weight:400;color:var(--text-muted);font-size:0.7rem">¥${w.price}/个</span></div>
         <div class="app-action-cost">追印${reprintQty}${isHVP ? '本' : '个'} · 成本¥${totalCost} · 现有库存${w.qty}</div>
       </div>
     </div>`;

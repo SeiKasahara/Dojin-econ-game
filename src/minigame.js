@@ -594,11 +594,14 @@ function calculateResult(mg, event) {
   const cardRate = Math.min(1, cardsExchanged / 5);
   const performance = engagementRate * 0.3 + conversionRate * 0.5 + cardRate * 0.2;
 
+  // Performance coefficient: scales the event's base salesBoost
+  // 0.5x (terrible) → 1.0x (average) → 1.5x (perfect)
+  // Final sales = eventBoost × performanceCoeff (applied in engine.js)
   let salesMultiplier;
-  if (performance < 0.2) salesMultiplier = 0.5 + performance * 1.5;
-  else if (performance < 0.5) salesMultiplier = 0.8 + (performance - 0.2) * 2.33;
-  else if (performance < 0.8) salesMultiplier = 1.5 + (performance - 0.5) * 3.33;
-  else salesMultiplier = 2.5 + (performance - 0.8) * 2.5;
+  if (performance < 0.2) salesMultiplier = 0.5 + performance * 1.5;       // 0.5 → 0.8
+  else if (performance < 0.5) salesMultiplier = 0.8 + (performance - 0.2) * 0.67; // 0.8 → 1.0
+  else if (performance < 0.8) salesMultiplier = 1.0 + (performance - 0.5) * 1.0;  // 1.0 → 1.3
+  else salesMultiplier = 1.3 + (performance - 0.8) * 1.0;                 // 1.3 → 1.5
 
   const perfRepBonus = performance > 0.6 ? (performance - 0.6) * 0.3 : 0; // up to +0.12 for perfect play
   const reputationDelta = event.reputationBoost + freebiesGiven * 0.02 + cardsExchanged * 0.01 + perfRepBonus;

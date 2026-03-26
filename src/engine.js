@@ -529,7 +529,7 @@ export function getActionDisplay(actionId, state) {
     if (state.hvpProject) {
       const p = state.hvpProject;
       const sub = HVP_SUBTYPES[p.subtype] || HVP_SUBTYPES.manga;
-      return { ...base, name: `继续创作${sub.name}`, emoji: sub.emoji, costLabel: `进度 ${p.progress}/${p.needed} · 热情-${staCost}${recTag}` };
+      return { ...base, name: `继续创作${sub.name}${p.name ? '·' + p.name : ''}`, emoji: sub.emoji, costLabel: `进度 ${p.progress}/${p.needed} · 热情-${staCost}${recTag}` };
     }
     return { ...base, costLabel: `选择类型后开始创作${recTag}` };
   }
@@ -1305,9 +1305,10 @@ export function executeAction(state, actionId) {
         state.passion = Math.min(100, state.passion + fatiguePassion);
         state.reputation += mg.reputationDelta;
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
-        state.attendingEvent = { ...evt, salesBoost: mg.salesMultiplier };
+        const attendBoost = Math.round(evt.salesBoost * mg.salesMultiplier * 10) / 10;
+        state.attendingEvent = { ...evt, salesBoost: attendBoost };
 
-        result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分`, positive: mg.performance >= 50 });
+        result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分 销量×${attendBoost}`, positive: mg.performance >= 50 });
         result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位' + (mg.moneySpent > 0 ? '+无料' : ''), value: `-¥${evt.travelCost + lodgingCost + mg.moneySpent}`, positive: false });
         result.deltas.push({ icon: 'heart', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
         if (fatigueDrain > 0) {
@@ -1347,8 +1348,10 @@ export function executeAction(state, actionId) {
         const shipCost = Math.round(evt.travelCost * 0.3);
         state.passion -= 2;
         addMoney(state, -shipCost);
-        state.attendingEvent = evt; // for calculateSales event boost
-        result.deltas.push({ icon: 'package', label: `寄售 ${evt.name}@${evt.city}`, value: '委托代售', positive: true });
+        const consignDiscount = 0.55; // consignment agent takes a cut + less engagement
+        const consignBoost = Math.round(evt.salesBoost * consignDiscount * 10) / 10;
+        state.attendingEvent = { ...evt, salesBoost: consignBoost };
+        result.deltas.push({ icon: 'package', label: `寄售 ${evt.name}@${evt.city}`, value: `委托代售 销量×${consignBoost}`, positive: true });
         result.deltas.push({ icon: 'coins', label: '邮寄费用', value: `-¥${shipCost}`, positive: false });
 
         // --- Consignment agent mishap: risk scales with consecutive consigns ---
@@ -1369,9 +1372,9 @@ export function executeAction(state, actionId) {
             state.passion = Math.max(0, state.passion - lostPassion);
             result.deltas.push({ icon: 'heart', label: '货都丢了...', value: `热情-${lostPassion}`, positive: false });
           } else if (roll < 0.65) {
-            // 代理私吞货款：扣掉部分收入（通过降低event salesBoost）
+            // 代理私吞货款：在已折扣的寄售boost上再扣一层
             const skimRate = 0.15 + Math.random() * 0.15; // 15-30%
-            state.attendingEvent = { ...evt, salesBoost: (evt.salesBoost || 1) * (1 - skimRate) };
+            state.attendingEvent = { ...evt, salesBoost: consignBoost * (1 - skimRate) };
             const skimPassion = Math.round(3 * _im);
             result.deltas.push({ icon: 'money', label: '代理疑似私吞部分货款', value: `预计损失${Math.round(skimRate * 100)}%收入`, positive: false });
             state.passion = Math.max(0, state.passion - skimPassion);
@@ -1602,7 +1605,9 @@ export function executeAction(state, actionId) {
       const needed = state.hasPartner ? sub.monthsPartner : soloNeeded;
       const [costMin, costMax] = sub.costRange;
       const printCost = costMin + Math.floor(Math.random() * (costMax - costMin));
-      state.hvpProject = { progress: 1, needed, printCost, subtype: subtypeId, workQuality: 1.0, styleTag: null, choices: [], isCultHit: false, _qualityLog: [] };
+      const hvpWorkName = state._hvpWorkName || null;
+      state._hvpWorkName = null;
+      state.hvpProject = { progress: 1, needed, printCost, subtype: subtypeId, workQuality: 1.0, styleTag: null, choices: [], isCultHit: false, _qualityLog: [], name: hvpWorkName };
 
       // Apply pending creative choices (theme from UI flow)
       if (state._pendingChoices) {
@@ -1725,6 +1730,7 @@ export function executeAction(state, actionId) {
         state.inventory.works.push({
           id: state.inventory.nextWorkId++,
           type: 'hvp', subtype: savedProject.subtype || 'manga',
+          name: savedProject.name || null,
           qty: batchQty, price: hvpPrice,
           workQuality: savedProject.workQuality || 1.0,
           styleTag: savedProject.styleTag || null,
@@ -1758,7 +1764,7 @@ export function executeAction(state, actionId) {
         if (fx.costReduction > 0.01) costLabels.push(`熟练-${Math.round(fx.costReduction * 100)}%`);
         result.deltas.push({ icon: 'printer', label: `印刷成本${costLabels.length ? '(' + costLabels.join(' ') + ')' : ''}`, value: `-¥${printCost}`, positive: false });
         if (partnerCost > 0) result.deltas.push({ icon: 'handshake', label: '搭档稿费', value: `-¥${partnerCost}`, positive: false });
-        result.deltas.push({ icon: 'package', label: `印刷${batchQty}本入库`, value: `库存${state.inventory.hvpStock}本 定价¥${state.inventory.hvpPrice}`, positive: true });
+        result.deltas.push({ icon: 'package', label: `${subInfo.name}${savedProject.name ? '·' + savedProject.name : ''} ×${batchQty}入库`, value: `库存${state.inventory.hvpStock}本 定价¥${state.inventory.hvpPrice}`, positive: true });
 
         // Anti-speculator strategy (frmn.md: creator countermeasures)
         const strategy = state._antiSpecStrategy || 'normal';
@@ -1853,9 +1859,12 @@ export function executeAction(state, actionId) {
     const lvpPrice = state.playerPrice.lvp || Math.round(15 * sub.marginMult);
     state.inventory.lvpPrice = lvpPrice;
     // Add to works array
+    const lvpWorkName = state._lvpWorkName || null;
+    state._lvpWorkName = null;
     state.inventory.works.push({
       id: state.inventory.nextWorkId++,
       type: 'lvp', subtype: subtypeId,
+      name: lvpWorkName,
       qty: batchQty, price: lvpPrice,
       workQuality: lvpQuality,
       styleTag: null, isCultHit: false,
@@ -1864,7 +1873,7 @@ export function executeAction(state, actionId) {
     state.inventory.lvpStock += batchQty;
     syncInventoryAggregates(state);
 
-    result.deltas.push({ icon: sub.emoji, label: `${sub.name}×${batchQty}入库`, value: `库存${state.inventory.lvpStock}个 定价¥${lvpPrice}`, positive: true });
+    result.deltas.push({ icon: sub.emoji, label: `${sub.name}${lvpWorkName ? '·' + lvpWorkName : ''} ×${batchQty}入库`, value: `库存${state.inventory.lvpStock}个 定价¥${lvpPrice}`, positive: true });
 
     state.totalLVP++;
     state.recentLVP = 1;
@@ -1916,7 +1925,7 @@ export function executeAction(state, actionId) {
         addMoney(state, -cost);
         totalReprintCost += cost;
         work.qty += qty;
-        result.deltas.push({ icon: 'printer', label: `追印${sub.name} +${qty}`, value: `-¥${cost}`, positive: false });
+        result.deltas.push({ icon: 'printer', label: `追印${sub.name}${work.name ? '·' + work.name : ''} +${qty}`, value: `-¥${cost}`, positive: false });
       }
       syncInventoryAggregates(state);
       if (totalReprintCost > 0) {
