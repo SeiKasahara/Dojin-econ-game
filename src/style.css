@@ -1822,7 +1822,7 @@ html, body {
   85%  { opacity: 0.6; }
   100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
 }
-.title-screen { position: relative; overflow: hidden; }
+.title-screen { position: relative; overflow-x: hidden; }
 .title-particle {
   position: absolute;
   bottom: -10px;
