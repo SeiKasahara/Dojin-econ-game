@@ -133,14 +133,25 @@ const QUIRKY_NEWS = [
   '年度盘点：今年最离谱的同人衍生品是……',
 ];
 
+// Simple seeded PRNG (mulberry32)
+function seededRng(seed) {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /**
- * Generate news items for this turn
+ * Generate news items for this turn (deterministic per month)
  * @param {object} state - game state
  * @returns {Array<{text: string, category: string}>}
  */
 export function generateWorldNews(state) {
   const news = [];
-  const rng = () => Math.random();
+  const rng = seededRng(state.turn * 7919 + 1337);
 
   // Pick 2-4 random news items
   const count = 2 + Math.floor(rng() * 3);
