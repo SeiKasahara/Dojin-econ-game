@@ -59,7 +59,7 @@ export function renderTitle(onStart, onContinue) {
         作者博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a><br/>
         音乐：<a href="https://amachamusic.chagasi.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">甘茶音乐工坊</a><br/>
         像素素材：<a href="https://www.avatarsinpixels.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Pixels © MostlyPixels</a><br/>
-        桌面画师：乌贼贼污 · 桌面人物：Jill Stingray
+        背景美术：<a href="https://www.deviantart.com/coolarts223/gallery" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">coolarts223</a><br/>
       </p>
     </div>
   `;
