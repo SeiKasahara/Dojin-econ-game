@@ -277,7 +277,7 @@ export const RANDOM_EVENTS = [
     weight: 6, when: (s) => {
       if (getLifeStage(s.turn) !== 'work' || s.unemployed) return false;
       // Not during transfer to easy dept or partner support
-      return !s.timeDebuffs.some(d => d.id.startsWith('transfer_') || d.id.startsWith('partner_support_'));
+      return !s.timeDebuffs.some(d => d.id.startsWith('transfer_') || d.id.startsWith('bestie_support_') || d.id.startsWith('bestie_save_'));
     }, maxTotal: Infinity,
   },
   {
@@ -415,12 +415,61 @@ export const RANDOM_EVENTS = [
       return !s.timeDebuffs.some(d => d.id === '996' || d.id.startsWith('commute_'));
     }, maxTotal: Infinity,
   },
+  // === 闺蜜好感度事件（bestieAffinity 越高越容易触发，效果越强）===
   {
-    id: 'partner_support', emoji: 'heart', title: '另一半很支持你的创作',
-    desc: '生活中的伴侣非常理解你的同人爱好，主动分担了家务和生活琐事，让你有更多时间创作。',
-    effect: '时间+1天（12月）热情+10', effectClass: 'positive',
-    apply: (s) => { s.timeDebuffs.push({ id: 'partner_support_' + s.turn, reason: '伴侣支持', turnsLeft: 12, delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 10); },
-    tip: '同人创作者最大的幸运之一就是遇到理解自己爱好的人。"你去画吧，碗我来洗"——这句话的含金量超过任何商业合作。',
-    weight: 5, when: (s) => getLifeStage(s.turn) === 'work' && (s.turn - 50) / 12 >= 5, maxTotal: 1,
+    id: 'bestie_support', emoji: 'heart', title: '小柚：我帮你分担点吧！',
+    desc: '闺蜜看你最近太忙了，主动帮你跑腿寄快递、整理素材，让你多了一天创作时间。',
+    effect: '闲暇+1天（6月）热情+8', effectClass: 'positive',
+    apply: (s) => { s.timeDebuffs.push({ id: 'bestie_support_' + s.turn, reason: '闺蜜帮忙', turnsLeft: 6, delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
+    tip: '友情是同人创作者最被低估的资源。一个愿意帮你跑腿的朋友，价值不亚于一个靠谱的搭档。',
+    weight: 3, when: (s) => (s.bestieAffinity || 0) >= 30, maxTotal: Infinity,
+  },
+  {
+    id: 'bestie_promo', emoji: 'megaphone', title: '小柚帮你在朋友圈疯狂安利',
+    desc: '闺蜜在各种群和社交媒体帮你转发作品，一波自来水带来了不少新关注。',
+    effect: '声誉+0.3 信息+15%', effectClass: 'positive',
+    apply: (s) => { s.reputation += 0.3; s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.15); },
+    tip: '口碑营销的本质是信任传递——朋友推荐的可信度远高于自卖自夸。这是社交资本最直接的变现方式。',
+    weight: 3, when: (s) => (s.bestieAffinity || 0) >= 40 && s.totalHVP + s.totalLVP > 0, maxTotal: Infinity,
+  },
+  {
+    id: 'bestie_cheer', emoji: 'confetti', title: '小柚给你寄了一箱零食',
+    desc: '"最近辛苦了！吃点好的补补脑～" 收到快递的你心里暖暖的，感觉又能画一整天了。',
+    effect: '热情+15', effectClass: 'positive',
+    apply: (s) => { s.passion = Math.min(100, s.passion + 15); },
+    tip: '创作是孤独的长跑，但有人在终点等你，或者在半路递水，就能多撑很远。',
+    weight: 4, when: (s) => (s.bestieAffinity || 0) >= 25 && s.passion < 50, maxTotal: Infinity,
+  },
+  {
+    id: 'bestie_collab', emoji: 'handshake', title: '小柚提议一起做个小企划',
+    desc: '闺蜜突然发来消息："我们一起做个联名谷子吧！我出文案你出图！" 合作过程充满欢笑。',
+    effect: '热情+12 声誉+0.2 资金+500', effectClass: 'positive',
+    apply: (s) => { s.passion = Math.min(100, s.passion + 12); s.reputation += 0.2; addMoney(s, 500); },
+    tip: '朋友间的非正式合作往往能产出最有灵气的作品——因为没有KPI的压力，只有纯粹的创作快乐。',
+    weight: 2, when: (s) => (s.bestieAffinity || 0) >= 55 && s.turn > 12, maxTotal: 3,
+  },
+  {
+    id: 'bestie_save', emoji: 'lifebuoy', title: '小柚紧急驰援',
+    desc: '你快崩溃的时候，闺蜜二话不说请了假飞过来陪你。"先别想那些了，我带你去吃好吃的。"',
+    effect: '热情+25 闲暇+2天（3月）', effectClass: 'positive',
+    apply: (s) => { s.passion = Math.min(100, s.passion + 25); s.timeDebuffs.push({ id: 'bestie_save_' + s.turn, reason: '闺蜜驰援', turnsLeft: 3, delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); },
+    tip: '真正的友谊在你最低谷的时候才会显现。这种"不问原因直接来"的行动力，是任何物质都换不来的。',
+    weight: 3, when: (s) => (s.bestieAffinity || 0) >= 60 && s.passion < 25, maxTotal: 2,
+  },
+  {
+    id: 'bestie_network', emoji: 'users', title: '小柚介绍了一个圈内朋友给你',
+    desc: '"我有个朋友也搞同人的，你们肯定聊得来！" 新认识的人给了你很多灵感和市场信息。',
+    effect: '声誉+0.15 信息+10%', effectClass: 'positive',
+    apply: (s) => { s.reputation += 0.15; s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1); },
+    tip: '弱关系理论：你的闺蜜认识的人，跟你的社交圈重叠度低，因此能带来更多新信息和新机会。',
+    weight: 3, when: (s) => (s.bestieAffinity || 0) >= 35, maxTotal: Infinity,
+  },
+  {
+    id: 'bestie_booth', emoji: 'tent', title: '小柚要来展会帮你看摊！',
+    desc: '"下个展我请假陪你去！你专心招待客人，后勤交给我！" 有人帮忙的展会轻松多了。',
+    effect: '热情+10 下次展会精力充沛', effectClass: 'positive',
+    apply: (s) => { s.passion = Math.min(100, s.passion + 10); s.timeDebuffs.push({ id: 'bestie_booth_' + s.turn, reason: '闺蜜助阵', turnsLeft: 3, delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
+    tip: '展会上有个信任的人帮忙看摊，你才能放心去逛别的摊位、交换名片。这就是社交资本在实际场景中的价值。',
+    weight: 2, when: (s) => (s.bestieAffinity || 0) >= 45 && (s.availableEvents?.length || 0) > 0, maxTotal: Infinity,
   },
 ];

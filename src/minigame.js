@@ -4,6 +4,7 @@
  */
 
 import { renderMinigame, renderFrame, renderScoring, preloadSprites } from './minigame-canvas.js';
+import { HVP_SUBTYPES, LVP_SUBTYPES } from './engine.js';
 import dialogData from './minigame-dialogs.json';
 
 const CUSTOMER_EMOJIS = ['👤', '🧑', '👩', '👨', '🧒', '👧', '🧑‍🎓', '👩‍🎓'];
@@ -59,9 +60,20 @@ function createState(mainState, event) {
     browsedCount: 0,
     // Cooldowns (ms remaining)
     cooldowns: { greet: 0, explain: 0, freebie: 0, exchange: 0 },
-    // Player works
+    // Player works (detailed inventory for context-aware dialogs & preferences)
     playerWorks: { hvp: mainState.totalHVP, lvp: mainState.totalLVP },
     playerReputation: mainState.reputation,
+    // Actual works in stock for dialog context
+    playerHVPWorks: (mainState.inventory?.works || []).filter(w => w.type === 'hvp' && w.qty > 0).map(w => {
+      const sub = HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga;
+      return { subtype: w.subtype, subtypeName: sub.name, name: w.name, isCultHit: w.isCultHit, displayName: sub.name + (w.name ? '·' + w.name : '') };
+    }),
+    playerLVPWorks: (mainState.inventory?.works || []).filter(w => w.type === 'lvp' && w.qty > 0).map(w => {
+      const sub = LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic;
+      return { subtype: w.subtype, subtypeName: sub.name, name: w.name, displayName: sub.name + (w.name ? '·' + w.name : '') };
+    }),
+    hasHVP: mainState.inventory?.hvpStock > 0,
+    hasLVP: mainState.inventory?.lvpStock > 0,
     // Neighbor chat
     neighborChatAvailable: false,
     neighborChatTimer: 15000 + Math.random() * 20000, // first chat after 15-35s
@@ -183,10 +195,28 @@ function rollRandomEvent(mg) {
 }
 
 // === Spawn Customer ===
+/** Pick a random element from an array */
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
 function spawnCustomer(mg) {
   if (mg.totalSpawned >= mg.maxCustomers) return;
-  const prefRoll = Math.random();
-  const preference = prefRoll < 0.35 ? 'hvp' : prefRoll < 0.7 ? 'lvp' : 'any';
+
+  // Preference based on actual stock (customers look for what you're actually selling)
+  let preference, preferredWork = null;
+  if (mg.hasHVP && mg.hasLVP) {
+    const r = Math.random();
+    if (r < 0.35) { preference = 'hvp'; preferredWork = pick(mg.playerHVPWorks); }
+    else if (r < 0.7) { preference = 'lvp'; preferredWork = pick(mg.playerLVPWorks); }
+    else { preference = 'any'; }
+  } else if (mg.hasHVP) {
+    preference = Math.random() < 0.7 ? 'hvp' : 'any';
+    if (preference === 'hvp') preferredWork = pick(mg.playerHVPWorks);
+  } else if (mg.hasLVP) {
+    preference = Math.random() < 0.7 ? 'lvp' : 'any';
+    if (preference === 'lvp') preferredWork = pick(mg.playerLVPWorks);
+  } else {
+    preference = 'any';
+  }
 
   // Determine destination using reputation-weighted distribution
   // Higher reputation booth attracts more customers
@@ -235,7 +265,7 @@ function spawnCustomer(mg) {
     targetX, targetY,
     state: 'walking',
     // walking | browsing | interested | buying | browsing_neighbor | buying_neighbor | leaving
-    preference, target,
+    preference, preferredWork, target,
     patience: 2500 + Math.random() * 3000, // 2.5-5.5s — faster turnover
     satisfaction: initSat,
     emoji: CUSTOMER_EMOJIS[Math.floor(Math.random() * CUSTOMER_EMOJIS.length)],
@@ -369,9 +399,11 @@ function updateCustomers(mg, dt) {
     } else if (c.state === 'buying') {
       c.stateTimer -= dt;
       if (c.stateTimer <= 0) {
-        mg.score.sold++;
-        mg.particles.push({ x: c.x, y: c.y, text: '💰', life: 1000, vy: -0.08 });
-        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😊';
+        // Diversity bonus: fans/any-preference customers with diverse inventory buy multiple
+        const diversityBuy = (c.preference === 'any' && mg.hasHVP && mg.hasLVP) ? 2 : 1;
+        mg.score.sold += diversityBuy;
+        mg.particles.push({ x: c.x, y: c.y, text: diversityBuy > 1 ? '💰💰' : '💰', life: 1000, vy: -0.08 });
+        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = diversityBuy > 1 ? '🤩' : '😊';
       }
 
     } else if (c.state === 'leaving') {
@@ -404,6 +436,84 @@ function updateCustomers(mg, dt) {
   }
 }
 
+// === Context-Aware Dialog Generator ===
+// Generates dialogs that reference the player's actual works
+function generateContextDialog(actionId, customer, mg) {
+  const w = customer.preferredWork; // may be null
+  const wName = w?.displayName;     // e.g. "漫画本·星之彼方"
+  const wType = w?.subtypeName;     // e.g. "漫画本" or "亚克力"
+  const hasMulti = mg.hasHVP && mg.hasLVP;
+
+  // Helper: pick an HVP or LVP work reference
+  const anyHVP = mg.playerHVPWorks.length ? pick(mg.playerHVPWorks) : null;
+  const anyLVP = mg.playerLVPWorks.length ? pick(mg.playerLVPWorks) : null;
+
+  if (actionId === 'greet' && wName) {
+    const templates = [
+      { customer: `你好！这个「${wName}」看起来好棒！`, choices: [
+        { text: '谢谢！这是我最近的新作，来仔细看看吧～', positive: true, reply: '好的！让我翻翻看！' },
+        { text: '啊...就随便做的...', positive: false, reply: '哦...那我看看别家的吧。' },
+      ]},
+      { customer: `请问「${wName}」还有货吗？朋友推荐我来的！`, choices: [
+        { text: '有的有的！你朋友眼光真好，来这边看～', positive: true, reply: '太好了！让我看看！' },
+        { text: '应该还有吧...你自己找找。', positive: false, reply: '嗯...那我自己看看。' },
+      ]},
+    ];
+    if (wType) templates.push(
+      { customer: `哇，你们有${wType}！我正好在找这类的～`, choices: [
+        { text: `对！这款${wType}是我特别用心做的，摸摸看质感～`, positive: true, reply: '手感真好！我喜欢！' },
+        { text: '嗯，就摆在那边。', positive: false, reply: '好吧...（自己拿起来看）' },
+      ]}
+    );
+    return pick(templates);
+  }
+
+  if (actionId === 'explain' && wName) {
+    const templates = [
+      { customer: `「${wName}」讲的是什么故事呀？`, choices: [
+        { text: '这是一个很用心的作品！让我给你介绍一下～', positive: true, reply: '听起来好有趣！我要买！' },
+        { text: '就...你自己翻翻看吧。', positive: false, reply: '这样啊...我再看看别家的。' },
+      ]},
+      { customer: `这个${wType || '作品'}做了多久？看起来好精致！`, choices: [
+        { text: '花了很多心血！每个细节都反复打磨过～', positive: true, reply: '能感受到用心！支持你！' },
+        { text: '记不清了...反正做了挺久的。', positive: false, reply: '哦...那挺辛苦的。' },
+      ]},
+    ];
+    if (hasMulti) templates.push(
+      { customer: `除了${wType || '这个'}，你们还有别的作品吗？`, choices: [
+        { text: `有的！${anyHVP ? anyHVP.displayName : ''}${anyHVP && anyLVP ? '和' : ''}${anyLVP ? anyLVP.displayName : ''}都可以看看～`, positive: true, reply: '种类好丰富！让我都看看！' },
+        { text: '就这些了。', positive: false, reply: '好吧...那我先看看这个。' },
+      ]}
+    );
+    return pick(templates);
+  }
+
+  if (actionId === 'fan') {
+    const refWork = w || anyHVP || anyLVP;
+    const refName = refWork?.displayName || '你的作品';
+    const templates = [
+      { customer: `啊啊啊终于找到你了！我是看了「${refName}」入坑的！`, choices: [
+        { text: '谢谢一直支持！今天有新作哦～', positive: true, reply: '新作！给我来一份！不，两份！' },
+        { text: '真的吗？太开心了...', positive: true, reply: '真的！你每次的作品我都买了！' },
+      ]},
+      { customer: `「${refName}」太棒了！我安利给了好多朋友！`, choices: [
+        { text: '感动！这次的新作也请多多支持～', positive: true, reply: '必须买！朋友们也让我帮她们带！' },
+        { text: '谢谢你帮我宣传...', positive: true, reply: '应该的！好作品值得被更多人看到！' },
+      ]},
+    ];
+    if (hasMulti) templates.push(
+      { customer: `大大！你的${anyHVP?.subtypeName || '本子'}和${anyLVP?.subtypeName || '谷子'}我全都要！`, choices: [
+        { text: '全都要？太豪气了！给你包好～', positive: true, reply: '嘿嘿，钱包准备好了！全部打包！' },
+        { text: '真的全要吗？会不会太多了...', positive: true, reply: '不多不多！买了就是赚到！' },
+      ]}
+    );
+    return pick(templates);
+  }
+
+  // freebie, exchange, troll: fall back to static dialogs
+  return null;
+}
+
 // === Dialog System ===
 function tryTriggerDialog(mg, actionId, nearby) {
   if (mg.activeDialog) return false;
@@ -411,22 +521,28 @@ function tryTriggerDialog(mg, actionId, nearby) {
   if (nearby.length === 0) return false;
   if (Math.random() > DIALOG_CHANCE) return false;
 
+  const target = nearby[Math.floor(Math.random() * nearby.length)];
+
   // 10% troll, 12% fan, rest normal
   const roll = Math.random();
-  let pool, dialogType = 'normal';
+  let dialog, dialogType = 'normal';
   if (roll < 0.10 && dialogData.troll?.length) {
-    pool = dialogData.troll;
+    dialog = pick(dialogData.troll);
     dialogType = 'troll';
   } else if (roll < 0.22 && dialogData.fan?.length) {
-    pool = dialogData.fan;
+    // Try context-aware fan dialog first
+    dialog = generateContextDialog('fan', target, mg) || pick(dialogData.fan);
     dialogType = 'fan';
   } else {
-    pool = dialogData[actionId];
+    // Try context-aware dialog, fall back to static
+    dialog = generateContextDialog(actionId, target, mg);
+    if (!dialog) {
+      const pool = dialogData[actionId];
+      if (!pool || pool.length === 0) return false;
+      dialog = pick(pool);
+    }
   }
-  if (!pool || pool.length === 0) return false;
-
-  const dialog = pool[Math.floor(Math.random() * pool.length)];
-  const target = nearby[Math.floor(Math.random() * nearby.length)];
+  if (!dialog) return false;
 
   mg.phase = 'dialog';
   mg.dialogCount++;
@@ -452,9 +568,14 @@ export function resolveDialog(mg, choiceIdx) {
     if (target) { target.state = 'leaving'; target.targetY = 340; target.thoughtBubble = null; }
     mg.energy = Math.max(0, mg.energy - 8);
     mg.passionBonus -= 2;
+
   } else if (dtype === 'fan') {
     // Fan: always positive, extra bonus + instant buy
-    if (target) { target.satisfaction = 100; target.state = 'buying'; target.stateTimer = 800; }
+    // If player has diverse inventory, fan buys both types
+    if (target) {
+      if (mg.hasHVP && mg.hasLVP) target.preference = 'any';
+      target.satisfaction = 100; target.state = 'buying'; target.stateTimer = 800;
+    }
     mg.energy = Math.min(100, mg.energy + 8);
     mg.passionBonus += 3;
   } else if (choice.positive) {

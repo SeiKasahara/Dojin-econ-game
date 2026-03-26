@@ -130,6 +130,8 @@ export async function chatWithNPC(character, messages, state) {
     if (remaining <= 0) return null; // signal "gone"
     if (!state._chatUsage) state._chatUsage = {};
     state._chatUsage.bestie = (state._chatUsage.bestie || 0) + 1;
+    // Grow bestie affinity (hidden stat)
+    state.bestieAffinity = Math.min(100, (state.bestieAffinity || 10) + 2);
   } else if (character === 'goddess') {
     const gs = getGoddessState(state);
     if (!gs || gs.remaining <= 0) return null; // signal "left"

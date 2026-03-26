@@ -833,6 +833,14 @@ export function openBrowserApp() {
           </div>
           <div style="color:var(--text-muted)">${ic('arrow-right')}</div>
         </a>
+        <a href="https://wj.qq.com/s2/25896834/7619/" target="_blank" rel="noopener" class="app-action-card" style="text-decoration:none;color:inherit;margin-bottom:10px">
+          <div class="app-action-icon" style="color:#FF6B35">${ic('clipboard-text', '1.3rem')}</div>
+          <div class="app-action-body">
+            <div class="app-action-name">同人经济学调查问卷</div>
+            <div class="app-action-cost">帮助我们的研究，填写只需几分钟</div>
+          </div>
+          <div style="color:var(--text-muted)">${ic('arrow-right')}</div>
+        </a>
         <a href="https://space.bilibili.com/4330116" target="_blank" rel="noopener" class="app-action-card" style="text-decoration:none;color:inherit">
           <div class="app-action-icon" style="color:#00A1D6">${ic('monitor-play', '1.3rem')}</div>
           <div class="app-action-body">
@@ -1531,6 +1539,8 @@ async function renderBestieChat(state, onAction, onBack) {
         if (!state._chatUsage) state._chatUsage = {};
         state._chatUsage.bestie = (state._chatUsage.bestie || 0) + 1;
         state._bestieLastChatTurn = state.turn; // start 3-month cooldown
+        // Grow bestie affinity (hidden stat)
+        state.bestieAffinity = Math.min(100, (state.bestieAffinity || 10) + 3);
         render();
       });
     });

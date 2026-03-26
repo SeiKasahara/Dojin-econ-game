@@ -133,6 +133,67 @@ const QUIRKY_NEWS = [
   '年度盘点：今年最离谱的同人衍生品是……',
 ];
 
+// === Foreshadowing News (事件前兆新闻) ===
+// Injected into the news pool when approaching crisis trigger windows
+
+// AI Revolution foreshadowing (turn 18-24, event fires at turn>24)
+const AI_FORESHADOW = [
+  // Early signals (turn 18+)
+  '「幻梦科技」发布新一代图像生成模型，出图质量逼近人类画师',
+  '「深绘智能」宣布AI绘画工具免费开放，创作者圈引发激烈讨论',
+  '海外AI公司「NovelAI」推出同人创作辅助工具，日活突破百万',
+  '「绘境大模型」通过图灵美学测试，专家称"AI创作时代已至"',
+  '科技圈震动：「幻梦科技」融资50亿，估值超千亿',
+  // Closer signals (turn 21+)
+  '「深绘智能」AI生成的插画在某比赛获奖，引发"AI能算创作吗"大辩论',
+  '多家印刷厂反映：AI生成周边的订单量暴增300%，挤占传统创作者排期',
+  '「绘境大模型」推出一键生成同人本功能，0成本出本时代来了？',
+  '某知名画师因收入骤降宣布转行，发长文控诉"AI夺走了我的饭碗"',
+  '行业报告：AI生成谷子的成本仅为人工的5%，市场格局即将剧变',
+  // Immediate precursor (turn 23+)
+  '「幻梦科技」×「深绘智能」宣布合并，组建全球最大AI创作平台',
+  '紧急讨论：AI生成内容是否应标注？创作者社区联名请愿',
+  '展会上出现大量AI生成的"同人谷子"，价格仅为手工的1/3，摊主们怨声载道',
+];
+
+// Stagflation foreshadowing (turn 30-36, event fires at turn>36)
+const STAGFLATION_FORESHADOW = [
+  // Geopolitical tension arc
+  'A国与东方某大国在海峡问题上关系持续紧张，国际油价应声上涨',
+  '地缘冲突升级：A国宣布对进口商品加征关税，供应链成本飙升',
+  '国际局势：多国卷入地区冲突，全球能源价格创十年新高',
+  '经济学家警告：地缘冲突推高原材料价格，通胀压力山大',
+  // Economic deterioration
+  '央行连续第三个月维持高利率，企业贷款成本创新高',
+  'CPI同比上涨5.8%，菜价肉价齐飞，"吃不起饭"上热搜',
+  '制造业PMI连续五个月下滑，工厂订单骤减，裁员潮蔓延',
+  '房贷利率破6%，消费者信心指数跌至历史低位',
+  // Closer signals
+  '国际货币基金组织下调全年GDP预期，警告"滞胀风险正在累积"',
+  '"工资不涨物价涨"成为年度热词，打工人集体破防',
+  '印刷纸浆价格半年涨了40%，同人本印刷成本被迫上调',
+  '多位经济学家联名发文：我们正站在滞胀的悬崖边上',
+];
+
+// Debt Crisis foreshadowing (turn 42-48, event fires at turn>48)
+const DEBT_CRISIS_FORESHADOW = [
+  // Consumer debt accumulation
+  '消费贷数据：90后人均负债12.7万，"花呗自由"成了新讽刺',
+  '信用卡逾期率创历史新高，银行开始大规模催收',
+  '大学生贷款总额突破万亿，"毕业即负债"成常态',
+  '某消费分期平台暴雷，数十万用户资金被冻结',
+  // Secondhand market signals
+  '"断舍离"话题热度暴涨，二手交易平台月活翻倍',
+  '咸鱼上大量低价抛售收藏品，卖家留言："还不起花呗了"',
+  '二手谷子价格集体腰斩，圈内人士直呼"跳楼甩卖"',
+  '某知名收藏家清空全部藏品："再不卖就要吃土了"',
+  // Systemic crisis signals
+  '央行紧急注入流动性，市场恐慌情绪蔓延',
+  '社会消费品零售总额连续三个月负增长，消费降级加速',
+  '经济观察：消费者资产负债表衰退，这比普通衰退可怕得多',
+  '某经济学家警告："债务泡沫即将破裂，每个人都该做好准备"',
+];
+
 // Simple seeded PRNG (mulberry32)
 function seededRng(seed) {
   let s = seed | 0;
@@ -171,6 +232,31 @@ export function generateWorldNews(state) {
 
   // Quirky — sprinkle in
   pool.push(...QUIRKY_NEWS.map(t => ({ text: t, category: 'quirky' })));
+
+  // === Foreshadowing injection (crisis precursors) ===
+  const adv = state.advanced;
+  const turn = state.turn;
+
+  // AI Revolution: foreshadow turns 18-24 (fires at >24, only if not yet triggered)
+  if (!adv?.aiRevolution && turn >= 18 && turn <= 26) {
+    const intensity = turn >= 23 ? 4 : turn >= 21 ? 3 : 2;
+    const aiPool = turn >= 23 ? AI_FORESHADOW.slice(10) : turn >= 21 ? AI_FORESHADOW.slice(5, 10) : AI_FORESHADOW.slice(0, 5);
+    for (let i = 0; i < intensity; i++) pool.push(...aiPool.map(t => ({ text: t, category: 'life' })));
+  }
+
+  // Stagflation: foreshadow turns 30-36 (fires at >36, only if not yet triggered)
+  if (!adv?.stagflationTurnsLeft && state.recessionTurnsLeft <= 0 && turn >= 30 && turn <= 38) {
+    const intensity = turn >= 34 ? 4 : turn >= 32 ? 3 : 2;
+    const stPool = turn >= 34 ? STAGFLATION_FORESHADOW.slice(8) : turn >= 32 ? STAGFLATION_FORESHADOW.slice(4, 8) : STAGFLATION_FORESHADOW.slice(0, 4);
+    for (let i = 0; i < intensity; i++) pool.push(...stPool.map(t => ({ text: t, category: 'macro' })));
+  }
+
+  // Debt Crisis: foreshadow turns 42-48 (fires at >48, only if not yet triggered)
+  if (!adv?.debtCrisisActive && turn >= 42 && turn <= 50) {
+    const intensity = turn >= 46 ? 4 : turn >= 44 ? 3 : 2;
+    const dcPool = turn >= 46 ? DEBT_CRISIS_FORESHADOW.slice(8) : turn >= 44 ? DEBT_CRISIS_FORESHADOW.slice(4, 8) : DEBT_CRISIS_FORESHADOW.slice(0, 4);
+    for (let i = 0; i < intensity; i++) pool.push(...dcPool.map(t => ({ text: t, category: 'macro' })));
+  }
 
   // Shuffle and pick
   const shuffled = pool.sort(() => rng() - 0.5);

@@ -421,6 +421,7 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     monthHadCreativeAction: false,  // for lastCreativeTurn tracking
     consecutiveConsigns: 0,         // tracks consecutive consignment events (resets on 亲参)
     creativeFatigue: 0,             // cumulative creative exhaustion (decays naturally, amplified by consecutive creation)
+    bestieAffinity: 10,             // hidden bestie affinity (0-100), grows with chat interactions
     equipmentLevel: 0,              // 0/1/2/3 — upgraded equipment improves quality & reduces passion cost
     lastSponsorTurn: -12,           // turn of last community sponsorship (cooldown)
     lastSalary: 0,                  // last salary received (for unemployment spending inertia)
@@ -2434,6 +2435,13 @@ export function endMonth(state) {
   if (state.monthActions.some(a => a.actionId === 'rest') && state.creativeFatigue > 0) {
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 1); // extra recovery on rest
     result.deltas.push({ icon: 'battery-medium', label: '创作疲劳缓解', value: `疲劳${state.creativeFatigue.toFixed(1)}`, positive: true });
+  }
+
+  // --- Bestie affinity decay (friendships need maintenance) ---
+  // Decay only if player didn't chat with bestie this month
+  const chattedBestieThisMonth = (state._chatUsage?.bestie || 0) > 0 || (state._bestieLastChatTurn === state.turn - 1);
+  if (!chattedBestieThisMonth && (state.bestieAffinity || 0) > 5) {
+    state.bestieAffinity = Math.max(5, (state.bestieAffinity || 10) - 2);
   }
 
   // --- Info disclosure: rapid decay (information flood drowns everything fast) ---
