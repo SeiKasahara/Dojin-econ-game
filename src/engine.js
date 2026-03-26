@@ -1191,6 +1191,12 @@ export function executeAction(state, actionId) {
     const evt = state.attendingEvent || (state.availableEvents && state.availableEvents[0]);
     if (evt) {
 
+      // Track attendance immediately (before handler nullifies state.attendingEvent)
+      if (!state.eventsAttendedThisMonth) state.eventsAttendedThisMonth = [];
+      if (!state.eventsAttendedThisMonth.includes(evt.name)) {
+        state.eventsAttendedThisMonth.push(evt.name);
+      }
+
       // Read and consume mode/minigame state BEFORE branching (shared by cancelled + normal paths)
       const mode = state._eventMode || 'attend';
       state._eventMode = null;
@@ -2014,10 +2020,7 @@ export function executeAction(state, actionId) {
 
   if (actionId === 'hvp') state.hvpWorkedThisMonth = true;
   if (actionId === 'lvp') state.lvpWorkedThisMonth = true;
-  if (actionId === 'attendEvent' && state.attendingEvent) {
-    if (!state.eventsAttendedThisMonth) state.eventsAttendedThisMonth = [];
-    state.eventsAttendedThisMonth.push(state.attendingEvent.name);
-  }
+  // attendEvent tracking moved into the handler (before state.attendingEvent is cleared)
   if (['hvp', 'lvp', 'attendEvent', 'promote_heavy'].includes(actionId) ||
       (actionId === 'findPartner' && state.hasPartner)) {
     state.monthHadCreativeAction = true;
