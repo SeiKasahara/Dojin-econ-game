@@ -1380,9 +1380,15 @@ export function renderAppPage(appId, state, onAction, onBack) {
       const affinity = parseFloat(btn.dataset.affinity) || 0;
       const cname = btn.dataset.name || '';
       const row = btn.closest('.contact-row');
-      // High affinity = severe reputation penalty (betrayal of trust)
-      // familiar(2~4): -0.5~-1.5, trusted(4+): -1.5~-3.0
-      const repPenalty = affinity >= 2 ? Math.min(3, (affinity - 1) * 0.75) : 0;
+      // Reputation penalty scales with affinity × network density
+      // Denser network (more contacts, more high-affinity) = word spreads faster
+      const networkSize = (state.contacts || []).length;
+      const highAffinityCount = (state.contacts || []).filter(c => c.affinity >= 2).length;
+      const densityMult = 1 + Math.min(1.0, highAffinityCount * 0.15); // 0 close friends→1.0x, 3→1.45x, 7+→2.0x
+      const basePenalty = affinity >= 4 ? Math.min(4, (affinity - 1) * 1.0)   // trusted: -3.0~-4.0
+        : affinity >= 2 ? Math.min(3, (affinity - 1) * 0.75)                  // familiar: -0.75~-2.25
+        : 0.1 + affinity * 0.03;                                              // acquaintance: -0.1~-0.16
+      const repPenalty = Math.round(basePenalty * densityMult * 100) / 100;
       const doRemove = (deductRep) => {
         if (deductRep) state.reputation = Math.max(0, state.reputation - repPenalty);
         state.contacts = state.contacts.filter(c => c.id !== cid);
@@ -1401,11 +1407,12 @@ export function renderAppPage(appId, state, onAction, onBack) {
       const panel = document.createElement('div');
       panel.style.cssText = 'position:relative;background:var(--card-bg,#fff);border-radius:16px;padding:24px 20px 16px;max-width:300px;width:85%;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center';
       if (repPenalty > 0) {
+        const relDesc = affinity >= 4 ? '关系很深' : affinity >= 2 ? '关系不错' : '虽然只是点头之交，但圈子里传出去也不好听';
         panel.innerHTML = `
           <div style="font-size:1.5rem;margin-bottom:8px">${ic('warning','1.5rem')}</div>
           <div style="font-size:0.9rem;font-weight:700;margin-bottom:6px">确认断联？</div>
-          <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px">你和 <b>${cname}</b> 关系不错</div>
-          <div style="font-size:0.78rem;color:var(--danger);font-weight:600;margin-bottom:16px">强行断联将损失 ${repPenalty.toFixed(1)} 声誉</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px">你和 <b>${cname}</b> ${relDesc}</div>
+          <div style="font-size:0.78rem;color:var(--danger);font-weight:600;margin-bottom:16px">断联将损失 ${repPenalty.toFixed(2)} 声誉</div>
           <div style="display:flex;gap:10px;justify-content:center">
             <button class="confirm-modal-cancel" style="flex:1;padding:8px 0;border-radius:10px;border:1px solid var(--border);background:var(--bg,#f5f5f5);color:var(--text);font-size:0.8rem;cursor:pointer">取消</button>
             <button class="confirm-modal-ok" style="flex:1;padding:8px 0;border-radius:10px;border:none;background:var(--danger);color:#fff;font-size:0.8rem;font-weight:600;cursor:pointer">确认断联</button>
@@ -1895,6 +1902,26 @@ export function renderResult(state, result, onContinue) {
             声誉↑需求曲线右移 · 信息透明度↑转化率提升 · 绿色=你的收入
           </p>
         </div>` : ''}
+
+        ${result.digitalSalesDetails ? (() => {
+          const d = result.digitalSalesDetails;
+          const total = result.digitalSalesTotal;
+          const collapsed = d.length > 3;
+          const rows = d.map(item =>
+            `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.7rem">
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.name)}</span>
+              <span style="flex-shrink:0;color:var(--text-muted);margin:0 6px">×${item.sales} @¥${item.price}</span>
+              <span style="flex-shrink:0;font-weight:600;color:var(--success)">+¥${item.rev}</span>
+            </div>`
+          ).join('');
+          return `<div class="market-panel${collapsed ? ' collapsed' : ''}" style="margin-bottom:10px">
+            <div class="market-header" style="cursor:${collapsed ? 'pointer' : 'default'}">
+              <span>${ic('phone')} 电子版被动收入 <span style="font-weight:700;color:var(--success)">+¥${total}</span> <span style="color:var(--text-muted);font-size:0.7rem">(${d.length}部)</span></span>
+              ${collapsed ? '<span class="market-arrow">▼</span>' : ''}
+            </div>
+            <div class="market-body" style="padding:4px 0">${rows}</div>
+          </div>`;
+        })() : ''}
 
         ${result.monthFinancial ? (() => {
           const f = result.monthFinancial;
@@ -2413,7 +2440,7 @@ export function renderEventModeSelector(state, event, onSelect, onCancel) {
   overlay.querySelectorAll('.mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       // Block attend if not enough time
-      if (btn.dataset.mode === 'attend' && state.time < 3) return;
+      if (btn.dataset.mode === 'attend' && (state.time - (state.monthTimeSpent || 0)) < 3) return;
       overlay.querySelectorAll('.mode-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
       btn.style.border = '2px solid var(--primary)';
       btn.style.background = '#F0FAF8';
@@ -2487,7 +2514,7 @@ export function renderReprintSelector(state, onSelect, onCancel) {
   const workItems = worksWithStock.map(w => {
     const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
     const isHVP = w.type === 'hvp';
-    const reprintQty = isHVP ? 30 : 20;
+    const reprintQty = isHVP ? 60 : 20;
     const unitCost = isHVP ? 40 : 6;
     const totalCost = reprintQty * unitCost;
     const cs = state.market ? state.market.communitySize : 10000;
@@ -2531,7 +2558,7 @@ export function renderReprintSelector(state, onSelect, onCancel) {
       let totalCost = 0;
       for (const id of selected) {
         const w = worksWithStock.find(w => w.id === id);
-        if (w) totalCost += (w.type === 'hvp' ? 30 * 40 : 20 * 6);
+        if (w) totalCost += (w.type === 'hvp' ? 60 * 20 : 20 * 6);
       }
       confirmBtn.textContent = `确认追印 ${selected.size}项 · 总计¥${totalCost}`;
     }

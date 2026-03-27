@@ -273,13 +273,13 @@ export const ADVANCED_EVENTS = [
   {
     id: 'foreign_wave', emoji: 'waves', title: '海外神作涌入！',
     desc: '一批极高质量的海外同人作品被搬运进来。消费者惊叹之余，本土创作者感受到了强烈的竞争压力。但同时，这些作品也激发了新的创作灵感...',
-    effect: '海外竞争↑ 热情+5（灵感激发） 声誉-0.1', effectClass: 'neutral',
+    effect: '海外竞争↑ 同人本创作者+2 热情+5（灵感激发）', effectClass: 'neutral',
     apply: (s) => {
       s.advanced.foreignContentPressure = Math.min(0.5, (s.advanced.foreignContentPressure || 0) + 0.2);
+      if (s.market) s.market.nHVP += 2;
       s.passion = Math.min(100, s.passion + 5);
-      s.reputation = Math.max(0, s.reputation - 0.1);
     },
-    tip: '跨国竞争中，本土创作者效用选择，迎合母国审美赚更多，但表达自我的空间被压缩。',
+    tip: '海外创作者的涌入不会降低你的个人声誉——你的口碑是自己积累的。但市场份额会被稀释，竞争加剧意味着同样的声誉能分到的需求更少了。',
     weight: 4, when: (s) => s.turn > 6 && s.market?.communitySize > 3000, maxTotal: Infinity,
   },
 

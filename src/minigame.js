@@ -37,8 +37,18 @@ function createState(mainState, event) {
   const cs = mainState.market?.communitySize || 10000;
   const sizeMult = event.size === 'mega' ? 8 : event.size === 'big' ? 5 : 2.5;
   const popularMult = event.condition === 'popular' ? 1.35 : 1.0;
-  const maxCustomers = Math.max(30, Math.round((cs / 1000 * sizeMult + 12) * popularMult));
+  // Reputation draws more foot traffic to your booth (known circles attract queues)
+  // Diminishing returns curve: steep early, gentle late, no hard cap
+  const rep = mainState.reputation || 0;
+  const repMult = 1 + 1.5 * rep / (rep + 5); // rep0→1.0, rep3→1.56, rep5→1.75, rep8→1.92, rep10→2.0, rep15→2.13
+  const maxCustomers = Math.max(30, Math.round((cs / 1000 * sizeMult + 12) * popularMult * repMult));
   const duration = event.size === 'mega' ? 90 : event.size === 'big' ? 75 : 60;
+
+  // CES floor: minimum total sales expected from economic model
+  // Divide by maxCustomers to get per-customer base purchase guarantee
+  const cesFloor = event._cesFloor || 0;
+  const baseBuyQty = cesFloor > 0 ? Math.max(0, Math.ceil(cesFloor / maxCustomers) - 1) : 0;
+  // baseBuyQty is EXTRA units on top of the normal 1, so each customer buys at least (1 + baseBuyQty)
 
   return {
     phase: 'init', // init | playing | scoring | done
@@ -53,6 +63,7 @@ function createState(mainState, event) {
     spawnInterval: Math.max(800, duration * 1000 / maxCustomers),
     totalSpawned: 0,
     maxCustomers,
+    baseBuyQty,
     // Booth zone (canvas coords)
     boothX: 190, boothY: 195, boothW: 100, boothH: 50,
     // Score
@@ -399,8 +410,10 @@ function updateCustomers(mg, dt) {
     } else if (c.state === 'buying') {
       c.stateTimer -= dt;
       if (c.stateTimer <= 0) {
+        // Base purchase: CES-backed minimum per customer (late game scaling)
+        const baseBuy = 1 + (mg.baseBuyQty || 0);
         // Diversity bonus: fans/any-preference customers with diverse inventory buy multiple
-        const diversityBuy = (c.preference === 'any' && mg.hasHVP && mg.hasLVP) ? 2 : 1;
+        const diversityExtra = (c.preference === 'any' && mg.hasHVP && mg.hasLVP) ? 1 : 0;
         // Late-game bulk buy: high reputation + info disclosure → customers buy extras (帮朋友带、多买收藏)
         let bulkExtra = 0;
         if (mg.playerReputation >= 3 && mg.playerInfoDisclosure >= 0.5) {
@@ -414,7 +427,7 @@ function updateCustomers(mg, dt) {
             bulkExtra = Math.random() < 0.3 ? 2 : 1;
           }
         }
-        const totalBuy = diversityBuy + bulkExtra;
+        const totalBuy = baseBuy + diversityExtra + bulkExtra;
         mg.score.sold += totalBuy;
         const coinText = totalBuy >= 3 ? '💰💰💰' : totalBuy >= 2 ? '💰💰' : '💰';
         mg.particles.push({ x: c.x, y: c.y, text: coinText, life: 1000, vy: -0.08 });

@@ -4,9 +4,9 @@
  */
 
 import './style.css';
-import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost } from './engine.js';
+import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost, calculateSales, getActionDisplay } from './engine.js';
 import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderWorkNameInput, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp } from './ui.js';
-import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES } from './engine.js';
+import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES, getQualityStars } from './engine.js';
 import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
 import { ic } from './icons.js';
 import { saveGame, loadGame, deleteSave } from './save.js';
@@ -180,11 +180,21 @@ function handleAction(actionId) {
         state._eventMode = mode;
         if (mode === 'attend') {
           // 亲参 → play minigame
+          // Pre-compute CES floor so minigame can use it as per-customer buy minimum
+          const savedAttending = state.attendingEvent;
+          state.attendingEvent = { ...chosenEvent, salesBoost: chosenEvent.salesBoost }; // temp for CES calc
+          state.playerPrice.hvp = state.inventory?.hvpPrice || 50;
+          state.playerPrice.lvp = state.inventory?.lvpPrice || 15;
+          const cesHvp = state.inventory?.hvpStock > 0 ? (calculateSales('hvp', state).hvpSales || 0) : 0;
+          const cesLvp = state.inventory?.lvpStock > 0 ? (calculateSales('lvp', state).lvpSales || 0) : 0;
+          state.attendingEvent = savedAttending; // restore
+          const cesFloorTotal = cesHvp + cesLvp;
+
           syncBGM('minigame');
           showLoadingOverlay('准备展会中…');
           import('./minigame.js').then(({ startMinigame }) => {
             removeLoadingOverlay();
-            startMinigame(state, chosenEvent, (mgResult) => {
+            startMinigame(state, { ...chosenEvent, _cesFloor: cesFloorTotal }, (mgResult) => {
               state._minigameResult = mgResult || null;
               syncBGM('game');
               executeInMonth(actionId);
@@ -219,55 +229,46 @@ function handleAction(actionId) {
     return;
   }
 
-  // === HVP flow: new project → subtype + theme choice; continue → execution/polish choice ===
+  // === HVP flow: new project → all choices upfront; continue → just confirm ===
   if (actionId === 'hvp' && !needsPricing(actionId)) {
     if (!state.hvpProject) {
-      // New project: select subtype → name → theme choice → proceed
+      // New project: subtype → name → theme → execution → finalPolish → proceed
       renderSubtypeSelector(state, 'hvp', (subtypeId) => {
         state._selectedHVPSubtype = subtypeId;
         const sub = HVP_SUBTYPES[subtypeId];
         renderWorkNameInput(sub.name, sub.emoji, (name) => {
           state._hvpWorkName = name;
           renderCreativeChoice(CREATIVE_CHOICES.theme, (themeId) => {
-            state._pendingChoices = [{ category: 'theme', optionId: themeId }];
-            executeInMonth(actionId);
+            renderCreativeChoice(CREATIVE_CHOICES.execution, (execId) => {
+              renderCreativeChoice(CREATIVE_CHOICES.finalPolish, (polishId) => {
+                state._pendingChoices = [
+                  { category: 'theme', optionId: themeId },
+                  { category: 'execution', optionId: execId },
+                  { category: 'finalPolish', optionId: polishId },
+                ];
+                executeInMonth(actionId);
+              }, cancelBack);
+            }, cancelBack);
           }, cancelBack);
         }, cancelBack);
       }, cancelBack);
     } else {
-      // Continue project: show creative choice for this month
-      const nextMonth = state.hvpProject.progress + 1;
-      const choicesMade = state.hvpProject.choices?.length || 0;
-      // Month 2: execution choice (if not yet made and we have >1 month projects)
-      if (nextMonth === 2 && choicesMade < 2) {
-        renderCreativeChoice(CREATIVE_CHOICES.execution, (choiceId) => {
-          state._pendingChoices = [{ category: 'execution', optionId: choiceId }];
-          executeInMonth(actionId);
-        }, cancelBack);
-      // Month 3+: final polish choice (if 3+ month project and not yet made)
-      } else if (nextMonth >= 3 && nextMonth >= state.hvpProject.needed && choicesMade < 3) {
-        renderCreativeChoice(CREATIVE_CHOICES.finalPolish, (choiceId) => {
-          state._pendingChoices = [{ category: 'finalPolish', optionId: choiceId }];
-          executeInMonth(actionId);
-        }, cancelBack);
-      } else {
-        // No choice needed this month, just confirm
-        const p = state.hvpProject;
-        const sub = HVP_SUBTYPES[p.subtype] || HVP_SUBTYPES.manga;
-        const overlay = document.createElement('div');
-        overlay.className = 'event-overlay';
-        overlay.innerHTML = `
-          <div class="event-card" style="max-width:340px">
-            <div style="font-size:1.3rem">${ic(sub.emoji, '1.3rem')}</div>
-            <div style="font-weight:700;margin:4px 0">继续创作${sub.name}${p.name ? '·' + p.name : ''}</div>
-            <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">进度 ${p.progress}/${p.needed}</div>
-            <button class="btn btn-primary btn-block" id="btn-hvp-go" style="margin-bottom:6px">继续创作</button>
-            <button class="btn btn-block" id="btn-hvp-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
-          </div>`;
-        document.body.appendChild(overlay);
-        overlay.querySelector('#btn-hvp-go').addEventListener('click', () => { overlay.remove(); executeInMonth(actionId); });
-        overlay.querySelector('#btn-hvp-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
-      }
+      // Continue project: just confirm, no more choices
+      const p = state.hvpProject;
+      const sub = HVP_SUBTYPES[p.subtype] || HVP_SUBTYPES.manga;
+      const overlay = document.createElement('div');
+      overlay.className = 'event-overlay';
+      overlay.innerHTML = `
+        <div class="event-card" style="max-width:340px">
+          <div style="font-size:1.3rem">${ic(sub.emoji, '1.3rem')}</div>
+          <div style="font-weight:700;margin:4px 0">继续创作${sub.name}${p.name ? '·' + p.name : ''}</div>
+          <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px">进度 ${p.progress}/${p.needed} · 质量${getQualityStars(p.workQuality)}</div>
+          <button class="btn btn-primary btn-block" id="btn-hvp-go" style="margin-bottom:6px">继续创作</button>
+          <button class="btn btn-block" id="btn-hvp-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#btn-hvp-go').addEventListener('click', () => { overlay.remove(); executeInMonth(actionId); });
+      overlay.querySelector('#btn-hvp-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
     }
     return;
   }
@@ -474,8 +475,114 @@ function handleAction(actionId) {
     return;
   }
 
+  // === Sell Goods: quantity slider ===
+  if (actionId === 'sellGoods') {
+    const maxQty = state.goodsCollection || 0;
+    if (maxQty <= 0) { executeInMonth(actionId); return; }
+    const defaultQty = Math.min(1, maxQty);
+    const shPressure = state.official?.secondHandPressure?.lvp || 0;
+    const unitPrice = Math.max(50, Math.round(120 * (1 - shPressure * 0.5)));
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    overlay.innerHTML = `
+      <div class="event-card" style="max-width:320px">
+        <div style="font-size:1.5rem">${ic('export', '1.5rem')}</div>
+        <div style="font-weight:700;margin:6px 0">出售闲置收藏</div>
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:8px">选择出售数量，卖越多割爱越痛</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <input type="range" id="sell-slider" min="1" max="${maxQty}" value="${defaultQty}" step="1" style="flex:1;accent-color:var(--primary)">
+          <span id="sell-qty-label" style="font-weight:700;font-size:1.1rem;min-width:36px;text-align:center">${defaultQty}件</span>
+        </div>
+        <div id="sell-preview" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:12px;text-align:center">预估收入 ¥${defaultQty * unitPrice} · 热情-${Math.min(8, Math.ceil(defaultQty * 0.8))}</div>
+        <button class="btn btn-primary btn-block" id="btn-sell-go" style="margin-bottom:6px">确认出售</button>
+        <button class="btn btn-block" id="btn-sell-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    const slider = overlay.querySelector('#sell-slider');
+    const label = overlay.querySelector('#sell-qty-label');
+    const preview = overlay.querySelector('#sell-preview');
+    slider.addEventListener('input', () => {
+      const q = parseInt(slider.value);
+      label.textContent = q + '件';
+      const passionCost = Math.min(8, Math.ceil(q * 0.8));
+      preview.textContent = `预估收入 ¥${q * unitPrice} · 热情-${passionCost}`;
+    });
+    overlay.querySelector('#btn-sell-go').addEventListener('click', () => {
+      state._sellQty = parseInt(slider.value);
+      overlay.remove();
+      executeInMonth(actionId);
+    });
+    overlay.querySelector('#btn-sell-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+    return;
+  }
+
+  // === Freelance: type selector ===
+  if (actionId === 'freelance') {
+    const baseTC = state.unemployed || state.fullTimeDoujin ? 2 : state.turn < 50 ? 3 : 5;
+    const remaining = state.time - (state.monthTimeSpent || 0);
+    const baseIncome = 200 + Math.floor(Math.sqrt(state.reputation) * 600);
+    const recTag = state.recessionTurnsLeft > 0 ? ' (经济下行-50%)' : '';
+    const canPremium = state.reputation >= 4 && remaining >= baseTC + 1;
+    const canStandard = remaining >= baseTC;
+    const canQuick = remaining >= Math.max(1, baseTC - 1);
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    overlay.innerHTML = `
+      <div class="event-card" style="max-width:360px;text-align:left">
+        <div style="text-align:center;margin-bottom:10px">
+          <div style="font-size:1.3rem">${ic('paint-brush')}</div>
+          <div style="font-weight:700">选择稿件类型</div>
+          <div style="font-size:0.75rem;color:var(--text-light)">不同稿件有不同的收入和消耗${recTag}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+          <div class="price-btn fl-type-btn${canQuick ? '' : ' disabled'}" data-fl="quick" style="padding:12px;cursor:${canQuick ? 'pointer' : 'not-allowed'};${canQuick ? '' : 'opacity:0.45;'}">
+            <div style="font-weight:700;font-size:0.9rem">${ic('lightning')} 快速小单</div>
+            <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">头像、表情包等小活，快速回款</div>
+            <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">收入约¥${Math.round(baseIncome * 0.4)} · 热情-2 · 需${Math.max(1, baseTC - 1)}天 · 下月闲暇-1天</div>
+          </div>
+          <div class="price-btn fl-type-btn${canStandard ? '' : ' disabled'}" data-fl="standard" style="padding:12px;cursor:${canStandard ? 'pointer' : 'not-allowed'};${canStandard ? '' : 'opacity:0.45;'}">
+            <div style="font-weight:700;font-size:0.9rem">${ic('paint-brush')} 标准同人稿</div>
+            <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">插画、封面等常规商稿</div>
+            <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">收入约¥${Math.round(baseIncome * 0.8)} · 热情-4 · 需${baseTC}天 · 下月闲暇-2天 · 声誉+</div>
+          </div>
+          <div class="price-btn fl-type-btn${canPremium ? '' : ' disabled'}" data-fl="premium" style="padding:12px;cursor:${canPremium ? 'pointer' : 'not-allowed'};${canPremium ? '' : 'opacity:0.45;'}">
+            <div style="font-weight:700;font-size:0.9rem">${ic('star')} 高端约稿</div>
+            <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">长期商业企划，高报酬高消耗</div>
+            <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">收入约¥${Math.round(baseIncome * 1.2)} · 热情-7 · 需${baseTC + 1}天 · 下月闲暇-3天 · 声誉++ · 技艺经验+</div>
+            ${!canPremium && state.reputation < 4 ? `<div style="font-size:0.65rem;color:var(--danger);margin-top:2px">${ic('warning')} 需要声誉≥4</div>` : ''}
+            ${!canPremium && state.reputation >= 4 ? `<div style="font-size:0.65rem;color:var(--danger);margin-top:2px">${ic('warning')} 闲暇不足（需≥${baseTC + 1}天）</div>` : ''}
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-fl-confirm" disabled style="opacity:0.5">请选择稿件类型</button>
+        <button class="btn btn-block" id="btn-fl-back" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    let selectedFL = null;
+    overlay.querySelectorAll('.fl-type-btn:not(.disabled)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        overlay.querySelectorAll('.fl-type-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
+        btn.style.border = '2px solid var(--primary)';
+        btn.style.background = '#F0FAF8';
+        selectedFL = btn.dataset.fl;
+        const cfm = overlay.querySelector('#btn-fl-confirm');
+        cfm.disabled = false;
+        cfm.style.opacity = '1';
+        const labels = { quick: '确认接小单', standard: '确认接稿', premium: '确认接高端约稿' };
+        cfm.textContent = labels[selectedFL] || '确认';
+      });
+    });
+    overlay.querySelector('#btn-fl-confirm').addEventListener('click', () => {
+      if (!selectedFL) return;
+      state._freelanceType = selectedFL;
+      overlay.remove();
+      executeInMonth(actionId);
+    });
+    overlay.querySelector('#btn-fl-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+    return;
+  }
+
   // Generic confirmation for all other actions
-  const act = ACTIONS[actionId];
+  const act = getActionDisplay(actionId, state) || ACTIONS[actionId];
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
   overlay.innerHTML = `
@@ -544,6 +651,7 @@ function afterMonthTransition(monthResult) {
       let displayEvent = typeof event.effect === 'function' ? { ...event, effect: event.effect(state) } : event;
       if (typeof displayEvent.desc === 'function') displayEvent = { ...displayEvent, desc: displayEvent.desc(state) };
       if (typeof displayEvent.tip === 'function') displayEvent = { ...displayEvent, tip: displayEvent.tip(state) };
+      if (typeof displayEvent.effectClass === 'function') displayEvent = { ...displayEvent, effectClass: displayEvent.effectClass(state) };
       state.lastEvent = displayEvent;
       renderEvent(displayEvent, () => {
         applyEvent(state, event);

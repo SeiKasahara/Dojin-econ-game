@@ -13,6 +13,20 @@ export function generateEnding(state) {
   const events = state.eventLog?.length || 0;
   const unemployed = state.unemployed;
 
+  // Reputation backlash ending: passion hit 0 within 3 months of a backlash event
+  if (state._lastBacklashTurn && state.turn - state._lastBacklashTurn <= 3) {
+    const severity = state._lastBacklashSeverity || 'mild';
+    const peakRep = rep.toFixed(1);
+    const curRep = state.reputation.toFixed(1);
+    if (severity === 'severe') {
+      return `从声誉${peakRep}的巅峰到${curRep}的谷底，只用了几个月。恶评像雪崩一样席卷而来——曾经的赞美变成了嘲讽，曾经的支持者变成了最尖锐的批评者。\n\n你关掉了所有社交媒体的通知，盯着天花板想：这一切到底是从哪里开始崩塌的？\n\n也许不是作品变差了，而是这个圈子从来就不允许任何人从神坛上安全地走下来。你的创作热情不是被自己消磨掉的——它是被舆论碾碎的。`;
+    }
+    if (severity === 'moderate') {
+      return `"xxx是不是不行了？"——当你第三次在时间线上看到这句话时，你终于失去了打开创作软件的力气。\n\n声誉从${peakRep}滑落到${curRep}的过程中，你试过加倍努力，试过沉默以对，试过解释和回应。但舆论的惯性比你的创作速度更快。\n\n${hvp > 3 ? `${hvp}本同人志证明过你的实力，但在恶评面前，过去的成绩只会被一句"也不过如此"轻松抹杀。` : '也许你还没来得及证明自己的全部实力。但至少你知道——不是你不够好，是这个环境太残酷了。'}`;
+    }
+    return `评论区里的冷嘲热讽终于积累到了临界点。你发现自己每次点开社交媒体都先深呼吸，每条通知都让心跳加速——不是因为期待，而是因为恐惧。\n\n创作本该是快乐的事。当它变成了恐惧的来源，也许暂时离开才是正确的选择。\n\n你的作品还在那里，等你准备好了随时可以回来。`;
+  }
+
   if (unemployed && state.money < -500) {
     return '失业和债务的双重压力让你再也无法提起画笔。同人创作从生活的支柱变成了无法承受的奢侈……但那些作品里倾注的心血，读者不会忘记。';
   }

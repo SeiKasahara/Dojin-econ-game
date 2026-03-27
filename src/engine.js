@@ -147,10 +147,10 @@ function getRealityDrain(turn) {
 }
 
 // All passion recovery decays with years in the hobby
-// Y0=100%, Y3=82%, Y5=70%, Y10+=35%
+// Y0=100%, Y3=91%, Y5=85%, Y10=70%, Y20=45%
 function applyPassionDecay(turn, rawAmount) {
   const yearsIn = turn / 12;
-  const mult = Math.max(0.35, 1 - yearsIn * 0.06);
+  const mult = Math.max(0.45, 1 - yearsIn * 0.03);
   return Math.max(1, Math.round(rawAmount * mult));
 }
 
@@ -162,7 +162,7 @@ export { PARTNER_TYPES, addContact, generatePartnerCandidates };
 export const HVP_SUBTYPES = {
   manga:    { id: 'manga',    name: '漫画本',       emoji: 'book-open', monthsSolo: 3, monthsPartner: 2, costRange: [3500, 5000], repMult: 1.0,  audienceMult: 1.0,  requiredRep: 0, desc: '标准同人本，全彩小批量印刷贵' },
   novel:    { id: 'novel',    name: '小说本',       emoji: 'book', monthsSolo: 2, monthsPartner: 1, costRange: [1500, 2500], repMult: 0.8,  audienceMult: 0.75, requiredRep: 0, desc: '成本低周期短，受众略小' },
-  artbook:  { id: 'artbook',  name: '创意绘本',     emoji: 'palette', monthsSolo: 3, monthsPartner: 2, costRange: [4500, 6000], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
+  artbook:  { id: 'artbook',  name: '加厚创意绘本',     emoji: 'palette', monthsSolo: 3, monthsPartner: 2, costRange: [4500, 6000], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
   lorebook: { id: 'lorebook', name: '设定集',       emoji: 'scroll', monthsSolo: 2, monthsPartner: 1, costRange: [2500, 3500], repMult: 1.2,  audienceMult: 0.6,  requiredRep: 2, desc: '小众高价值，需声誉≥2' },
   music:    { id: 'music',    name: '同人音乐专辑', emoji: 'music-notes', monthsSolo: 4, monthsPartner: 3, costRange: [4000, 5000], repMult: 1.3,  audienceMult: 0.7,  requiredRep: 0, desc: '独特受众，周期长' },
 };
@@ -184,7 +184,7 @@ export const CREATIVE_CHOICES = {
     ],
   },
   execution: {
-    title: '创作进度决策', desc: '目前进展如何？接下来要怎么做？',
+    title: '创作进度决策', desc: '想要做什么样的质量？',
     options: [
       { id: 'rush',   name: '赶工加速', emoji: 'lightning', desc: '压缩工期，省一个月但可能影响品质' },
       { id: 'normal', name: '正常进度', emoji: 'note-pencil', desc: '按部就班，稳扎稳打' },
@@ -192,7 +192,7 @@ export const CREATIVE_CHOICES = {
     ],
   },
   finalPolish: {
-    title: '最后冲刺', desc: '作品即将完成，最后阶段如何处理？',
+    title: '最后冲刺', desc: '作品最后阶段如何处理？',
     options: [
       { id: 'safe',       name: '保守完成',     emoji: 'package', desc: '安全收尾，稳定输出' },
       { id: 'overhaul',   name: '大改封面/曲目', emoji: 'arrows-clockwise', desc: '推翻重做，可能翻车也可能惊艳' },
@@ -229,54 +229,11 @@ const CHOICE_EFFECTS = {
   budget:    { qualityMod: -0.15, costMod: 0.7, batchMod: 1.3 },
 };
 
-// === Creative Journal Entries (flavor text for non-choice months) ===
-const CREATIVE_JOURNAL = {
-  early: [ // progress < 50%
-    '今天画到了关键场景，情绪完全投入了',
-    '找参考资料找了一整天，总算理清思路',
-    '草稿改了三版，第三版终于满意了',
-    '灵感来得很突然——半夜爬起来记了满满一页',
-    '人设细节越画越多，控制不住自己',
-    '今天的BGM完美配合了创作节奏',
-    '看了一堆同类作品找感觉，信心满满',
-    '分镜卡了半天，散步回来突然通了',
-    '手感超好的一天，进度飞速推进',
-    '重新审视了大纲，做了一些微调',
-  ],
-  late: [ // progress >= 50%
-    '能看到完成的轮廓了，越来越兴奋',
-    '开始收尾工作了，细节打磨中',
-    '通读了一遍已完成的部分，比想象的好',
-    '最后几页总是最难的…但快了',
-    '检查了一遍排版，修了几个小问题',
-    '润色了几段对白，更流畅了',
-    '试着从读者角度审视，调整了节奏',
-    '进入了心流状态，一口气推了很多',
-    '越接近完成越焦虑，但也越期待',
-    '感觉这次的作品比上次有进步',
-  ],
-  partner: [ // has partner
-    '搭档交来的部分比预想的好，信心大增',
-    '和搭档讨论了半天细节，方向更清晰了',
-    '搭档提了个好建议，改了一段关键情节',
-    '配合越来越默契了，效率在提高',
-    '搭档催进度了…我得加把劲',
-  ],
-  milestone: '创作过半！回头看看已完成的部分，还不错。接下来继续加油！',
-};
-
-function getCreativeJournal(project, hasPartner) {
-  const ratio = project.progress / project.needed;
-  const pool = ratio < 0.5 ? CREATIVE_JOURNAL.early : CREATIVE_JOURNAL.late;
-  const entries = [pool[Math.floor(Math.random() * pool.length)]];
-  if (hasPartner && Math.random() < 0.4) {
-    entries.push(CREATIVE_JOURNAL.partner[Math.floor(Math.random() * CREATIVE_JOURNAL.partner.length)]);
-  }
-  return entries;
-}
+// Creative journal — per-subtype flavor text (see creative-journal.js)
+import { getCreativeJournal, getJournalMilestone } from './creative-journal.js';
 
 // Quality star rating (0.5-1.8 → ★☆ display)
-function getQualityStars(quality) {
+export function getQualityStars(quality) {
   const stars = Math.max(1, Math.min(5, Math.round((quality - 0.5) / 0.26)));
   return '★'.repeat(stars) + '☆'.repeat(5 - stars);
 }
@@ -319,12 +276,22 @@ export function applyCreativeChoice(project, choiceCategory, optionId) {
   return project.workQuality - qBefore;
 }
 
+// Reputation gain with diminishing returns (√t growth curve)
+// factor = 1/√(1+2r): rep0→100%, rep1→58%, rep3→38%, rep5→30%, rep10→22%
+function addReputation(state, rawGain) {
+  if (rawGain <= 0) { state.reputation = Math.max(0, state.reputation + rawGain); return rawGain; }
+  const factor = 1 / Math.sqrt(1 + 2 * state.reputation);
+  const actual = rawGain * factor;
+  state.reputation += actual;
+  return actual;
+}
+
 // Work quality effects on sales/reputation (hidden multipliers)
 export function getWorkQualityEffects(quality) {
   return {
-    salesMult: 0.4 + quality * 0.6,          // quality 0.5→0.7, 1.0→1.0, 1.5→1.3, 1.8→1.48
-    repMult: 0.5 + quality * 0.5,             // quality 0.5→0.75, 1.0→1.0, 1.5→1.25
-    breakthroughMod: (quality - 1.0) * 0.1,   // quality 0.5→-0.05, 1.0→0, 1.5→+0.05
+    salesMult: Math.pow(quality, 2.0),         // quality 0.5→0.25, 0.85→0.72, 1.0→1.0, 1.25→1.56, 1.5→2.25, 1.8→3.24
+    repMult: Math.pow(quality, 1.5),           // quality 0.5→0.35, 1.0→1.0, 1.5→1.84
+    breakthroughMod: (quality - 1.0) * 0.15,  // quality 0.5→-0.075, 1.0→0, 1.5→+0.075
   };
 }
 
@@ -609,7 +576,7 @@ export function getActionDisplay(actionId, state) {
   if (!base) return null;
   if (actionId === 'rest') {
     const yearsIn = state.turn / 12;
-    const eff = Math.max(35, Math.round((1 - yearsIn * 0.06) * 100));
+    const eff = Math.max(45, Math.round((1 - yearsIn * 0.03) * 100));
     const remaining = Math.max(0, state.time - (state.monthTimeSpent || 0));
     const idle = state.turn - state.lastCreativeTurn;
     let extra = '';
@@ -627,7 +594,8 @@ export function getActionDisplay(actionId, state) {
     const tc = getFreelanceTimeCost(state);
     const label = state.unemployed ? '失业接稿' : getLifeStage(state.turn) === 'university' ? '课余接稿' : '下班接稿';
     const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}-50%` : '';
-    return { ...base, costLabel: `热情-4 下月闲暇-2天 需≥${tc}天 ${label}${recTag}` };
+    const premiumTag = state.reputation >= 4 ? ' 含高端约稿' : '';
+    return { ...base, costLabel: `需≥${tc}天 ${label}${recTag}${premiumTag}` };
   }
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
@@ -671,7 +639,7 @@ export function getActionDisplay(actionId, state) {
       return { ...base, costLabel: '还没有作品可以追印！' };
     }
     const parts = [];
-    if (state.totalHVP > 0) parts.push(`本30本¥1200`);
+    if (state.totalHVP > 0) parts.push(`本60本¥1200`);
     if (state.totalLVP > 0) parts.push(`谷20个¥120`);
     return { ...base, costLabel: `${parts.join(' / ')} 库存:本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}` };
   }
@@ -737,7 +705,11 @@ export function getTimeCost(state, actionId) {
   if (actionId === 'promote_heavy') return 3;
   if (actionId === 'findPartner') return 2;
   if (actionId === 'partTimeJob') return 3;
-  if (actionId === 'freelance') return getFreelanceTimeCost(state);
+  if (actionId === 'freelance') {
+    const baseTC = getFreelanceTimeCost(state);
+    const ft = state._freelanceType || 'standard';
+    return ft === 'quick' ? Math.max(1, baseTC - 1) : ft === 'premium' ? baseTC + 1 : baseTC;
+  }
   if (actionId === 'attendEvent') return state._eventMode === 'consign' ? 0 : 3; // 亲参3天，寄售0天
   if (actionId === 'jobSearch') return Infinity;
   if (actionId === 'reprint') return 1;
@@ -950,7 +922,7 @@ function calculateFeedback(state) {
 // === Sales (Translated CES model from consumer.md) ===
 // Q_H* = γ_H + β_H^σ · p_H^(-σ) / Σ · m^s
 // Simplified: total market demand split among N_HVP creators by reputation share
-function calculateSales(actionId, state) {
+export function calculateSales(actionId, state) {
   const communitySize = state.market ? state.market.communitySize : 10000;
   const alphaMod = state.market ? state.market.consumerAlpha : 1.0;
 
@@ -977,8 +949,8 @@ function calculateSales(actionId, state) {
   // --- Player's share: depends on reputation vs competition ---
   // Player's share = α_player / Σα_all (sub-level CES share)
   const nCompetitors = isHVP ? (state.market?.nHVP || 9) : (state.market?.nLVP || 55);
-  // Average NPC reputation ~2.0 for HVP, ~0.5 for LVP
-  const npcAvgRep = isHVP ? 2.0 : 0.5;
+  // Average NPC reputation calibrated for √rep curve (player rep ~3-6 mid-late game)
+  const npcAvgRep = isHVP ? 1.0 : 0.2;
   const totalAlpha = nCompetitors * npcAvgRep + state.reputation;
   const playerShare = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
 
@@ -1049,7 +1021,7 @@ function calculateSales(actionId, state) {
 
 // === Supply-Demand chart data ===
 export function getSupplyDemandData(state, sales) {
-  const Pmax = 20 + state.reputation * 15;
+  const Pmax = 20 + Math.sqrt(state.reputation) * 60;
   const slope = 0.8 - state.infoDisclosure * 0.4;
   const Qsupply = sales?.hvpSales || sales?.lvpSales || 5;
   return { Pmax, slope, Qsupply, Peq: Math.max(5, Pmax - slope * Qsupply), Qmax: Math.ceil(Pmax / slope) + 5, reputation: state.reputation, infoDisclosure: state.infoDisclosure, recessionActive: state.recessionTurnsLeft > 0 };
@@ -1104,9 +1076,43 @@ export function rollEvent(state) {
             s.official.secondHandPressure.hvp = Math.max(0, (s.official.secondHandPressure.hvp || 0) - 0.2);
           }
         }
-        s.reputation += 0.2;
+        addReputation(s, 0.2);
       },
       tip: '加印打破了"绝版溢价"：投机客押注的稀缺性归零。这是创作者对抗投机的核武器，真正的读者会感谢你。',
+    };
+  }
+
+  // 1.8. Reputation freefall → backlash event (恶评风波)
+  // Triggers when reputation drops significantly over 3 months (relative to current level)
+  // Cooldown: 6 months after last backlash to prevent snowball spiral
+  const repDelta = state._repDelta3m || 0;
+  const repDropRate = state.reputation > 0.5 ? -repDelta / state.reputation : 0;
+  const backlashCooldown = state._lastBacklashTurn ? state.turn - state._lastBacklashTurn : Infinity;
+  if (repDropRate > 0.20 && -repDelta > 0.5 && state.reputation > 1 && backlashCooldown >= 6 && Math.random() < Math.min(0.5, repDropRate * 0.7)) {
+    const severity = -repDelta > 1.5 ? 'severe' : -repDelta > 0.8 ? 'moderate' : 'mild';
+    const extraDrop = severity === 'severe' ? 0.4 : severity === 'moderate' ? 0.2 : 0.1;
+    const passionHit = severity === 'severe' ? 23 : severity === 'moderate' ? 12 : 6;
+    const titles = {
+      mild: '风评开始变差…',
+      moderate: '恶评扩散中！',
+      severe: '声誉崩塌引发连锁恶评！',
+    };
+    const descs = {
+      mild: '有人在社交媒体上提到你最近的"下坡路"，评论区开始出现微妙的冷嘲热讽。',
+      moderate: '你的声誉快速下滑引起了圈内关注。"xxx是不是不行了？"的讨论开始蔓延，部分粉丝开始动摇。',
+      severe: '声誉的急剧下滑像推倒了多米诺骨牌。曾经追捧你的人开始翻旧账，"早就觉得不过如此"的马后炮铺天盖地。',
+    };
+    return {
+      id: 'rep_backlash', emoji: 'megaphone', title: titles[severity],
+      desc: descs[severity],
+      effect: `声誉-${extraDrop.toFixed(1)} 热情-${passionHit}`, effectClass: 'negative',
+      apply: (s) => {
+        s.reputation = Math.max(0, s.reputation - extraDrop);
+        s.passion = Math.max(0, s.passion - passionHit);
+        s._lastBacklashTurn = s.turn;
+        s._lastBacklashSeverity = severity;
+      },
+      tip: '声誉的下滑不只是数字减少——它会引发"恶评螺旋"。人们对"正在下坡"的创作者格外苛刻，因为批评不再有反噬风险。维护声誉的最好方式是保持稳定的创作产出。',
     };
   }
 
@@ -1170,7 +1176,8 @@ export function applyEvent(state, event) {
   // 书香门第以上家庭: dip chance reduced; 超级富哥: no dip
   const bgDip = state.background;
   const dipMult = bgDip === 'tycoon' ? 0 : bgDip === 'wealthy' ? 0.3 : bgDip === 'educated' ? 0.6 : 1;
-  if (dipMult > 0 && event.effectClass === 'negative' && state.money > 300) {
+  const resolvedEffectClass = typeof event.effectClass === 'function' ? event.effectClass(state) : event.effectClass;
+  if (dipMult > 0 && resolvedEffectClass === 'negative' && state.money > 300) {
     const urgency = EVENT_URGENCY[event.id] || 'low';
     const cfg = DIP_CONFIG[urgency];
     if (Math.random() < cfg.chance * dipMult) {
@@ -1221,7 +1228,7 @@ export function executeAction(state, actionId) {
     // Rest effectiveness decays with years in the hobby
     const yearsIn = state.turn / 12;
     const basRestore = (15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3) * hourScale;
-    const fatigueMult = Math.max(0.35, 1 - yearsIn * 0.06);   // Y0=100%, Y3=82%, Y5=70%, Y10+=35%
+    const fatigueMult = Math.max(0.45, 1 - yearsIn * 0.03);   // Y0=100%, Y3=91%, Y5=85%, Y10=70%, Y20=45%
     const restore = Math.max(2, Math.round(basRestore * fatigueMult));
     state.passion = Math.min(100, state.passion + restore);
     result.deltas.push({ icon: 'heart', label: `休息${restHours}天`, value: `热情+${restore}`, positive: true });
@@ -1237,7 +1244,8 @@ export function executeAction(state, actionId) {
       result.deltas.push({ icon: 'warning', label: '休息无法抵消消耗', value: `恢复${restore} < 预计消耗${Math.round(estDrain)}`, positive: false });
       result.deltas.push({ icon: 'lightbulb', label: '如果还有空的话...试试接稿、买谷子、参展?', value: '', positive: false });
     }
-    const decay = state.reputation * 0.02;
+    // Decay scales with √rep: high rep decays slowly (matches √ growth curve)
+    const decay = 0.02 * Math.sqrt(state.reputation);
     state.reputation = Math.max(0, state.reputation - decay);
     if (decay > 0.01) result.deltas.push({ icon: 'star', label: '声誉自然衰减', value: `-${decay.toFixed(2)}`, positive: false });
     result.tip = TIPS.rest;
@@ -1284,8 +1292,8 @@ export function executeAction(state, actionId) {
 
     // Reputation bonus from engagement
     if (repBonus > 0) {
-      state.reputation += repBonus;
-      result.deltas.push({ icon: 'star', label: '互动声誉', value: `+${repBonus.toFixed(2)}`, positive: true });
+      const actualRep = addReputation(state, repBonus);
+      result.deltas.push({ icon: 'star', label: '互动声誉', value: `+${actualRep.toFixed(2)}`, positive: true });
     }
 
     // 20% chance to gain a contact from online promotion
@@ -1401,22 +1409,43 @@ export function executeAction(state, actionId) {
     result.tip = TIPS.partTimeJob;
 
   } else if (action.type === 'freelance') {
-    // Freelance: creative labor → some passion drain + energy (time debuff)
-    state.passion -= 4; // uses creative energy, but less than original creation
-    const base = 200, repBonus = Math.floor(state.reputation * 150);
-    const rawIncome = Math.min(3500, base + repBonus + Math.floor(Math.random() * 150));
+    // Freelance with type selection: quick / standard / premium
+    const fType = state._freelanceType || 'standard';
+    state._freelanceType = null;
+
+    // Type parameters: { incomeMult, passionCost, timeDelta, repRaw, skillExp, fatigue, label }
+    const FREELANCE_TYPES = {
+      quick:    { incomeMult: 0.40, passionCost: 2, timeDelta: -1, repRaw: 0,    skillExp: 0, fatigue: 0,   label: '快速小单' },
+      standard: { incomeMult: 0.80, passionCost: 4, timeDelta: -2, repRaw: 0.02, skillExp: 0, fatigue: 0,   label: '标准同人稿' },
+      premium:  { incomeMult: 1.20, passionCost: 7, timeDelta: -3, repRaw: 0.05, skillExp: 5, fatigue: 0.5, label: '高端约稿' },
+    };
+    const ft = FREELANCE_TYPES[fType] || FREELANCE_TYPES.standard;
+
+    state.passion -= ft.passionCost;
+    // Base income with √rep scaling, then apply type multiplier
+    const base = 200, repBonus = Math.floor(Math.sqrt(state.reputation) * 600);
+    const rawIncome = Math.min(3500, Math.floor((base + repBonus + Math.floor(Math.random() * 150)) * ft.incomeMult));
     const recessionCut = state.recessionTurnsLeft > 0 ? 0.5 : 1.0;
     const income = Math.floor(rawIncome * recessionCut);
     addMoney(state, income);
-    const repGain = 0.02;
-    state.reputation += repGain;
-    state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: -2 });
-    result.deltas.push({ icon: 'heart', label: '创作精力', value: '-4', positive: false });
-    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: '下月闲暇-2天', positive: false });
+    const repGain = ft.repRaw > 0 ? addReputation(state, ft.repRaw) : 0;
+    state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: ft.timeDelta });
+    if (ft.skillExp > 0) {
+      const talentMult = 1 + (state.endowments.talent || 0) * 0.35;
+      state.skillExp = (state.skillExp || 0) + Math.round(ft.skillExp * talentMult);
+    }
+    if (ft.fatigue > 0) state.creativeFatigue = (state.creativeFatigue || 0) + ft.fatigue;
+
+    result.deltas.push({ icon: 'paint-brush', label: ft.label, value: '', positive: true });
+    result.deltas.push({ icon: 'heart', label: '创作精力', value: `-${ft.passionCost}`, positive: false });
+    result.deltas.push({ icon: 'barbell', label: '体力消耗', value: `下月闲暇${ft.timeDelta}天`, positive: false });
     result.deltas.push({ icon: 'coins', label: '接稿收入', value: `+¥${income}`, positive: true });
     if (recessionCut < 1) result.deltas.push({ icon: 'trend-down', label: '经济下行需求萎缩', value: '-50%', positive: false });
-    result.deltas.push({ icon: 'star', label: '商业声誉', value: `+${repGain.toFixed(2)}`, positive: true });
-    result.tip = state.reputation >= 3 ? TIPS.freelanceHigh : TIPS.freelanceLow;
+    if (repGain > 0) result.deltas.push({ icon: 'star', label: '商业声誉', value: `+${repGain.toFixed(2)}`, positive: true });
+    if (ft.skillExp > 0) result.deltas.push({ icon: 'palette', label: '商业锻炼', value: `技艺经验+${ft.skillExp}`, positive: true });
+    if (ft.fatigue > 0) result.deltas.push({ icon: 'smiley-sad', label: '高强度消耗', value: `创作疲劳+${ft.fatigue}`, positive: false });
+    result.tip = fType === 'premium' ? { label: '高端约稿', text: '高端商业企划报酬丰厚，但会消耗大量创作精力。获得的技艺经验和声誉是对"跨界锻炼"的回报——商业嗅觉和同人创作是相通的。' }
+      : state.reputation >= 3 ? TIPS.freelanceHigh : TIPS.freelanceLow;
 
   } else if (action.type === 'attendEvent') {
     // === ATTEND DOUJIN EVENT — now sells directly from inventory ===
@@ -1476,9 +1505,10 @@ export function executeAction(state, actionId) {
       if (isAttend) {
         state.recentEventTurns.push(state.turn);
         const recentCount = state.recentEventTurns.filter(t => state.turn - t < 6).length;
-        eventFatigue = recentCount <= 1 ? 1.0 : Math.max(0.25, 1.0 - (recentCount - 1) * 0.25);
-        // Extra passion drain for frequent attending
-        if (recentCount >= 3) fatigueDrain = (recentCount - 2) * 5; // 3rd→-5, 4th→-10, 5th→-15
+        // Gentler fatigue curve: 1st=100%, 2nd=85%, 3rd=70%, 4th=55%, 5th+=40%
+        eventFatigue = recentCount <= 1 ? 1.0 : Math.max(0.40, 1.0 - (recentCount - 1) * 0.15);
+        // Extra passion drain for frequent attending (milder)
+        if (recentCount >= 4) fatigueDrain = (recentCount - 3) * 4; // 4th→-4, 5th→-8
       }
 
       if (isAttend && mg) {
@@ -1488,7 +1518,7 @@ export function executeAction(state, actionId) {
         addMoney(state, -(evt.travelCost + lodgingCost + mg.moneySpent));
         const fatiguePassion = Math.round(mg.passionDelta * eventFatigue);
         state.passion = Math.min(100, state.passion + fatiguePassion);
-        state.reputation += mg.reputationDelta;
+        addReputation(state, mg.reputationDelta);
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         const attendBoost = Math.round(evt.salesBoost * mg.salesMultiplier * 10) / 10;
         state.attendingEvent = { ...evt, salesBoost: attendBoost };
@@ -1514,7 +1544,7 @@ export function executeAction(state, actionId) {
         addMoney(state, -(evt.travelCost + lodgingCost));
         const fatigueBoost = Math.round(evt.passionBoost * eventFatigue);
         state.passion = Math.min(100, state.passion + fatigueBoost);
-        state.reputation += evt.reputationBoost;
+        addReputation(state, evt.reputationBoost);
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = evt;
         result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
@@ -1580,7 +1610,7 @@ export function executeAction(state, actionId) {
       let totalEventSold = 0;
 
       if (isAttend && mg && mg.sold > 0) {
-        // 亲参: minigame sold count is the actual sales (player saw it happen)
+        // 亲参: minigame sold count (CES floor already baked into per-customer baseBuyQty)
         const mgSold = mg.sold;
         const totalStock = state.inventory.hvpStock + state.inventory.lvpStock;
         const actualSold = Math.min(mgSold, totalStock);
@@ -1598,8 +1628,7 @@ export function executeAction(state, actionId) {
             state.totalSales += hvpResult.sold;
             result.salesDetails = (result.salesDetails || []).concat(hvpResult.details);
             result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpResult.sold}本`, value: `+¥${hvpResult.revenue}`, positive: true });
-            const repGain = 0.08 * state.infoDisclosure * hvpResult.sold * 0.05;
-            state.reputation += repGain;
+            addReputation(state, 0.08 * state.infoDisclosure * hvpResult.sold * 0.05);
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
             if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpResult.sold);
           }
@@ -1610,8 +1639,7 @@ export function executeAction(state, actionId) {
             state.totalSales += lvpResult.sold;
             result.salesDetails = (result.salesDetails || []).concat(lvpResult.details);
             result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
-            const repGain = 0.01 * state.infoDisclosure * lvpResult.sold * 0.05;
-            state.reputation += repGain;
+            addReputation(state, 0.01 * state.infoDisclosure * lvpResult.sold * 0.05);
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
             if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpResult.sold);
           }
@@ -1630,8 +1658,7 @@ export function executeAction(state, actionId) {
           result.supplyDemand = getSupplyDemandData(state, sales);
           result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpResult.sold}本`, value: `+¥${hvpResult.revenue}`, positive: true });
           if (sales.hvpSales > hvpResult.sold) result.deltas.push({ icon: 'fire', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpResult.sold}`, positive: false });
-          const repGain = 0.08 * state.infoDisclosure * hvpResult.sold * 0.05;
-          state.reputation += repGain;
+          addReputation(state, 0.08 * state.infoDisclosure * hvpResult.sold * 0.05);
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           if (state.official) recordPlayerWork(state.official, 'hvp', state.turn, state.reputation, hvpResult.sold);
         }
@@ -1646,8 +1673,7 @@ export function executeAction(state, actionId) {
           result.salesDetails = (result.salesDetails || []).concat(lvpResult.details);
           result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
           if (sales.lvpSales > lvpResult.sold) result.deltas.push({ icon: 'fire', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpResult.sold}`, positive: false });
-          const repGain = 0.01 * state.infoDisclosure * lvpResult.sold * 0.05;
-          state.reputation += repGain;
+          addReputation(state, 0.01 * state.infoDisclosure * lvpResult.sold * 0.05);
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpResult.sold);
         }
@@ -1809,53 +1835,28 @@ export function executeAction(state, actionId) {
       }
       result.tip = TIPS.hvpStart;
     } else {
-      // Continue project
-      // Apply any pending creative choices from UI flow
-      const hadChoice = !!state._pendingChoices;
+      // Continue project (all creative choices already made at start)
+      // Legacy support: apply any pending choices from old saves
       if (state._pendingChoices) {
-        for (const c of state._pendingChoices) {
-          const qDelta = applyCreativeChoice(state.hvpProject, c.category, c.optionId);
-          // Show quality change from this choice
-          if (qDelta && Math.abs(qDelta) > 0.001) {
-            const sign = qDelta > 0 ? '+' : '';
-            result.deltas.push({
-              icon: qDelta > 0 ? 'arrow-fat-up' : 'arrow-fat-down',
-              label: '作品质量变化',
-              value: `${sign}${qDelta.toFixed(2)} ${getQualityStars(state.hvpProject.workQuality)}`,
-              positive: qDelta > 0,
-            });
-          }
-          // Show cult hit discovery
-          if (state.hvpProject.isCultHit && state.hvpProject._qualityLog?.some(l => l.special)) {
-            result.deltas.push({ icon: 'shooting-star', label: '意外发现！这可能成为Cult经典', value: '', positive: true });
-            // Clear so we don't show it again
-            state.hvpProject._qualityLog = state.hvpProject._qualityLog.map(l => ({ ...l, special: false }));
-          }
-        }
-        // Extra passion cost from "polish" choice
+        for (const c of state._pendingChoices) applyCreativeChoice(state.hvpProject, c.category, c.optionId);
         if (state.hvpProject._extraPassionCost) {
           state.passion -= state.hvpProject._extraPassionCost;
-          result.deltas.push({ icon: 'sparkle', label: '精雕细琢的额外消耗', value: `-${state.hvpProject._extraPassionCost}`, positive: false });
           state.hvpProject._extraPassionCost = 0;
         }
         state._pendingChoices = null;
       }
 
-      // Creative journal: flavor text for non-choice months
-      if (!hadChoice) {
-        const ratio = state.hvpProject.progress / state.hvpProject.needed;
-        // Milestone at 50%
-        if (ratio >= 0.45 && ratio < 0.6 && state.hvpProject.progress > 1) {
-          result.deltas.push({ icon: 'flag-pennant', label: '创作手记', value: CREATIVE_JOURNAL.milestone, positive: true });
-        } else {
-          const entries = getCreativeJournal(state.hvpProject, state.hasPartner);
-          for (const e of entries) {
-            result.deltas.push({ icon: 'note-pencil', label: '创作手记', value: e, positive: true });
-          }
+      // Creative journal: flavor text each month
+      const ratio = state.hvpProject.progress / state.hvpProject.needed;
+      if (ratio >= 0.45 && ratio < 0.6 && state.hvpProject.progress > 1) {
+        result.deltas.push({ icon: 'flag-pennant', label: '创作手记', value: getJournalMilestone(state.hvpProject), positive: true });
+      } else {
+        const entries = getCreativeJournal(state.hvpProject, state.hasPartner);
+        for (const e of entries) {
+          result.deltas.push({ icon: 'note-pencil', label: '创作手记', value: e, positive: true });
         }
-        // Show current quality status
-        result.deltas.push({ icon: 'star', label: '当前质量', value: getQualityStars(state.hvpProject.workQuality), positive: state.hvpProject.workQuality >= 1.0 });
       }
+      result.deltas.push({ icon: 'star', label: '当前质量', value: getQualityStars(state.hvpProject.workQuality), positive: state.hvpProject.workQuality >= 1.0 });
 
       // Work stage: creative efficiency reduced (fatigue after day job)
       let progressEff = getLifeStage(state.turn) === 'work' && !state.unemployed && !state.fullTimeDoujin ? 0.7 : 1.0;
@@ -1964,18 +1965,19 @@ export function executeAction(state, actionId) {
           // To签定制：流通因子降低，二手转售价值断崖
           if (state.official) state.official.secondHandPool.hvp = Math.max(0, state.official.secondHandPool.hvp - 3);
           result.deltas.push({ icon: 'pencil', label: 'To签限定·切断二手流通', value: '同人本二手市场压力下降 声誉+', positive: true });
-          state.reputation += 0.1;
+          addReputation(state, 0.1);
         } else if (strategy === 'digital') {
           // 同时发电子版：内容效用被低成本满足，投机买家减少
+          // 标记该作品有电子版，每月产生被动收入
           if (state.official) state.official.secondHandPool.hvp = Math.floor(state.official.secondHandPool.hvp * 0.8);
-          const digiRev = Math.round(batchQty * state.inventory.hvpPrice * 0.3);
-          addMoney(state, digiRev);
-          result.deltas.push({ icon: 'phone', label: '同步电子版', value: `电子版收入+¥${digiRev}`, positive: true });
+          const newWork = state.inventory.works[state.inventory.works.length - 1];
+          if (newWork) newWork.hasDigital = true;
+          const digiPrice = Math.round(state.inventory.hvpPrice * 0.35); // 电子版定价约实体的35%
+          result.deltas.push({ icon: 'phone', label: '同步电子版上架', value: `电子版定价¥${digiPrice} 每月产生被动收入`, positive: true });
         }
 
         // Reputation gain — base floor + info-scaled + skill
-        const repGain = (0.04 + 0.08 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus;
-        state.reputation += repGain;
+        const repGain = addReputation(state, (0.04 + 0.08 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus);
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         result.deltas.push({ icon: 'star', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: true });
 
@@ -1990,12 +1992,12 @@ export function executeAction(state, actionId) {
         let wasBreakthrough = false;
         if (Math.random() < fx.breakthroughChance) {
           wasBreakthrough = true;
-          const bkRep = 0.3 + skill * 0.1;
+          const bkRepRaw = 0.3 + skill * 0.1;
+          const bkRep = addReputation(state, bkRepRaw);
           const bkPassion = 10 + Math.round(skill * 2);
-          state.reputation += bkRep;
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           state.passion = Math.min(100, state.passion + bkPassion);
-          result.deltas.push({ icon: 'sparkle', label: '突破之作！质量超出预期', value: `声誉+${bkRep.toFixed(1)} 热情+${bkPassion}`, positive: true });
+          result.deltas.push({ icon: 'sparkle', label: '突破之作！质量超出预期', value: `声誉+${bkRep.toFixed(2)} 热情+${bkPassion}`, positive: true });
           result.tip = { label: `${ic('sparkle')} 学习曲线突破`, text: `累计创作${state.totalHVP}本同人志，你的技艺已达到${getSkillLabel(skill)}级（${skill.toFixed(1)}）。学习曲线理论预测：累计产出越多，生产效率越高、品质越稳定。偶尔的突破之作是量变引发质变的证明——这就是为什么"坚持创作"比"等灵感来"更靠谱。` };
         } else {
           result.tip = TIPS.hvpComplete;
@@ -2074,8 +2076,7 @@ export function executeAction(state, actionId) {
     state.recentLVP = 1;
 
     // Reputation gain — base floor + info-scaled + skill
-    const repGain = (0.01 + 0.02 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus;
-    state.reputation += repGain;
+    const repGain = addReputation(state, (0.01 + 0.02 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus);
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
     result.deltas.push({ icon: 'star', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: true });
 
@@ -2088,9 +2089,8 @@ export function executeAction(state, actionId) {
     let lvpBreakthrough = false;
     if (Math.random() < fx.breakthroughChance * 0.5) {
       lvpBreakthrough = true;
-      const bkRep = 0.15 + skill * 0.05;
+      const bkRep = addReputation(state, 0.15 + skill * 0.05);
       const bkPassion = 6 + Math.round(skill);
-      state.reputation += bkRep;
       state.maxReputation = Math.max(state.maxReputation, state.reputation);
       state.passion = Math.min(100, state.passion + bkPassion);
       result.deltas.push({ icon: 'sparkle', label: '精品谷子！超出预期的品质', value: `声誉+${bkRep.toFixed(1)} 热情+${bkPassion}`, positive: true });
@@ -2122,8 +2122,8 @@ export function executeAction(state, actionId) {
         if (!work) continue;
         const isHVP = work.type === 'hvp';
         const sub = isHVP ? (HVP_SUBTYPES[work.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[work.subtype] || LVP_SUBTYPES.acrylic);
-        const qty = isHVP ? 30 : 20;
-        const unitCost = isHVP ? 40 : 6;
+        const qty = isHVP ? 60 : 20;
+        const unitCost = isHVP ? 20 : 6;
         const cost = qty * unitCost;
         addMoney(state, -cost);
         totalReprintCost += cost;
@@ -2176,21 +2176,24 @@ export function executeAction(state, actionId) {
     if (state.goodsCollection <= 0) {
       result.deltas.push({ icon: 'export', label: '没有收藏品可出', value: '', positive: false });
     } else {
-      // Sell up to 3 items per turn
-      const sellQty = Math.min(3, state.goodsCollection);
+      // Sell player-selected quantity (from slider), default 1
+      const sellQty = Math.min(state._sellQty || 1, state.goodsCollection);
+      state._sellQty = null;
       // Price depends on secondhand market pressure (low pressure = better price)
       const shPressure = state.official?.secondHandPressure?.lvp || 0;
       const unitPrice = Math.max(50, Math.round(120 * (1 - shPressure * 0.5)));
       const revenue = sellQty * unitPrice;
       state.goodsCollection -= sellQty;
       addMoney(state, revenue);
-      state.passion = Math.max(0, state.passion - 3); // slight emotional cost of letting go
+      // Emotional cost scales with quantity (1→-1, 3→-3, 10→-6)
+      const passionCost = Math.min(8, Math.ceil(sellQty * 0.8));
+      state.passion = Math.max(0, state.passion - passionCost);
 
       // Feeds secondhand pool
       if (state.official) state.official.secondHandPool.lvp += sellQty;
 
       result.deltas.push({ icon: 'export', label: `出售${sellQty}件收藏品`, value: `+¥${revenue}（¥${unitPrice}/件）`, positive: true });
-      result.deltas.push({ icon: 'heart', label: '割爱之痛', value: '-3', positive: false });
+      result.deltas.push({ icon: 'heart', label: '割爱之痛', value: `-${passionCost}`, positive: false });
       if (state.goodsCollection > 0) {
         result.deltas.push({ icon: 'package', label: '剩余收藏', value: `${state.goodsCollection}件`, positive: true });
       }
@@ -2229,8 +2232,7 @@ export function executeAction(state, actionId) {
     const cost = Math.round(1500 + cs / 10000 * 1500);
     addMoney(state, -cost);
     state.lastSponsorTurn = state.turn;
-    const repGain = 0.12 + Math.min(0.08, state.reputation * 0.01);
-    state.reputation += repGain;
+    const repGain = addReputation(state, 0.12 + Math.min(0.08, state.reputation * 0.01));
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
     state.passion = Math.min(100, state.passion + 8);
     state.infoDisclosure = Math.min(1, state.infoDisclosure + 0.15);
@@ -2323,7 +2325,7 @@ export function endMonth(state) {
   // Passive rest at month end
   const remainingDays = Math.max(0, state.time - (state.monthTimeSpent || 0));
   const yearsIn = state.turn / 12;
-  const fatigueMult = Math.max(0.35, 1 - yearsIn * 0.06);
+  const fatigueMult = Math.max(0.45, 1 - yearsIn * 0.03);
 
   if (remainingDays > 0) {
     // Player ended month early with leisure left → convert remaining days to rest
@@ -2384,7 +2386,7 @@ export function endMonth(state) {
       const ampPassion = Math.round(drama.passionDelta * interpersonalMult);
       const ampRep = drama.reputationDelta * (interpersonalMult > 1 ? interpersonalMult : 1);
       state.passion = Math.max(0, state.passion + ampPassion);
-      state.reputation = Math.max(0, state.reputation + ampRep);
+      addReputation(state, ampRep);
       result.deltas.push({ icon: 'warning', label: drama.desc, value: `热情${ampPassion} 声誉${ampRep < 0 ? ampRep.toFixed(1) : ''}`, positive: false });
     }
     state.partnerTurns--;
@@ -2681,7 +2683,7 @@ export function endMonth(state) {
     const onlineShModLVP = getSecondHandModifier(state.official, 'lvp');
 
     if (state.inventory.hvpStock > 0) {
-      const totalAlpha = nHVP * 2.0 + state.reputation;
+      const totalAlpha = nHVP * 1.0 + state.reputation;
       const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
       const rawDemand = cs / 1000 * 5 * share * baseConv * onlineFactor * onlineShModHVP;
       // Guarantee at least 1 sale if reputation > 0 and info > 0 (long tail online)
@@ -2692,15 +2694,14 @@ export function endMonth(state) {
           addMoney(state, hvpResult.revenue);
           state.totalRevenue += hvpResult.revenue;
           state.totalSales += hvpResult.sold;
-          const repGain = (0.02 + 0.06 * state.infoDisclosure) * hvpResult.sold * 0.03;
-          state.reputation += repGain;
+          addReputation(state, (0.02 + 0.06 * state.infoDisclosure) * hvpResult.sold * 0.03);
           result.deltas.push({ icon: 'globe-simple', label: `网上售出同人本×${hvpResult.sold}`, value: `+¥${hvpResult.revenue}`, positive: true });
         }
       }
     }
 
     if (state.inventory.lvpStock > 0) {
-      const totalAlpha = nLVP * 0.5 + state.reputation;
+      const totalAlpha = nLVP * 0.2 + state.reputation;
       const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
       const rawDemand = cs / 1000 * 15 * share * baseConv * onlineFactor * onlineShModLVP;
       const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
@@ -2723,6 +2724,36 @@ export function endMonth(state) {
     const worstShMod = Math.min(onlineShModHVP, onlineShModLVP);
     if (worstShMod < 0.9) {
       result.deltas.push({ icon: 'package', label: '二手市场挤压网上销量', value: `-${Math.round((1 - worstShMod) * 100)}%`, positive: false });
+    }
+  }
+
+  // --- Passive digital sales (电子版被动收入) ---
+  const digitalWorks = (state.inventory?.works || []).filter(w => w.hasDigital && w.type === 'hvp');
+  if (digitalWorks.length > 0 && state.market) {
+    const cs = state.market.communitySize;
+    const nHVP = state.market.nHVP || 9;
+    const share = state.reputation / (nHVP * 1.0 + state.reputation);
+    // Digital sales heavily depend on info disclosure: low visibility ≈ no buyers
+    // info 0.05→0.003, 0.2→0.04, 0.5→0.25, 0.8→0.64, 1.0→1.0
+    const infoMod = Math.pow(state.infoDisclosure, 2);
+    let totalDigiRev = 0;
+    const digiDetails = [];
+    for (const w of digitalWorks) {
+      const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : null;
+      const digiPrice = Math.round(w.price * 0.35);
+      const age = Math.max(0, state.turn - (w.turn || state.turn));
+      const ageMod = Math.max(0.2, 1 - age * 0.04);
+      const qualityMod = Math.pow(w.workQuality || 1.0, 2.0);
+      const rawSales = Math.max(0, Math.round(cs / 1000 * 2 * share * infoMod * ageMod * qualityMod * (0.8 + Math.random() * 0.4)));
+      const rev = rawSales * digiPrice;
+      totalDigiRev += rev;
+      if (rawSales > 0) digiDetails.push({ name: (sub ? sub.name : '作品') + (w.name ? '·' + w.name : ''), sales: rawSales, price: digiPrice, rev });
+    }
+    if (totalDigiRev > 0) {
+      addMoney(state, totalDigiRev);
+      state.totalRevenue += totalDigiRev;
+      result.digitalSalesDetails = digiDetails;
+      result.digitalSalesTotal = totalDigiRev;
     }
   }
 
@@ -2773,6 +2804,13 @@ export function endMonth(state) {
     action: lastActionId,
     hvpStock: state.inventory.hvpStock, lvpStock: state.inventory.lvpStock,
   });
+
+  // --- Track reputation change rate (for backlash event detection) ---
+  const repHistoryWindow = 3; // look back 3 months
+  if (state.history.length >= repHistoryWindow + 1) {
+    const pastRep = state.history[state.history.length - 1 - repHistoryWindow].reputation;
+    state._repDelta3m = state.reputation - pastRep; // negative = dropping
+  }
 
   // --- Advance turn ---
   state.turn++;

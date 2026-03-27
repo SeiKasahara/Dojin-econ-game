@@ -132,10 +132,30 @@ export const RANDOM_EVENTS = [
   },
   {
     id: 'ai', emoji: 'robot', title: 'AI冲击波',
-    desc: '大量AI生成的内容涌入市场，竞争加剧...',
-    effect: '声誉-0.15', effectClass: 'neutral',
-    apply: (s) => { s.reputation = Math.max(0, s.reputation - 0.15); },
-    tip: 'AI把"执行劳动"无限贬值，但无法取代企业家的敏锐度——发现未被满足需求的能力。人创的不完美性反而成了稀缺品。',
+    desc: (s) => {
+      const skill = getCreativeSkill(s);
+      return skill >= 3 ? '大量AI生成的内容涌入市场。不过你的技艺已经超越了AI能替代的范畴——人创作品的稀缺性反而凸显了出来。'
+        : skill >= 1.5 ? '大量AI生成的内容涌入市场。你的作品还有AI难以复制的个人风格，但焦虑感确实在蔓延...'
+        : '大量AI生成的内容涌入市场。看着AI几秒钟出图的效果和你画了几天的差不多，巨大的挫败感扑面而来...';
+    },
+    effect: (s) => {
+      const skill = getCreativeSkill(s);
+      const passionHit = skill >= 3 ? 3 : skill >= 1.5 ? 8 : 15;
+      const extra = skill >= 3 ? ' 高手不惧' : skill >= 1.5 ? '' : ' 严重焦虑';
+      return `市场竞争者+3 热情-${passionHit}${extra}`;
+    },
+    effectClass: (s) => getCreativeSkill(s) >= 3 ? 'neutral' : 'negative',
+    apply: (s) => {
+      const skill = getCreativeSkill(s);
+      const passionHit = skill >= 3 ? 3 : skill >= 1.5 ? 8 : 15;
+      if (s.market) s.market.nLVP += 3;
+      s.passion = Math.max(0, s.passion - passionHit);
+    },
+    tip: (s) => {
+      const skill = getCreativeSkill(s);
+      return skill >= 3 ? 'AI把"执行劳动"无限贬值，但你的技艺已经跨过了护城河。人创的不完美性和个人风格是AI无法复制的稀缺品。'
+        : 'AI把"执行劳动"无限贬值——技艺越低，被替代的焦虑越强。提升创作技艺是抵御AI冲击的最好护城河。';
+    },
     weight: 5, when: (s) => s.turn > 18 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
@@ -343,7 +363,7 @@ export const RANDOM_EVENTS = [
     tip: '从同人到商业是许多创作者的自然进化路径。',
     weight: 15,
     when: (s) => {
-      if (s.commercialOfferReceived || s.reputation < 12 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
+      if (s.commercialOfferReceived || s.reputation < 6 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
       if (s.recessionTurnsLeft > 0 || (s.advanced && (s.advanced.stagflationTurnsLeft > 0 || s.advanced.debtCrisisActive))) return Math.random() < 0.3;
       return true;
     },
