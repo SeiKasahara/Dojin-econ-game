@@ -3,7 +3,7 @@
  *
  */
 
-import { ic } from './icons.js';
+import { ic, escapeHtml } from './icons.js';
 import { createMarketState, tickMarket, getCompetitionModifier } from './market.js';
 import { createOfficialState, tickOfficial, getSecondHandModifier, recordPlayerWork } from './official.js';
 import { createAdvancedState, tickAdvanced, getAdvancedCostMod, getAdvancedSalesMod, getSignalCost, ADVANCED_EVENTS } from './advanced.js';
@@ -2036,11 +2036,11 @@ export function executeAction(state, actionId) {
         if (work.isRareWork) {
           work.isRareWork = false;
           state.reprintCrashTurn = state.turn + 2 + Math.floor(Math.random() * 3);
-          state.reprintCrashWorkName = sub.name + (work.name ? '·' + work.name : '');
+          state.reprintCrashWorkName = sub.name + (work.name ? '·' + escapeHtml(work.name) : '');
         }
         work.qty += qty;
         work.soldOutSinceTurn = null;
-        result.deltas.push({ icon: 'printer', label: `追印${sub.name}${work.name ? '·' + work.name : ''} +${qty}`, value: `-¥${cost}`, positive: false });
+        result.deltas.push({ icon: 'printer', label: `追印${sub.name}${work.name ? '·' + escapeHtml(work.name) : ''} +${qty}`, value: `-¥${cost}`, positive: false });
       }
       syncInventoryAggregates(state);
       if (totalReprintCost > 0) {

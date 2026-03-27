@@ -55,6 +55,24 @@ export function triggerWelcomeMessages(state) {
   state._welcomeMessagesSent = true;
 }
 
+// === Narrative error messages (hide technical details) ===
+const _ERROR_BESTIE = [
+  '…啊抱歉！手机信号突然不好了，等一下再发给你~',
+  '…欸？消息好像没发出去，我换个地方试试……',
+  '…（小柚发送了一条消息，但似乎在隧道里信号断了）',
+  '…刚才手机掉地上了！等我一下哈哈哈',
+];
+const _ERROR_GODDESS = [
+  '…次元通讯出现了短暂的干扰，本女神稍后再说。',
+  '…嗯？观测信号被什么遮蔽了……这很少见。',
+  '…（女神的声音忽远忽近，像是信号在时空夹缝中丢失了）',
+  '…本女神的水晶球突然起雾了，容我擦一擦。',
+];
+function _narrativeError(character) {
+  const pool = character === 'goddess' ? _ERROR_GODDESS : _ERROR_BESTIE;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // === Character System Prompts ===
 function buildSystemPrompt(character, state, eventContext) {
   const stateContext = `
@@ -162,11 +180,10 @@ export async function chatWithNPC(character, messages, state) {
     const data = await res.json();
 
     if (data.text) return data.text;
-    if (data.error) return `…（${data.error}）`;
-    return '…（信号不太好，再发发看？）';
+    if (data.error) return _narrativeError(character);
+    return _narrativeError(character);
   } catch (err) {
-
-    return `…（连接失败: ${err.message}）`;
+    return _narrativeError(character);
   }
 }
 

@@ -10,7 +10,7 @@ import { getOfficialNarratives } from './official.js';
 import { getAdvancedNarratives } from './advanced.js';
 import { generateWorldNews } from './world-news.js';
 import { toggleMute, isMuted } from './bgm.js';
-import { ic } from './icons.js';
+import { ic, escapeHtml } from './icons.js';
 import { hasSave, getSaveSummary } from './save.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -1031,7 +1031,7 @@ export function openMarketApp(state) {
             const qColor = w.workQuality >= 1.3 ? 'var(--success)' : w.workQuality < 0.8 ? 'var(--danger)' : 'var(--text-muted)';
             return `<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;padding:4px 0;border-bottom:1px dashed #eee">
               <span style="flex-shrink:0">${ic(sub.emoji)}</span>
-              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub.name}${w.name ? '·' + w.name : ''}${w.isCultHit ? ' ★' : ''}</span>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub.name}${w.name ? '·' + escapeHtml(w.name) : ''}${w.isCultHit ? ' ★' : ''}</span>
               <span style="color:${qColor};flex-shrink:0">Q${(w.workQuality || 1).toFixed(1)}</span>
               <span style="flex-shrink:0;font-weight:600">×${w.qty}</span>
               <span style="flex-shrink:0;color:var(--primary)">¥${w.price}</span>
@@ -2455,7 +2455,7 @@ export function renderReprintSelector(state, onSelect, onCancel) {
     return `<div class="app-action-card" data-work-id="${w.id}" style="cursor:pointer">
       <div class="app-action-icon" style="color:${isHVP ? 'var(--primary)' : 'var(--secondary)'}">${ic(sub.emoji, '1.1rem')}</div>
       <div class="app-action-body">
-        <div class="app-action-name">${sub.name}${w.name ? '·' + w.name : ''}${w.isCultHit ? ' ★' : ''} <span style="font-weight:400;color:var(--text-muted);font-size:0.7rem">¥${w.price}/个</span></div>
+        <div class="app-action-name">${sub.name}${w.name ? '·' + escapeHtml(w.name) : ''}${w.isCultHit ? ' ★' : ''} <span style="font-weight:400;color:var(--text-muted);font-size:0.7rem">¥${w.price}/个</span></div>
         <div class="app-action-cost">追印${reprintQty}${isHVP ? '本' : '个'} · 成本¥${totalCost} · 现有库存${w.qty}</div>
       </div>
     </div>`;
