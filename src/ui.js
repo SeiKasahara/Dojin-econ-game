@@ -1635,7 +1635,7 @@ async function renderBestieChat(state, onAction, onBack) {
         <div id="chat-messages" style="flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch">
           ${msgsHtml}
           ${gone ? `<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:0.78rem">${char.goneMessage}</div>` : ''}
-        </div>
+        </div>、
       </div>`;
 
     if (!document.body.contains(overlay)) document.body.appendChild(overlay);

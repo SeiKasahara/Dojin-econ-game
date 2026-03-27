@@ -40,11 +40,59 @@ const CONTACT_AVATAR_COUNT = 15; // partner/1.webp ~ 15.webp
 
 // Tiered bio system: acquaintance → vague, familiar → hints, trusted → clear
 // Toxic disguised as normal at acquaintance/familiar tiers
+// Source-specific bios ensure causal consistency (e.g. 展会认识的不会出现"网上互关")
+const SOURCE_BIOS = {
+  acquaintance: {
+    event_card: {
+      supportive: ['展会上交换过名片，人很温和', '漫展上聊过几句，感觉很好相处', '展会上见过，很有亲和力'],
+      demanding:  ['展会上见过TA的摊位，作品很专业', '漫展上交换过名片，感觉很认真', '展会上聊过，对创作要求很高的样子'],
+      unreliable: ['展会上打过招呼，感觉挺随性', '漫展上碰到过，很开朗但有点散漫', '展会上交换过名片，不知道还记不记得'],
+      toxic:      ['展会上认识的，很健谈很热情', '漫展上主动来搭话，看起来人脉很广', '展会上结识的，看起来交际很广'],
+    },
+    online: {
+      supportive: ['在网上互关了，偶尔互动', '转发过TA的作品，感觉不错', '网上认识的，聊过几次印象挺好'],
+      demanding:  ['网上关注了TA，作品质量很高', '看过TA发的作品，很专业', '网上认识的，对创作似乎很认真'],
+      unreliable: ['在网上互关了，偶尔点赞', '网上聊过几次，回复时快时慢', '关注了TA，更新频率不太稳定'],
+      toxic:      ['网上主动加的好友，看起来交际很广', '在网上很活跃，经常发动态', '网上认识的，很健谈很热情的样子'],
+    },
+    sponsor: {
+      supportive: ['社区活动上认识的，人很随和', '赞助活动时聊过，感觉很好相处', '线下活动上见过，印象不错'],
+      demanding:  ['社区活动上认识的，感觉很专业', '赞助活动时见过TA的作品，质量很高', '线下活动聊过，对创作很有追求'],
+      unreliable: ['社区活动上认识的，感觉挺随性', '赞助活动时打过招呼，有点大大咧咧', '线下活动碰到过，挺随意的'],
+      toxic:      ['社区活动上认识的，很健谈很热情', '赞助活动时主动来搭话的', '线下活动结识的，看起来人脉很广'],
+    },
+  },
+  familiar: {
+    friend_intro: {
+      supportive: ['朋友介绍的靠谱搭档，合作过的人都说好', '朋友推荐的，画风很稳从不失约', '经朋友介绍认识的，人超好据说从来不催稿'],
+    },
+    event_card: {
+      supportive: ['展会上认识的，合作过的人都说好', '展会上结识的老朋友，效率高沟通顺畅', '漫展上认识的，约定的事从不失约'],
+      demanding:  ['展会上认识的，据说出品质量极高但要求严格', '漫展结识的完美主义者，细节要求苛刻', '展会上认识的，作品质量没话说'],
+      unreliable: ['展会上认识的，有才华但好像不太靠谱', '漫展结识的，回复消息时快时慢', '展会上认识的，有时很给力有时人间蒸发'],
+      toxic:      ['展会上认识的，在圈里人脉很广', '漫展结识的，说话很直接有想法', '展会上认识的，很会来事但总感觉哪里不对…'],
+    },
+    online: {
+      supportive: ['网上认识的，合作过的人都说好', '网上结识的创作者，效率高沟通顺畅', '网上认识的，画风很稳从不失约'],
+      demanding:  ['网上认识的，据说出品质量极高但要求严格', '网上结识的完美主义者，细节要求苛刻', '网上认识的，作品质量没话说'],
+      unreliable: ['网上认识的，有才华但好像不太靠谱', '网上结识的，回复消息时快时慢', '网上认识的，有时很给力有时人间蒸发'],
+      toxic:      ['网上认识的，在圈里人脉很广', '网上结识的，说话很直接有想法', '网上认识的，很会来事但总感觉哪里不对…'],
+    },
+    sponsor: {
+      supportive: ['社区活动认识的，合作过的人都说好', '赞助活动结识的，效率高沟通顺畅', '线下活动认识的，画风很稳从不失约'],
+      demanding:  ['社区活动认识的，据说出品质量极高但要求严格', '赞助活动结识的完美主义者，细节要求苛刻', '线下活动认识的，作品质量没话说'],
+      unreliable: ['社区活动认识的，有才华但好像不太靠谱', '赞助活动结识的，回复消息时快时慢', '线下活动认识的，有时很给力有时人间蒸发'],
+      toxic:      ['社区活动认识的，在圈里人脉很广', '赞助活动结识的，说话很直接有想法', '线下活动认识的，很会来事但总感觉哪里不对…'],
+    },
+  },
+};
+
+// Generic bios (fallback for strangers or unknown sources)
 const CONTACT_BIOS = {
   acquaintance: {
-    supportive: ['加过好友，偶尔点赞', '在展会上打过招呼', '群里见过几次，印象不错'],
-    demanding:  ['加过好友，偶尔点赞', '看过TA的作品，质量很高', '群里见过几次，似乎很认真'],
-    unreliable: ['加过好友，偶尔点赞', '在展会上打过招呼', '群里见过几次，感觉挺随性'],
+    supportive: ['加过好友，偶尔点赞', '见过几次，印象不错', '互相认识，感觉挺好相处'],
+    demanding:  ['加过好友，偶尔点赞', '看过TA的作品，质量很高', '见过几次，似乎很认真'],
+    unreliable: ['加过好友，偶尔点赞', '见过几次，感觉挺随性', '互相认识，但不太了解'],
     toxic:      ['加过好友，偶尔点赞', '很健谈很热情的样子', '主动加的好友，看起来交际很广'],
   },
   familiar: {
@@ -61,7 +109,15 @@ const CONTACT_BIOS = {
   },
 };
 
-export function getContactBio(type, tier) {
+export function getContactBio(type, tier, source = null) {
+  // Try source-specific bio first for causal consistency
+  if (source) {
+    const sourcePool = SOURCE_BIOS[tier]?.[source]?.[type];
+    if (sourcePool && sourcePool.length > 0) {
+      return sourcePool[Math.floor(Math.random() * sourcePool.length)];
+    }
+  }
+  // Fallback to generic tier/type bios (for strangers or unknown sources)
   const pool = CONTACT_BIOS[tier]?.[type] || CONTACT_BIOS.acquaintance.supportive;
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -106,7 +162,7 @@ export function addContact(state, { source, affinity = 1.0, forceType = null }) 
     id: state.contactNextId++,
     name, avatarIdx, pType, tier,
     affinity: clampedAffinity,
-    bio: getContactBio(pType, tier),
+    bio: getContactBio(pType, tier, source),
     source,
     metTurn: state.turn,
   };
@@ -121,7 +177,7 @@ export function updateContactAffinity(state, contactId, delta) {
   const newTier = getContactTier(c.affinity);
   if (newTier !== c.tier) {
     c.tier = newTier;
-    c.bio = getContactBio(c.pType, newTier);
+    c.bio = getContactBio(c.pType, newTier, c.source);
   }
 }
 
@@ -174,7 +230,7 @@ export function tickContacts(state, result) {
     if (c.id === state.activeContactId) continue;
     c.affinity = Math.max(0, c.affinity - 0.05);
     const newTier = getContactTier(c.affinity);
-    if (newTier !== c.tier) { c.tier = newTier; c.bio = getContactBio(c.pType, newTier); }
+    if (newTier !== c.tier) { c.tier = newTier; c.bio = getContactBio(c.pType, newTier, c.source); }
   }
 
   // Remove contacts that drifted to 0 affinity (lost touch)

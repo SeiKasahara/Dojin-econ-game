@@ -1041,20 +1041,36 @@ export function rollEvent(state) {
   // 2. Random events: 35% chance after turn 1
   if (state.turn < 1 || Math.random() > 0.35) return null;
 
+  // Money-loss events: reduced/removed for wealthy backgrounds
+  const MONEY_LOSS_EVENTS = new Set([
+    'family_emergency', 'inflation', 'health_issue', 'work_burnout',
+    'social_obligation', 'life_admin', 'unexpected_expense', 'rent_increase', 'tax_season',
+  ]);
+  const bg = state.background;
+  // 书香门第 0.6x, 富裕家庭 0.3x, 超级富哥 0x
+  const moneyLossWeightMult = bg === 'tycoon' ? 0 : bg === 'wealthy' ? 0.3 : bg === 'educated' ? 0.6 : 1;
+
   // Filter by condition and frequency cap
   const allEvents = [...RANDOM_EVENTS, ...ADVANCED_EVENTS];
   const eligible = allEvents.filter(e => {
     if (!e.when(state)) return false;
     const count = state.eventCounts[e.id] || 0;
     if (count >= e.maxTotal) return false;
+    // 超级富哥: skip money-loss events entirely
+    if (moneyLossWeightMult === 0 && MONEY_LOSS_EVENTS.has(e.id)) return false;
     return true;
   });
   if (eligible.length === 0) return null;
 
-  const totalWeight = eligible.reduce((sum, e) => sum + e.weight, 0);
+  // Apply weight reduction for money-loss events based on background
+  const totalWeight = eligible.reduce((sum, e) => {
+    const w = MONEY_LOSS_EVENTS.has(e.id) ? e.weight * moneyLossWeightMult : e.weight;
+    return sum + w;
+  }, 0);
   let roll = Math.random() * totalWeight;
   for (const event of eligible) {
-    roll -= event.weight;
+    const w = MONEY_LOSS_EVENTS.has(event.id) ? event.weight * moneyLossWeightMult : event.weight;
+    roll -= w;
     if (roll <= 0) return event;
   }
   return eligible[0];
@@ -1079,10 +1095,13 @@ export function applyEvent(state, event) {
   if (event.id) state.eventCounts[event.id] = (state.eventCounts[event.id] || 0) + 1;
 
   // Negative events may cause savings dip (random — "surplus depleted, dip into doujin fund")
-  if (event.effectClass === 'negative' && state.money > 300) {
+  // 书香门第以上家庭: dip chance reduced; 超级富哥: no dip
+  const bgDip = state.background;
+  const dipMult = bgDip === 'tycoon' ? 0 : bgDip === 'wealthy' ? 0.3 : bgDip === 'educated' ? 0.6 : 1;
+  if (dipMult > 0 && event.effectClass === 'negative' && state.money > 300) {
     const urgency = EVENT_URGENCY[event.id] || 'low';
     const cfg = DIP_CONFIG[urgency];
-    if (Math.random() < cfg.chance) {
+    if (Math.random() < cfg.chance * dipMult) {
       const rate = cfg.rateMin + Math.random() * (cfg.rateMax - cfg.rateMin);
       const dip = Math.round(state.money * rate);
       if (dip > 0) {
@@ -1274,7 +1293,7 @@ export function executeAction(state, actionId) {
         // Toxic revealed for first time → force contact to trusted tier
         if (pType === 'toxic' && candidate.contactId) {
           const c = (state.contacts || []).find(x => x.id === candidate.contactId);
-          if (c && c.tier !== 'trusted') { c.tier = 'trusted'; c.affinity = Math.max(c.affinity, 4); c.bio = getContactBio('toxic', 'trusted'); }
+          if (c && c.tier !== 'trusted') { c.tier = 'trusted'; c.affinity = Math.max(c.affinity, 4); c.bio = getContactBio('toxic', 'trusted', c.source); }
         }
       }
       if (isFree) {
