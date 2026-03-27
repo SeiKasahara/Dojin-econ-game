@@ -11,6 +11,7 @@ import { getAdvancedNarratives } from './advanced.js';
 import { generateWorldNews } from './world-news.js';
 import { toggleMute, isMuted } from './bgm.js';
 import { ic, escapeHtml } from './icons.js';
+import { fogRecession, fogTrend, fogConsumerAlpha, fogCreatorCount, fogCreatorRange, fogConfidence, fogSecondHand } from './market-fog.js';
 import { hasSave, getSaveSummary } from './save.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -310,8 +311,9 @@ export function renderGame(state, onAction, onRetire) {
       }).join(' ')
     : '';
 
-  const recessionInfo = state.recessionTurnsLeft > 0
-    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger)">${ic('trend-down')} 经济下行 ${state.recessionTurnsLeft}月</span>`
+  const recFog = fogRecession(state.recessionTurnsLeft);
+  const recessionInfo = recFog
+    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger)">${ic(recFog.icon)} ${recFog.label}</span>`
     : '';
 
   const hvpInfo = state.hvpProject
@@ -320,6 +322,8 @@ export function renderGame(state, onAction, onRetire) {
 
   const unemployedInfo = state.unemployed
     ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#FDE8E8;color:var(--danger);font-weight:700">${ic('warning-circle')} 失业中</span>`
+    : state.fullTimeDoujin
+    ? `<span style="font-size:0.7rem;padding:2px 6px;border-radius:8px;background:#E8F8F0;color:var(--success);font-weight:700">${ic('sparkle')} 全职同人</span>`
     : '';
 
   // Month schedule card
@@ -946,21 +950,55 @@ export function openMarketApp(state) {
       ? market.npcEvents.map(e => `<div style="font-size:0.75rem;color:var(--text-light);padding:3px 0">${e}</div>`).join('')
       : '<div style="font-size:0.75rem;color:var(--text-muted)">市场平稳运行中...</div>';
 
+    const confFog = fogConfidence(market.marketConfidence);
+    const trendFog = fogTrend(market.currentTrend);
+    const alphaFog = fogConsumerAlpha(market.consumerAlpha);
+    const shLvpFog = official ? fogSecondHand(official.secondHandPressure.lvp) : null;
+    const shHvpFog = official ? fogSecondHand(official.secondHandPressure.hvp) : null;
+
     marketHtml = `
       <div style="display:flex;justify-content:space-around;padding:12px 0;font-size:0.78rem;text-align:center">
         <div><div style="font-weight:700;font-size:1.2rem">${market.communitySize.toLocaleString()}</div><div style="color:var(--text-muted)">社群人数</div></div>
-        <div><div style="font-weight:700;font-size:1.2rem;color:var(--primary)">${market.nHVP}</div><div style="color:var(--text-muted)">同人本创作者</div></div>
-        <div><div style="font-weight:700;font-size:1.2rem">${market.nLVP}</div><div style="color:var(--text-muted)">同人谷创作者</div></div>
+        <div><div style="font-weight:700;font-size:1rem;color:var(--primary)">${fogCreatorRange(market.nHVP)}</div><div style="color:var(--text-muted)">同人本创作者</div></div>
+        <div><div style="font-weight:700;font-size:1rem">${fogCreatorRange(market.nLVP)}</div><div style="color:var(--text-muted)">同人谷创作者</div></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;padding:0 4px 12px">
-        <div class="stat-row"><span class="stat-icon">${ic('users')}</span><span class="stat-label">多样</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${divPct}%;background:linear-gradient(90deg,${divColor},${divColor}88)"></div></div><span class="stat-value" style="color:${divColor}">${divPct}% ${divLabel}</span></div>
-        <div class="stat-row"><span class="stat-icon">${ic('chart-bar')}</span><span class="stat-label">信心</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${confPct}%;background:linear-gradient(90deg,#3498DB,#81D4FA)"></div></div><span class="stat-value">${confPct}%</span></div>
-        <div class="stat-row"><span class="stat-icon">${ic('film-strip')}</span><span class="stat-label">IP热</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${ipHeat}%;background:linear-gradient(90deg,${ipColor},${ipColor}88)"></div></div><span class="stat-value">${ipHeat}</span></div>
+        <div class="stat-row"><span class="stat-icon">${ic('users')}</span><span class="stat-label">多样</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${divPct}%;background:linear-gradient(90deg,${divColor},${divColor}88)"></div></div><span class="stat-value" style="color:${divColor}">${divLabel}</span></div>
+        <div class="stat-row"><span class="stat-icon">${ic(confFog.icon)}</span><span class="stat-label">信心</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${confPct}%;background:linear-gradient(90deg,${confFog.color},${confFog.color}88)"></div></div><span class="stat-value" style="color:${confFog.color}">${confFog.label}</span></div>
+        <div class="stat-row"><span class="stat-icon">${ic('film-strip')}</span><span class="stat-label">IP热</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${ipHeat}%;background:linear-gradient(90deg,${ipColor},${ipColor}88)"></div></div><span class="stat-value">${ipHeat > 60 ? '火热' : ipHeat > 30 ? '温和' : '冷淡'}</span></div>
       </div>
-      ${market.currentTrend ? `<div style="font-size:0.78rem;padding:8px 4px;color:var(--primary);font-weight:600;border-top:1px solid var(--border)">${ic('fire')} 热门话题: ${market.currentTrend.tag} (剩${market.currentTrend.turnsLeft}月)</div>` : ''}
-      ${market.consumerAlpha < 0.9 ? `<div style="font-size:0.75rem;color:var(--danger);padding:4px">${ic('warning')} 消费者偏好衰减: α=${market.consumerAlpha.toFixed(2)}</div>` : ''}
-      ${official && official.secondHandPressure.lvp > 0.05 ? `<div style="font-size:0.75rem;color:${official.secondHandPressure.lvp > 0.3 ? 'var(--danger)' : 'var(--warning)'};padding:4px">${ic('package')} 二手谷子压力: ${Math.round(official.secondHandPressure.lvp * 100)}%</div>` : ''}
-      ${official && official.secondHandPressure.hvp > 0.05 ? `<div style="font-size:0.75rem;color:${official.secondHandPressure.hvp > 0.2 ? 'var(--danger)' : 'var(--warning)'};padding:4px">${ic('package')} 二手同人本压力: ${Math.round(official.secondHandPressure.hvp * 100)}%</div>` : ''}
+      ${trendFog ? `<div style="font-size:0.78rem;padding:8px 4px;color:var(--primary);font-weight:600;border-top:1px solid var(--border)">${ic('fire')} 热门话题:「${trendFog.tag}」${trendFog.heat}</div>` : ''}
+      ${alphaFog ? `<div style="font-size:0.75rem;color:var(--danger);padding:4px">${ic('warning')} ${alphaFog}</div>` : ''}
+      ${shLvpFog && official.secondHandPressure.lvp > 0.05 ? `<div style="font-size:0.75rem;color:${shLvpFog.color};padding:4px">${ic('package')} 二手谷子市场: ${shLvpFog.label}</div>` : ''}
+      ${shHvpFog && official.secondHandPressure.hvp > 0.05 ? `<div style="font-size:0.75rem;color:${shHvpFog.color};padding:4px">${ic('package')} 二手同人本市场: ${shHvpFog.label}</div>` : ''}
+      ${(state.inventory.works || []).filter(w => w.qty > 0).length > 0 ? `
+      <div style="margin-top:8px;border-top:1px solid var(--border);padding:8px 4px">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--secondary);margin-bottom:6px">${ic('tag')} 调整定价</div>
+        ${state.inventory.works.filter(w => w.qty > 0).map(w => {
+          const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
+          const cd = w._lastRepriceTurn != null ? Math.max(0, 6 - (state.turn - w._lastRepriceTurn)) : 0;
+          const locked = cd > 0;
+          return `<div class="reprice-row" data-work-id="${w.id}" data-is-hvp="${w.type === 'hvp' ? 1 : 0}" data-current="${w.price}" style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px dashed #eee;font-size:0.72rem;cursor:${locked ? 'default' : 'pointer'}">
+            <span style="flex-shrink:0">${ic(sub.emoji, '0.7rem')}</span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub.name}${w.name ? '·' + escapeHtml(w.name) : ''}</span>
+            <span style="flex-shrink:0;font-weight:700;color:var(--primary)">¥${w.price}</span>
+            ${locked
+              ? `<span style="font-size:0.6rem;color:var(--text-muted)">${cd}月后可改</span>`
+              : `<span style="font-size:0.6rem;color:var(--secondary)">点击改价</span>`
+            }
+          </div>`;
+        }).join('')}
+        <div id="reprice-panel" style="display:none;margin-top:6px;padding:10px;background:var(--bg-card);border:2px solid var(--primary);border-radius:10px">
+          <div id="reprice-title" style="font-weight:600;font-size:0.78rem;margin-bottom:6px"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <input type="range" id="reprice-slider" min="1" max="200" value="50" step="1" style="flex:1;accent-color:var(--primary)">
+            <span id="reprice-label" style="font-weight:700;font-size:1rem;min-width:45px;text-align:center">¥50</span>
+          </div>
+          <div id="reprice-hint" style="font-size:0.65rem;color:var(--text-muted);text-align:center;margin-bottom:8px;font-style:italic"></div>
+          <button id="reprice-confirm" class="btn btn-primary btn-block" style="font-size:0.8rem;padding:8px">确认改价</button>
+        </div>
+        <div style="font-size:0.62rem;color:var(--text-muted);margin-top:4px;font-style:italic">${ic('warning', '0.55rem')} 改价后6个月内不可再改——频繁改价是明目张胆的价格歧视，会让买家不信任你。</div>
+      </div>` : ''}
       <div style="margin-top:8px;border-top:1px solid var(--border);padding:8px 4px">
         <div style="font-size:0.75rem;font-weight:700;color:var(--secondary);margin-bottom:4px">${ic('storefront')} 市场动态</div>
         ${npcFeed}
@@ -1078,6 +1116,70 @@ export function openMarketApp(state) {
   document.body.appendChild(overlay);
 
   overlay.querySelector('#market-back').addEventListener('click', () => overlay.remove());
+  // Reprice: click row → show slider panel → confirm to apply
+  let activeRepriceWid = null;
+  const repricePanel = overlay.querySelector('#reprice-panel');
+  const repriceSlider = overlay.querySelector('#reprice-slider');
+  const repriceLabel = overlay.querySelector('#reprice-label');
+  const repriceHint = overlay.querySelector('#reprice-hint');
+  const repriceTitle = overlay.querySelector('#reprice-title');
+  const repriceConfirm = overlay.querySelector('#reprice-confirm');
+
+  overlay.querySelectorAll('.reprice-row').forEach(row => {
+    const cd = (() => { const w = (state.inventory.works || []).find(w => w.id === parseInt(row.dataset.workId)); return w?._lastRepriceTurn != null ? Math.max(0, 6 - (state.turn - w._lastRepriceTurn)) : 0; })();
+    if (cd > 0) return; // locked, no click handler
+    row.addEventListener('click', () => {
+      const wid = parseInt(row.dataset.workId);
+      const isHVP = row.dataset.isHvp === '1';
+      const cur = parseInt(row.dataset.current);
+      activeRepriceWid = wid;
+      repriceSlider.min = 1;
+      repriceSlider.max = isHVP ? 200 : 60;
+      repriceSlider.value = cur;
+      repriceLabel.textContent = '¥' + cur;
+      repriceTitle.textContent = row.querySelector('span:nth-child(2)').textContent;
+      repriceHint.textContent = cur === parseInt(repriceSlider.value) ? '拖动滑块调整价格' : '';
+      if (repricePanel) repricePanel.style.display = 'block';
+      // Highlight active row
+      overlay.querySelectorAll('.reprice-row').forEach(r => r.style.background = '');
+      row.style.background = '#F0FAF8';
+    });
+  });
+
+  if (repriceSlider) {
+    repriceSlider.addEventListener('input', () => {
+      const p = parseInt(repriceSlider.value);
+      repriceLabel.textContent = '¥' + p;
+      const work = (state.inventory.works || []).find(w => w.id === activeRepriceWid);
+      if (work) {
+        const diff = p - work.price;
+        repriceHint.textContent = diff === 0 ? '价格未变' : diff > 0 ? `涨价 +¥${diff}` : `降价 ¥${diff}`;
+      }
+    });
+  }
+
+  if (repriceConfirm) {
+    repriceConfirm.addEventListener('click', () => {
+      if (activeRepriceWid == null) return;
+      const newPrice = parseInt(repriceSlider.value);
+      const work = (state.inventory.works || []).find(w => w.id === activeRepriceWid);
+      if (work && work.price !== newPrice) {
+        work.price = newPrice;
+        work._lastRepriceTurn = state.turn;
+        // Update row display
+        const row = overlay.querySelector(`.reprice-row[data-work-id="${activeRepriceWid}"]`);
+        if (row) {
+          row.querySelector('span:nth-child(3)').textContent = '¥' + newPrice;
+          row.querySelector('span:nth-child(4)').textContent = '6月后可改';
+          row.style.cursor = 'default';
+          row.style.background = '';
+          row.replaceWith(row.cloneNode(true)); // remove click listener
+        }
+      }
+      if (repricePanel) repricePanel.style.display = 'none';
+      activeRepriceWid = null;
+    });
+  }
   overlay.querySelectorAll('.sns-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       overlay.querySelectorAll('.sns-tab').forEach(t => t.classList.remove('active'));
@@ -1228,6 +1330,7 @@ export const APP_DEFS = [
   { id: 'ciyuanbi', name: '打破次元墙', icon: 'handshake', color: '#27AE60', actions: ['findPartner', 'hireAssistant', 'sponsorCommunity'], logo: 'app logos/打破次元壁.jpg' },
   { id: 'rest', name: '休息', icon: 'coffee', color: '#8B6914', actions: ['rest'], special: true, logo: 'app logos/休息.avif' },
   { id: 'memu', name: 'Memu', icon: 'desktop', color: '#3498DB', actions: ['upgradeEquipment'], special: true, logo: 'app logos/Memu.avif' },
+  { id: 'prediction', name: '织梦交易', icon: 'chart-line-up', color: '#F39C12', actions: [], special: 'prediction', logo: 'app logos/织梦交易.avif' },
   { id: 'market', name: '同人市场观察', icon: 'chart-bar', color: '#34495E', actions: [], special: 'market', logo: 'app logos/同人市场观察.jpg' },
   { id: 'nyaner', name: 'Nyaner', icon: 'chat-circle-dots', color: '#1DA1F2', actions: [], special: 'sns', logo: 'app logos/Nyaner.avif' },
   { id: 'message', name: '短信', icon: 'envelope', color: '#2ECC71', actions: ['goCommercial'], special: 'message', logo: 'app logos/短信.png' },
@@ -1240,7 +1343,7 @@ function renderAppDesktop(state) {
   const apps = APP_DEFS.map(app => {
     // Disabled logic
     let disabled = false;
-    if (app.special === 'sns' || app.special === 'market' || app.special === 'browser') {
+    if (app.special === 'sns' || app.special === 'market' || app.special === 'browser' || app.special === 'prediction') {
       disabled = false; // always available
     } else if (app.special === 'message') {
       disabled = false; // always available (闺蜜 + 女神 always there)
@@ -1470,7 +1573,7 @@ export function renderAppPage(appId, state, onAction, onBack) {
             const tag = done ? ' <span style="color:var(--text-muted)">✓ 已参加</span>' : isPast ? ' <span style="color:var(--text-muted)">已过期</span>' : '';
             return `<div style="padding:10px 12px;margin-bottom:6px;border-radius:8px;background:var(--bg-card);border:1px solid var(--border);${dimmed ? 'opacity:0.4;' : ''}">
               <div style="font-weight:600;font-size:0.8rem;margin-bottom:3px">${sIcon[e.size] || ''} ${e.name}${tag}</div>
-              <div style="font-size:0.7rem;color:var(--text-muted)">${ic('map-pin', '0.65rem')} ${e.city} · 路费¥${e.travelCost} · 销量×${e.salesBoost} · 声誉+${e.reputationBoost}</div>
+              <div style="font-size:0.7rem;color:var(--text-muted)">${ic('map-pin', '0.65rem')} ${e.city} · 路费¥${e.travelCost} · ${e.salesBoost >= 4 ? '盛况空前' : e.salesBoost >= 2.5 ? '人气旺盛' : e.salesBoost >= 1.5 ? '人流一般' : '比较冷清'}</div>
               <div style="font-size:0.62rem;color:var(--text-muted);margin-top:2px">${sLabel[e.size] || ''}</div>
             </div>`;
           }).join('');
@@ -1876,7 +1979,7 @@ export function renderResult(state, result, onContinue) {
   }).join('');
 
   // Chart placeholder
-  const chartId = result.supplyDemand ? 'supply-demand-chart' : '';
+  const chartId = ''; // supply-demand chart removed (info fog)
 
   app().innerHTML = `
     <div class="screen">
@@ -1917,6 +2020,30 @@ export function renderResult(state, result, onContinue) {
           return `<div class="market-panel${collapsed ? ' collapsed' : ''}" style="margin-bottom:10px">
             <div class="market-header" style="cursor:${collapsed ? 'pointer' : 'default'}">
               <span>${ic('phone')} 电子版被动收入 <span style="font-weight:700;color:var(--success)">+¥${total}</span> <span style="color:var(--text-muted);font-size:0.7rem">(${d.length}部)</span></span>
+              ${collapsed ? '<span class="market-arrow">▼</span>' : ''}
+            </div>
+            <div class="market-body" style="padding:4px 0">${rows}</div>
+          </div>`;
+        })() : ''}
+
+        ${result.predictionSettlements ? (() => {
+          const ps = result.predictionSettlements;
+          const totalPL = ps.reduce((s, p) => s + p.profit, 0);
+          const collapsed = ps.length > 3;
+          const rows = ps.map(p => {
+            const sideLabel = p.side === 'yes' ? 'YES' : 'NO';
+            const sideColor = p.won ? 'var(--success)' : 'var(--danger)';
+            const resultIcon = p.won ? '${ic("check-circle","0.65rem")}' : '${ic("x-circle","0.65rem")}';
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:0.7rem;border-bottom:1px dashed var(--border)">
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.question)}</span>
+              <span style="flex-shrink:0;margin:0 4px;font-size:0.62rem;color:var(--text-muted)">结果${p.outcome} · 持${sideLabel}×${p.shares}</span>
+              <span style="flex-shrink:0;font-weight:600;color:${sideColor}">${p.won ? '+¥' + p.payout : '-¥' + p.cost}</span>
+            </div>`;
+          }).join('');
+          const plColor = totalPL >= 0 ? 'var(--success)' : 'var(--danger)';
+          return `<div class="market-panel${collapsed ? ' collapsed' : ''}" style="margin-bottom:10px">
+            <div class="market-header" style="cursor:${collapsed ? 'pointer' : 'default'}">
+              <span>${ic('chart-line-up')} 织梦交易结算 <span style="font-weight:700;color:${plColor}">${totalPL >= 0 ? '+' : ''}¥${totalPL}</span> <span style="color:var(--text-muted);font-size:0.7rem">(${ps.length}笔)</span></span>
               ${collapsed ? '<span class="market-arrow">▼</span>' : ''}
             </div>
             <div class="market-body" style="padding:4px 0">${rows}</div>
@@ -1993,45 +2120,61 @@ export function renderResult(state, result, onContinue) {
 // === Event Overlay ===
 // === Sales Breakdown (educational waterfall) ===
 function renderSalesBreakdown(s, salesDetails) {
-  // Collapsible panel showing the full causal chain
-  const modifiers = [];
-  if (s.partnerMult !== 100) modifiers.push({ label: '搭档加成', val: s.partnerMult, icon: 'handshake' });
-  if (s.shModPct < 95) modifiers.push({ label: '二手冲击', val: s.shModPct, icon: 'package' });
-  if (s.advMod !== 100) modifiers.push({ label: '宏观/AI/niche', val: s.advMod, icon: 'globe-simple' });
-  if (s.eventBoost > 100) modifiers.push({ label: '同人展加成', val: s.eventBoost, icon: 'tent' });
-  if (s.catalogBonus > 100) modifiers.push({ label: '产品线多样性', val: s.catalogBonus, icon: 'books' });
-  if (s.qualityDemandBonus > 105) modifiers.push({ label: '作品质量吸引力', val: s.qualityDemandBonus, icon: 'sparkle' });
-  if (s.infoHighBonus > 100) modifiers.push({ label: '口碑效应(信息≥60%)', val: s.infoHighBonus, icon: 'megaphone' });
+  // Narrative intuition panel — no precise numbers, only causal signals
+  const insights = [];
 
-  const modHtml = modifiers.map(m => {
-    const color = m.val >= 100 ? 'var(--success)' : 'var(--danger)';
-    return `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.72rem">
-      <span>${ic(m.icon)} ${m.label}</span><span style="color:${color};font-weight:600">×${(m.val / 100).toFixed(2)}</span>
-    </div>`;
-  }).join('');
+  // Market size signal
+  const csLabel = s.communitySize > 15000 ? '社群人气很旺，潜在买家多' : s.communitySize > 8000 ? '社群规模中等' : s.communitySize > 3000 ? '社群规模偏小' : '社群人丁稀少';
+  insights.push({ icon: 'users', text: csLabel, positive: s.communitySize > 8000 });
 
-  // Per-work breakdown (Step 5)
-  let workBreakdownHtml = '';
+  // Reputation → share
+  const shareLabel = s.playerShare > 30 ? '你在圈里很有存在感，不少人专程来找你' : s.playerShare > 15 ? '有一部分人认识你，会优先看你的摊位' : s.playerShare > 5 ? '知道你的人不多，大部分人只是路过' : '你还是无名小卒，需要更多曝光';
+  insights.push({ icon: 'star', text: shareLabel, positive: s.playerShare > 15 });
+
+  // Info disclosure → conversion
+  const convLabel = s.conversion > 60 ? '你的宣传做得很到位，看到的人大多愿意掏钱' : s.conversion > 40 ? '有一定曝光度，路人转化率还行' : '很多人不知道你在卖什么，需要加强宣传';
+  insights.push({ icon: 'megaphone', text: convLabel, positive: s.conversion > 40 });
+
+  // Modifiers as narrative
+  if (s.partnerMult > 100) insights.push({ icon: 'handshake', text: '搭档帮忙招揽了更多客人', positive: true });
+  if (s.shModPct < 90) insights.push({ icon: 'package', text: '二手市场上的竞品分流了一些买家', positive: false });
+  if (s.eventBoost > 100) insights.push({ icon: 'tent', text: '展会的面对面接触大大提升了成交意愿', positive: true });
+  if (s.catalogBonus > 105) insights.push({ icon: 'books', text: '丰富的产品线吸引了更多人驻足', positive: true });
+  if (s.qualityDemandBonus > 110) insights.push({ icon: 'sparkle', text: '作品质量本身就是最好的广告', positive: true });
+  if (s.infoHighBonus > 100) insights.push({ icon: 'chat-circle', text: '口碑效应带来了额外的客流', positive: true });
+  if (s.alphaMod < 95) insights.push({ icon: 'warning', text: '消费者对同人本的兴趣在衰退，市场在萎缩', positive: false });
+
+  const insightsHtml = insights.map(i =>
+    `<div style="display:flex;align-items:flex-start;gap:6px;padding:3px 0;font-size:0.72rem">
+      <span style="flex-shrink:0;color:${i.positive ? 'var(--success)' : 'var(--danger)'}">${ic(i.icon, '0.72rem')}</span>
+      <span style="color:${i.positive ? 'var(--text)' : 'var(--danger)'}">${i.text}</span>
+    </div>`
+  ).join('');
+
+  // Per-work narrative breakdown
+  let workNarrativeHtml = '';
   if (salesDetails && salesDetails.length > 0) {
     const rows = salesDetails.filter(d => d.sold > 0).map(d => {
       const w = d.work;
       const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
       const name = `${sub.name}${w.name ? '·' + escapeHtml(w.name) : ''}`;
-      const tags = [];
-      if (d.noveltyBonus > 1) tags.push(`<span style="color:#27AE60">新刊×${d.noveltyBonus.toFixed(1)}</span>`);
-      if (d.qualityMult !== 1) tags.push(`<span style="color:${d.qualityMult >= 1 ? 'var(--success)' : 'var(--danger)'}">Q×${d.qualityMult.toFixed(2)}</span>`);
-      if (d.trendMult !== 1) tags.push(`<span style="color:${d.trendMult >= 1 ? '#27AE60' : '#E67E22'}">潮×${d.trendMult.toFixed(1)}</span>`);
-      if (d.saturationFactor < 0.8) tags.push(`<span style="color:var(--danger)">饱${Math.round((1 - d.saturationFactor) * 100)}%</span>`);
-      if (d.ageDecay < 0.8) tags.push(`<span style="color:#E67E22">旧×${d.ageDecay.toFixed(2)}</span>`);
+      const reasons = [];
+      if (d.noveltyBonus > 1) reasons.push('<span style="color:#27AE60">新刊效应</span>');
+      if (d.qualityMult > 1.2) reasons.push('<span style="color:var(--success)">质量出众</span>');
+      else if (d.qualityMult < 0.8) reasons.push('<span style="color:var(--danger)">质量堪忧</span>');
+      if (d.trendMult > 1.1) reasons.push('<span style="color:#27AE60">踩中潮流</span>');
+      else if (d.trendMult < 0.9) reasons.push('<span style="color:#E67E22">不合时宜</span>');
+      if (d.saturationFactor < 0.5) reasons.push('<span style="color:var(--danger)">市场饱和</span>');
+      if (d.ageDecay < 0.7) reasons.push('<span style="color:#E67E22">老作品热度消退</span>');
       return `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.68rem">
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ic(sub.emoji)} ${name}</span>
-        <span style="flex-shrink:0;margin:0 4px;color:var(--text-muted)">${tags.join(' ')}</span>
+        <span style="flex-shrink:0;margin:0 4px;color:var(--text-muted)">${reasons.join(' ')}</span>
         <span style="flex-shrink:0;font-weight:600">${d.sold}${w.type === 'hvp' ? '本' : '个'}</span>
       </div>`;
     }).join('');
     if (rows) {
-      workBreakdownHtml = `<div style="padding:6px 0;border-bottom:1px dashed var(--border)">
-        <div style="font-weight:700;color:var(--secondary);margin-bottom:4px">第5步：各作品销售分配</div>
+      workNarrativeHtml = `<div style="padding:6px 0;border-top:1px dashed var(--border)">
+        <div style="font-weight:700;color:var(--secondary);margin-bottom:4px">${ic('list-dashes')} 各作品表现</div>
         ${rows}
       </div>`;
     }
@@ -2040,38 +2183,17 @@ function renderSalesBreakdown(s, salesDetails) {
   return `
     <div class="market-panel collapsed" style="margin-bottom:10px">
       <div class="market-header" id="breakdown-toggle">
-        <span>${ic('magnifying-glass')} 销售因果分析</span>
+        <span>${ic('lightbulb')} 销售直觉分析</span>
         <span class="market-arrow">▼</span>
       </div>
       <div class="market-body" style="font-size:0.75rem">
-        <div style="padding:6px 0;border-bottom:1px dashed var(--border)">
-          <div style="font-weight:700;color:var(--secondary);margin-bottom:4px">第1步：市场总需求 (Translated CES)</div>
-          <div style="display:flex;justify-content:space-between"><span>社群 ${s.communitySize.toLocaleString()}人</span><span>承诺消费γ=${s.gamma}+超量m^s=${s.supernumerary}</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:600"><span>→ 市场总需求</span><span>${s.marketDemand}单位</span></div>
+        <div style="padding:6px 0;font-size:0.68rem;color:var(--text-muted);font-style:italic;margin-bottom:4px">
+          作为创作者，你不会看到精确的公式——但你能凭直觉感知到这些因素在起作用：
         </div>
-        <div style="padding:6px 0;border-bottom:1px dashed var(--border)">
-          <div style="font-weight:700;color:var(--secondary);margin-bottom:4px">第2步：你的份额 (子层CES)</div>
-          <div style="display:flex;justify-content:space-between"><span>你的声誉 θ=${s.playerRep}</span><span>竞争者${s.nCompetitors}人</span></div>
-          ${s.alphaMod < 100 ? `<div style="display:flex;justify-content:space-between;color:var(--danger)"><span>消费者偏好衰减α</span><span>${s.alphaMod}%</span></div>` : ''}
-          <div style="display:flex;justify-content:space-between;font-weight:600"><span>→ 你的份额</span><span>${s.playerShare}% → ${s.awareness}人关注你</span></div>
-        </div>
-
-        <div style="padding:6px 0;border-bottom:1px dashed var(--border)">
-          <div style="font-weight:700;color:var(--secondary);margin-bottom:4px">第3步：谁愿意买？(Stigler转化)</div>
-          <div style="display:flex;justify-content:space-between"><span>基础转化率</span><span>15%</span></div>
-          <div style="display:flex;justify-content:space-between;color:var(--success)"><span>信息透明度加成</span><span>+${s.infoBonus}%</span></div>
-          <div style="display:flex;justify-content:space-between;font-weight:700;margin-top:2px"><span>→ 转化率</span><span>${s.conversion}%</span></div>
-        </div>
-
-        ${modifiers.length > 0 ? `<div style="padding:6px 0;border-bottom:1px dashed var(--border)">
-          <div style="font-weight:700;color:var(--secondary);margin-bottom:4px">第4步：市场环境修正</div>
-          ${modHtml}
-        </div>` : ''}
-
-        ${workBreakdownHtml}
-
-        <div style="padding:6px 0;font-size:0.68rem;color:var(--text-muted)">
-          随机波动: ×${(s.noise / 100).toFixed(2)} · 最终 = 关注${s.awareness} × 转化${s.conversion}%${modifiers.length > 0 ? ' × 修正' : ''} × 波动
+        ${insightsHtml}
+        ${workNarrativeHtml}
+        <div style="padding:6px 0;font-size:0.65rem;color:var(--text-muted);border-top:1px dashed var(--border);margin-top:4px">
+          ${ic('lightbulb', '0.6rem')} 提升销量的关键：声誉决定有多少人知道你，宣传决定多少人愿意买，作品质量决定口碑能否扩散。
         </div>
       </div>
     </div>
@@ -2121,79 +2243,72 @@ export function renderPriceSelector(state, productType, onSelect, onCancel) {
         <div style="font-weight:700;font-size:1rem;margin-top:2px">${label}定价</div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;font-size:0.72rem">
-        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
-          <div style="color:var(--text-muted)">社群规模</div>
-          <div style="font-weight:700">${cs.toLocaleString()}人</div>
-        </div>
-        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
-          <div style="color:var(--text-muted)">同类竞争者</div>
-          <div style="font-weight:700">${nComp}人${recLabel}</div>
-        </div>
-        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
-          <div style="color:var(--text-muted)">你的市场份额</div>
-          <div style="font-weight:700">${(playerShare * 100).toFixed(1)}%</div>
-        </div>
-        <div style="padding:6px 8px;background:#F8F9FA;border-radius:6px">
-          <div style="color:var(--text-muted)">单位成本 / 市场均价</div>
-          <div style="font-weight:700">¥${unitCost} / ¥${basePrice} ${basePrice > refPrice ? ic('trend-up') : basePrice < refPrice ? ic('trend-down') : ''}</div>
-        </div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:0.72rem;padding:8px;background:#F8F9FA;border-radius:8px">
+        <div>${ic('users', '0.7rem')} ${cs > 15000 ? '社群很大，潜在买家多' : cs > 8000 ? '社群规模中等' : '社群偏小，买家有限'}</div>
+        <div>${ic('storefront', '0.7rem')} ${fogCreatorCount(nComp, productType)}${recLabel}</div>
+        <div>${ic('coins', '0.7rem')} 最近别人的摊位上，同类${label}大概卖 ¥${Math.round(basePrice * 0.9)}~¥${Math.round(basePrice * 1.1)} 左右</div>
+        <div style="color:var(--text-muted);font-style:italic;margin-top:2px">${isHVP ? '同人本是"想要但不是必须"的东西——定价太高，犹豫的人就不买了' : '谷子对粉丝来说几乎是"必买品"——涨一点价，大多数人还是会买'}</div>
       </div>
 
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:6px">
-        弹性 ε=${elasticity} (${typeLabel}) · 预估月需求 ~${baseDemand}${isHVP ? '本' : '个'}（均价时）
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
-        ${previews.map(t => {
-          const profitColor = t.estProfit > 0 ? 'var(--success)' : 'var(--danger)';
-          const isBase = t.id === 'normal';
-          return `
-          <div class="price-btn" data-price="${t.price}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;text-align:left;cursor:pointer;${isBase ? 'border:1px solid var(--primary);' : ''}">
-            <div style="min-width:52px;text-align:center">
-              <div style="font-size:1.1rem;font-weight:700">¥${t.price}</div>
-              <div style="font-size:0.65rem;color:var(--text-muted)">${t.label}</div>
-            </div>
-            <div style="flex:1;font-size:0.72rem;display:flex;gap:12px">
-              <div><div style="color:var(--text-muted)">预估销量</div><div style="font-weight:600">${t.estDemand}${isHVP ? '本' : '个'}</div></div>
-              <div><div style="color:var(--text-muted)">预估收入</div><div style="font-weight:600">¥${t.estRevenue}</div></div>
-              <div><div style="color:var(--text-muted)">预估利润</div><div style="font-weight:600;color:${profitColor}">${t.estProfit >= 0 ? '+' : ''}¥${t.estProfit}</div></div>
-            </div>
-          </div>`;
-        }).join('')}
+      <div style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <input type="range" id="price-slider" min="1" max="${isHVP ? 200 : 60}" value="${basePrice}" step="1" style="flex:1;accent-color:var(--primary)">
+          <span id="price-value" style="font-weight:700;font-size:1.3rem;min-width:55px;text-align:center">¥${basePrice}</span>
+        </div>
+        <div id="price-reaction" style="text-align:center;padding:10px;border-radius:10px;background:var(--bg-card);border:1.5px solid var(--border);min-height:60px">
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--text-muted);margin-top:3px;padding:0 2px">
+          <span>白送</span>
+          <span>别人差不多这个价</span>
+          <span>天价</span>
+        </div>
       </div>
 
       <div class="tip-box" style="text-align:left;margin-bottom:0">
-        <div class="tip-label">定价经济学</div>
+        <div class="tip-label">定价直觉</div>
         <div class="tip-text">${isHVP
-          ? '同人本弹性ε=1.06>1（弱奢侈品）：涨价会让需求下降更快，总收入反而减少。但高价策略适合声誉高、份额大的创作者——因为你的粉丝愿意为品质付费。'
-          : '谷子弹性ε=0.92<1（必需品属性）：涨价时需求下降较慢，收入可能反增。低价走量和高价少量都是可行策略——取决于你的库存和参展计划。'}</div>
+          ? '同人本涨价容易吓跑犹豫的买家——但如果你声誉够高、作品够好，粉丝愿意为品质买单。低价冲量还是高价精品，取决于你对自己作品的信心。'
+          : '谷子是粉丝日常消费品，对价格没那么敏感。适当提价通常不会影响太多销量。低价走量和高价少量都行——看你库存够不够。'}</div>
       </div>
-      <button class="btn btn-primary btn-block" id="btn-price-confirm" disabled style="margin-top:10px;opacity:0.5">请选择定价</button>
+      <button class="btn btn-primary btn-block" id="btn-price-confirm" style="margin-top:10px">确认定价 ¥${basePrice}</button>
       <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  let selectedPrice = null;
-  overlay.querySelectorAll('.price-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      // Deselect all
-      overlay.querySelectorAll('.price-btn').forEach(b => {
-        b.style.border = '1px solid var(--border)';
-        b.style.background = '';
-      });
-      // Highlight selected
-      btn.style.border = '2px solid var(--primary)';
-      btn.style.background = '#F0FAF8';
-      selectedPrice = parseInt(btn.dataset.price);
-      // Enable confirm
-      const cfm = overlay.querySelector('#btn-price-confirm');
-      cfm.disabled = false;
-      cfm.style.opacity = '1';
-      cfm.textContent = `确认定价 ¥${selectedPrice}`;
-    });
-  });
+  const priceSlider = overlay.querySelector('#price-slider');
+  const priceLabel = overlay.querySelector('#price-value');
+  const reactionEl = overlay.querySelector('#price-reaction');
+  const confirmBtn = overlay.querySelector('#btn-price-confirm');
+  let selectedPrice = basePrice;
+
+  function updatePriceReaction() {
+    const p = parseInt(priceSlider.value);
+    selectedPrice = p;
+    priceLabel.textContent = '¥' + p;
+    confirmBtn.textContent = '确认定价 ¥' + p;
+
+    const ratio = p / basePrice;
+    const pf = Math.pow(Math.max(0.01, ratio), -elasticity);
+    const estSales = Math.max(1, Math.round(baseDemand * pf));
+
+    // Inner monologue
+    let thought;
+    if (p <= 1) thought = '等等我在干什么…这连印刷成本都收不回来啊';
+    else if (ratio < 0.3) thought = '虽然每本都在亏钱，但应该能卖很多…吧？';
+    else if (ratio < 0.6) thought = '虽然每本赚得少，但卖得多应该能回本…吧？';
+    else if (ratio < 0.85) thought = '便宜一点点，应该能多吸引几个犹豫的人';
+    else if (ratio <= 1.15) thought = '跟大家差不多的价格，应该不会出什么问题';
+    else if (ratio <= 1.5) thought = '有点贵了…但我对这次的作品有信心';
+    else if (ratio <= 2.5) thought = '这个价格…除了真爱粉应该没人会买吧';
+    else if (ratio <= 5) thought = '我是不是疯了…算了，定都定了';
+    else thought = '……我到底在想什么';
+
+    reactionEl.innerHTML = '<div style=\"font-size:0.85rem;font-weight:600;font-style:italic;color:var(--text);line-height:1.5\">「' + thought + '」</div>';
+  }
+  updatePriceReaction();
+
+  priceSlider.addEventListener('input', updatePriceReaction);
   overlay.querySelector('#btn-price-confirm').addEventListener('click', () => {
     if (selectedPrice == null) return;
     overlay.remove();
@@ -2478,7 +2593,7 @@ export function renderEventSelector(state, onSelect, onCancel) {
         const attended = (state.eventsAttendedThisMonth || []).includes(e.name);
         return `<div class="price-btn${attended ? ' disabled' : ''}" data-idx="${i}" style="margin-bottom:8px;text-align:left;padding:12px;${attended ? 'opacity:0.4;pointer-events:none;' : ''}">
           <div style="font-weight:700">${e.size === 'mega' ? ic('star-four') : e.size === 'big' ? ic('tent') : ic('note-pencil')} ${e.name}${attended ? ' ✓ 已参加' : ''}</div>
-          <div style="font-size:0.8rem;color:var(--text-light)">${ic('map-pin')}${e.city} · 路费¥${e.travelCost} · 销量×${e.salesBoost} · 声誉+${e.reputationBoost}</div>
+          <div style="font-size:0.8rem;color:var(--text-light)">${ic('map-pin')}${e.city} · 路费¥${e.travelCost} · ${e.salesBoost >= 4 ? '盛况空前' : e.salesBoost >= 2.5 ? '人气旺盛' : e.salesBoost >= 1.5 ? '人流一般' : '比较冷清'}</div>
         </div>`;
       }).join('')}
       <div class="tip-box" style="text-align:left;margin-bottom:0">
@@ -2501,35 +2616,27 @@ export function renderEventSelector(state, onSelect, onCancel) {
   });
 }
 
-// === Reprint Type Selector ===
+// === Reprint Selector: single-select + quantity slider ===
 export function renderReprintSelector(state, onSelect, onCancel) {
   const overlay = document.createElement('div');
   overlay.className = 'event-overlay';
 
-  // Collect all unique works that have ever been created (including sold-out ones from history)
-  // For reprint, we show works currently in inventory + works that are sold out (qty=0 but existed)
-  const allWorks = state.inventory.works || [];
-  // Also include sold-out works by checking all past creations via totalHVP/totalLVP
-  // For simplicity, show works array (includes qty=0 items before cleanup) + a generic option for each type
-  const worksWithStock = allWorks.filter(w => w.qty >= 0); // all works including sold-out
-  const workItems = worksWithStock.map(w => {
+  const allWorks = (state.inventory.works || []).filter(w => w.qty >= 0);
+  const workItems = allWorks.map(w => {
     const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
     const isHVP = w.type === 'hvp';
-    const reprintQty = isHVP ? 60 : 20;
-    const unitCost = isHVP ? 40 : 6;
-    const totalCost = reprintQty * unitCost;
+    const unitCost = isHVP ? 20 : 6;
     const cs = state.market ? state.market.communitySize : 10000;
     const satCoeff = isHVP ? 0.008 : 0.012;
     const satPct = Math.round((w.totalSold || 0) / (cs * satCoeff) * 100);
-    const satLabel = satPct <= 30 ? `<span style="color:var(--success);font-size:0.65rem">市场空间充足</span>`
-      : satPct <= 70 ? `<span style="color:#E67E22;font-size:0.65rem">需求开始递减 (饱和${satPct}%)</span>`
-      : `<span style="color:var(--danger);font-size:0.65rem">市场接近饱和 (饱和${satPct}%)</span>`;
-    return `<div class="app-action-card" data-work-id="${w.id}" style="cursor:pointer">
+    const satLabel = satPct <= 30 ? '<span style="color:var(--success);font-size:0.62rem">市场空间充足</span>'
+      : satPct <= 70 ? `<span style="color:#E67E22;font-size:0.62rem">饱和${satPct}%</span>`
+      : `<span style="color:var(--danger);font-size:0.62rem">饱和${satPct}%</span>`;
+    return `<div class="app-action-card reprint-work" data-work-id="${w.id}" data-unit-cost="${unitCost}" data-is-hvp="${isHVP ? 1 : 0}" style="cursor:pointer">
       <div class="app-action-icon" style="color:${isHVP ? 'var(--primary)' : 'var(--secondary)'}">${ic(sub.emoji, '1.1rem')}</div>
       <div class="app-action-body">
-        <div class="app-action-name">${sub.name}${w.name ? '·' + escapeHtml(w.name) : ''}${w.isCultHit ? ' ★' : ''}${w.styleTag ? ` <span style="background:var(--bg);border:1px solid var(--border);padding:0 3px;border-radius:3px;font-size:0.62rem;color:var(--secondary)">${w.styleTag}</span>` : ''} <span style="font-weight:400;color:var(--text-muted);font-size:0.7rem">¥${w.price}/个</span></div>
-        <div class="app-action-cost">追印${reprintQty}${isHVP ? '本' : '个'} · 成本¥${totalCost} · 现有库存${w.qty}</div>
-        <div style="margin-top:2px">${satLabel}</div>
+        <div class="app-action-name">${sub.name}${w.name ? '·' + escapeHtml(w.name) : ''}${w.isCultHit ? ' ★' : ''}${w.styleTag ? ` <span style="background:var(--bg);border:1px solid var(--border);padding:0 3px;border-radius:3px;font-size:0.62rem;color:var(--secondary)">${w.styleTag}</span>` : ''}</div>
+        <div class="app-action-cost">¥${unitCost}/${isHVP ? '本' : '个'} · 库存${w.qty} · ${satLabel}</div>
       </div>
     </div>`;
   }).join('');
@@ -2538,50 +2645,113 @@ export function renderReprintSelector(state, onSelect, onCancel) {
     <div class="event-card" style="max-width:380px;text-align:left">
       <div style="text-align:center;margin-bottom:8px"><span style="font-size:1.3rem">${ic('printer')}</span></div>
       <div style="text-align:center;font-weight:700;font-size:1rem;margin-bottom:4px">追加印刷</div>
-      <div style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-bottom:12px">选择要追印的作品</div>
-      <div style="max-height:45vh;overflow-y:auto">
+      <div style="text-align:center;font-size:0.8rem;color:var(--text-light);margin-bottom:12px">选择作品，然后选择数量</div>
+      <div style="max-height:35vh;overflow-y:auto;margin-bottom:8px">
         ${workItems || '<div style="text-align:center;color:var(--text-muted);padding:12px">没有可追印的作品</div>'}
       </div>
-      <button class="btn btn-primary btn-block" id="reprint-confirm" style="margin-top:12px" disabled>确认追印</button>
+      <div id="reprint-qty-panel" style="display:none;padding:10px;background:var(--bg-card);border-radius:10px;border:2px solid var(--primary);margin-bottom:8px">
+        <div id="reprint-qty-title" style="font-weight:600;font-size:0.82rem;margin-bottom:6px"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <input type="range" id="reprint-slider" min="10" max="200" value="30" step="5" style="flex:1;accent-color:var(--primary)">
+          <span id="reprint-qty-label" style="font-weight:700;font-size:1rem;min-width:40px;text-align:center">30</span>
+        </div>
+        <div id="reprint-preview" style="font-size:0.72rem;color:var(--text-muted);text-align:center"></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="reprint-confirm" style="margin-top:8px" disabled>选择要追印的作品</button>
       <button class="btn btn-block btn-cancel-overlay" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
     </div>
   `;
   document.body.appendChild(overlay);
-  const selected = new Set();
-  const confirmBtn = overlay.querySelector('#reprint-confirm');
 
-  function updateConfirm() {
-    if (selected.size === 0) {
-      confirmBtn.disabled = true;
-      confirmBtn.textContent = '确认追印';
-    } else {
-      confirmBtn.disabled = false;
-      let totalCost = 0;
-      for (const id of selected) {
-        const w = worksWithStock.find(w => w.id === id);
-        if (w) totalCost += (w.type === 'hvp' ? 60 * 20 : 20 * 6);
-      }
-      confirmBtn.textContent = `确认追印 ${selected.size}项 · 总计¥${totalCost}`;
+  // Per-work quantity map: workId → { qty, unitCost, isHVP, name }
+  const qtyMap = new Map();
+  let activeWorkId = null;
+  const confirmBtn = overlay.querySelector('#reprint-confirm');
+  const panel = overlay.querySelector('#reprint-qty-panel');
+  const slider = overlay.querySelector('#reprint-slider');
+  const qtyLabel = overlay.querySelector('#reprint-qty-label');
+  const preview = overlay.querySelector('#reprint-preview');
+  const titleEl = overlay.querySelector('#reprint-qty-title');
+
+  function saveActiveToMap() {
+    if (activeWorkId != null) {
+      const entry = qtyMap.get(activeWorkId);
+      if (entry) entry.qty = parseInt(slider.value);
     }
   }
 
-  overlay.querySelectorAll('.app-action-card[data-work-id]').forEach(btn => {
+  function updateConfirmBtn() {
+    const entries = [...qtyMap.values()].filter(e => e.qty > 0);
+    if (entries.length === 0) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '选择要追印的作品';
+      return;
+    }
+    const totalCost = entries.reduce((s, e) => s + e.qty * e.unitCost, 0);
+    const totalItems = entries.reduce((s, e) => s + e.qty, 0);
+    const debt = totalCost > state.money ? ' (将欠债)' : '';
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = `确认追印 ${entries.length}种${totalItems}件 · ¥${totalCost}${debt}`;
+  }
+
+  function updateSliderPreview() {
+    const entry = qtyMap.get(activeWorkId);
+    if (!entry) return;
+    const qty = parseInt(slider.value);
+    const cost = qty * entry.unitCost;
+    qtyLabel.textContent = qty;
+    preview.textContent = `${qty}${entry.isHVP ? '本' : '个'} × ¥${entry.unitCost} = ¥${cost}`;
+    entry.qty = qty;
+    // Update badge on card
+    const card = overlay.querySelector(`.reprint-work[data-work-id="${activeWorkId}"]`);
+    let badge = card?.querySelector('.reprint-badge');
+    if (card && qty > 0) {
+      if (!badge) { badge = document.createElement('span'); badge.className = 'reprint-badge'; badge.style.cssText = 'position:absolute;top:-4px;right:-4px;background:var(--primary);color:#fff;font-size:0.6rem;font-weight:700;padding:1px 5px;border-radius:8px'; card.style.position = 'relative'; card.appendChild(badge); }
+      badge.textContent = `+${qty}`;
+    } else if (badge) { badge.remove(); }
+    updateConfirmBtn();
+  }
+
+  overlay.querySelectorAll('.reprint-work').forEach(btn => {
     btn.addEventListener('click', () => {
-      const id = parseInt(btn.dataset.workId);
-      if (selected.has(id)) {
-        selected.delete(id);
-        btn.style.borderColor = 'transparent';
-        btn.style.background = 'var(--bg-card)';
-      } else {
-        selected.add(id);
-        btn.style.borderColor = 'var(--primary)';
-        btn.style.background = '#F0FAF8';
-      }
-      updateConfirm();
+      const wid = parseInt(btn.dataset.workId);
+      const unitCost = parseInt(btn.dataset.unitCost);
+      const isHVP = btn.dataset.isHvp === '1';
+      const name = btn.querySelector('.app-action-name').textContent;
+
+      // Save current slider value before switching
+      saveActiveToMap();
+
+      // Init entry if first click
+      if (!qtyMap.has(wid)) qtyMap.set(wid, { qty: 30, unitCost, isHVP, name });
+
+      activeWorkId = wid;
+      const entry = qtyMap.get(wid);
+
+      // Highlight active (keep selected ones with border too)
+      overlay.querySelectorAll('.reprint-work').forEach(b => {
+        const bid = parseInt(b.dataset.workId);
+        if (bid === wid) { b.style.borderColor = 'var(--primary)'; b.style.background = '#F0FAF8'; }
+        else if (qtyMap.has(bid) && qtyMap.get(bid).qty > 0) { b.style.borderColor = 'var(--primary)'; b.style.background = ''; }
+        else { b.style.borderColor = 'transparent'; b.style.background = 'var(--bg-card)'; }
+      });
+
+      // Load slider from saved qty
+      slider.value = entry.qty;
+      titleEl.textContent = name;
+      panel.style.display = 'block';
+      updateSliderPreview();
     });
   });
+
+  slider.addEventListener('input', updateSliderPreview);
+
   confirmBtn.addEventListener('click', () => {
-    if (selected.size > 0) { overlay.remove(); onSelect([...selected]); }
+    saveActiveToMap();
+    const orders = [...qtyMap.entries()].filter(([, e]) => e.qty > 0).map(([id, e]) => ({ id, qty: e.qty }));
+    if (orders.length === 0) return;
+    overlay.remove();
+    onSelect(orders);
   });
   overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => {
     overlay.remove();
@@ -2750,8 +2920,8 @@ function buildNarrativeSections(state) {
   }
 
   if (state.recessionTurnsLeft > 0) {
-    const yrs = (state.recessionTurnsLeft / 12).toFixed(1);
-    alerts.push({ icon: 'trend-down', text: `经济下行持续中（约${yrs}年），销量-30%，成本+20%。`, severity: 'warning' });
+    const rf = fogRecession(state.recessionTurnsLeft);
+    alerts.push({ icon: 'trend-down', text: `${rf.label}，销量下降，成本上升。`, severity: 'warning' });
   }
 
   const negDebuffs = state.timeDebuffs.filter(d => d.delta < 0);
@@ -2763,11 +2933,11 @@ function buildNarrativeSections(state) {
   // === SPOTLIGHT: actionable opportunities ===
   if (state.availableEvents && state.availableEvents.length > 0) {
     for (const e of state.availableEvents) {
-      spotlight.push({ icon: 'tent', text: `<b>${e.name}</b>@${e.city} <span class="spotlight-chip">路费¥${e.travelCost}</span> <span class="spotlight-chip">销量×${e.salesBoost}</span>` });
+      spotlight.push({ icon: 'tent', text: `<b>${e.name}</b>@${e.city} <span class="spotlight-chip">路费¥${e.travelCost}</span> <span class="spotlight-chip">${e.salesBoost >= 4 ? '盛况空前' : e.salesBoost >= 2.5 ? '人气旺盛' : '人流一般'}</span>` });
     }
   }
   if (state.attendingEvent) {
-    spotlight.push({ icon: 'sparkle', text: `参展加成生效中：售卖销量×${state.attendingEvent.salesBoost}！` });
+    spotlight.push({ icon: 'sparkle', text: `参展加成生效中！` });
   }
   if (state.hvpProject) {
     const p = state.hvpProject;

@@ -5,7 +5,7 @@
  */
 
 import { ic } from './icons.js';
-import { addMoney } from './engine.js';
+import { addMoney, addReputation } from './engine.js';
 
 // === IP Heat System (hsls.md: dK/dt = I_official + θ·N_D - λ·K) ===
 export function createOfficialState(ipType = 'normal') {
@@ -96,7 +96,7 @@ export function tickOfficial(official, market, playerState) {
         tip: '官方对同人的影子价格变为补贴。官方主业赚钱时，补贴同人是理性的——每多一个创作者都能转化新的付费粉丝。',
         apply: (s) => {
           s.official.shadowPrice = -0.2;
-          s.reputation += 0.2;
+          addReputation(s, 0.2);
           s.market.nLVP += 5;
           addMoney(s, 300); // subsidy equivalent
         },

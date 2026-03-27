@@ -4,7 +4,7 @@
  */
 
 import { ic, escapeHtml } from './icons.js';
-import { createMarketState, tickMarket, getCompetitionModifier } from './market.js';
+import { createMarketState, tickMarket, getCompetitionModifier, getMarketAvgPrice } from './market.js';
 import { createOfficialState, tickOfficial, getSecondHandModifier, recordPlayerWork } from './official.js';
 import { createAdvancedState, tickAdvanced, getAdvancedCostMod, getAdvancedSalesMod, getSignalCost, ADVANCED_EVENTS } from './advanced.js';
 import { SCHEDULED_EVENTS, RANDOM_EVENTS, setComputeEffectiveTime } from './events.js';
@@ -278,7 +278,7 @@ export function applyCreativeChoice(project, choiceCategory, optionId) {
 
 // Reputation gain with diminishing returns (√t growth curve)
 // factor = 1/√(1+2r): rep0→100%, rep1→58%, rep3→38%, rep5→30%, rep10→22%
-function addReputation(state, rawGain) {
+export function addReputation(state, rawGain) {
   if (rawGain <= 0) { state.reputation = Math.max(0, state.reputation + rawGain); return rawGain; }
   const factor = 1 / Math.sqrt(1 + 2 * state.reputation);
   const actual = rawGain * factor;
@@ -314,7 +314,7 @@ const NOVELTY_BONUS_RECENT = 1.2;   // 1-2月内 (近期)
 const NOVELTY_THRESHOLD    = 2;     // 新刊窗口期(月)
 const SAT_COEFF_HVP  = 0.008;      // HVP饱和系数 (社群的0.8%拥有后开始饱和)
 const SAT_COEFF_LVP  = 0.012;      // LVP饱和系数 (谷子饱和更慢)
-const SAT_FLOOR      = 0.15;       // 饱和最低倍率
+const SAT_FLOOR      = 0;          // 完全饱和=0需求，不保底
 const AGE_RAMP       = 8;          // 年龄惩罚爬满月数
 const BASE_AGE_DECAY = 0.15;       // 无二手压力时的基础年龄衰减
 
@@ -346,9 +346,18 @@ function sellFromWorks(state, type, baseDemand) {
     // Age decay: older works lose appeal (strengthened from original)
     const ageFactor = Math.min(1, age / AGE_RAMP);
     const ageDecay = Math.max(0.05, 1 - (shPressure + BASE_AGE_DECAY) * ageFactor);
+    // Price commitment: absurd pricing kills demand, extreme cheap triggers suspicion
+    const mktAvg = state.market ? getMarketAvgPrice(state.market, state, type) : (type === 'hvp' ? 50 : 15);
+    const pr = w.price / Math.max(1, mktAvg);
+    let priceMult = 1.0;
+    if (pr > 2.5) priceMult = 0;
+    else if (pr > 1.8) priceMult = 0.3;
+    else if (pr > 1.4) priceMult = 0.7;
+    else if (pr < 0.15) priceMult = 0.2;
+    else if (pr < 0.3) priceMult = 0.5;
     // Combined attractiveness
-    const workMult = qualityMult * trendMult * noveltyBonus * saturationFactor * ageDecay;
-    return { work: w, workMult, qualityMult, trendMult, noveltyBonus, saturationFactor, ageDecay };
+    const workMult = qualityMult * trendMult * noveltyBonus * saturationFactor * ageDecay * priceMult;
+    return { work: w, workMult, qualityMult, trendMult, noveltyBonus, saturationFactor, ageDecay, priceMult };
   });
 
   // Phase 2: sort by attractiveness (best first)
@@ -363,8 +372,9 @@ function sellFromWorks(state, type, baseDemand) {
 
   for (const d of workData) {
     if (remaining <= 0) break;
+    if (d.workMult <= 0) continue; // fully saturated — no demand
     const share = totalWeight > 0 ? d.workMult / totalWeight : 1 / workData.length;
-    const workDemand = Math.max(1, Math.round(baseDemand * share));
+    const workDemand = Math.max(0, Math.round(baseDemand * share));
     const sell = Math.min(remaining, Math.min(workDemand, d.work.qty));
     if (sell > 0) {
       d.work.qty -= sell;
@@ -383,7 +393,7 @@ function sellFromWorks(state, type, baseDemand) {
   if (remaining > 0) {
     for (const d of workData) {
       if (remaining <= 0) break;
-      if (d.work.qty <= 0) continue;
+      if (d.work.qty <= 0 || d.workMult <= 0) continue; // skip sold-out and saturated
       const sell = Math.min(remaining, d.work.qty);
       if (sell > 0) {
         d.work.qty -= sell;
@@ -444,7 +454,7 @@ export const BACKGROUNDS = {
   comfort:  { name: '小康家庭', emoji: 'house-line', weight: 12, money: 3500, allowanceMult: 1.3, salaryMult: 1.1,  fireResist: 0.02, desc: '稍有余裕，更多试错空间' },
   educated: { name: '书香门第', emoji: 'books', weight: 8,  money: 2500, allowanceMult: 1.15, salaryMult: 1.05, fireResist: 0.01, desc: '文化氛围好，创作更容易被理解' },
   wealthy:  { name: '富裕家庭', emoji: 'diamond', weight: 3,  money: 8000, allowanceMult: 2.0, salaryMult: 1.4,  fireResist: 0.04, desc: '资金充裕，几乎不用担心钱' },
-  tycoon:   { name: '超级富哥', emoji: 'crown', weight: 2,  money: 20000, allowanceMult: 3.0, salaryMult: 2.0, fireResist: 0.05, desc: '钱不是问题，热情才是' },
+  tycoon:   { name: '超级富哥', emoji: 'crown', weight: 0.1, money: 20000, allowanceMult: 3.0, salaryMult: 2.0, fireResist: 0.05, desc: '钱不是问题，热情才是' },
 };
 
 export function rollBackground() {
@@ -526,7 +536,7 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     lastSalary: 0,                  // last salary received (for unemployment spending inertia)
     // Achievement tracking counters
     _debtBailoutDone: false,        // family debt bailout triggered this cycle
-    _debtFinalWarning: false,       // poor family: first warning given (next time = gameover)
+    _debtBailedOnce: false,         // permanent flag: first bailout used (non-tycoon = no second chance)
     _debtPassionStreak: 0,          // consecutive months with money<0 and passion>=60
     _lowPassionHit: false,          // ever had passion<=15
     _passionRecovered: false,       // recovered from <=15 to >=80
@@ -609,7 +619,7 @@ export function getActionDisplay(actionId, state) {
   }
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
-    if (stage === 'work' && !state.unemployed) return { ...base, costLabel: '仅学生/失业可用' };
+    if (stage === 'work' && !state.unemployed && !state.fullTimeDoujin) return { ...base, costLabel: '仅学生/失业/全职同人可用' };
     const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
     return { ...base, costLabel: `赚¥300~500 下月闲暇-1天${recTag}` };
   }
@@ -752,10 +762,10 @@ export function canPerformAction(state, actionId) {
       if (state.lastReturnToWorkTurn > 0 && state.turn - state.lastReturnToWorkTurn < 12) return false;
     }
   }
-  // partTimeJob: only students or unemployed
+  // partTimeJob: only students, unemployed, or full-time doujin
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
-    if (stage === 'work' && !state.unemployed) return false;
+    if (stage === 'work' && !state.unemployed && !state.fullTimeDoujin) return false;
   }
   // attendEvent: need events available AND have inventory AND not all events attended this month
   if (actionId === 'attendEvent') {
@@ -949,9 +959,10 @@ export function calculateSales(actionId, state) {
   const isHVP = type === 'hvp';
 
   // Total market demand for this type (per 1000 consumers)
+  // NOTE: price commitment penalty is applied per-work in sellFromWorks, not globally here
   const totalDemand = isHVP
-    ? gamma_H + beta_H * m_s / 50          // committed + supernumerary allocation
-    : gamma_L + (1 - beta_H) * m_s / 15;   // B-type gets rest
+    ? gamma_H + beta_H * m_s / 50
+    : gamma_L + (1 - beta_H) * m_s / 15;
 
   // Scale by community size (per 1000 consumers)
   const marketDemand = totalDemand * (communitySize / 1000) * alphaMod;
@@ -993,7 +1004,7 @@ export function calculateSales(actionId, state) {
 
   // --- Calculate base demand ---
   const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * catalogBonus * infoHighBonus * qualityDemandBonus;
-  const sales = Math.max(1, Math.round(rawSales));
+  const sales = Math.max(0, Math.round(rawSales));
 
   // === Full breakdown for educational display ===
   const result = {
@@ -1132,6 +1143,13 @@ export function rollEvent(state) {
     };
   }
 
+  // 1.9. Commercial offer — independent 30% check when conditions met (bypasses event pool competition)
+  if (!state.commercialOfferReceived && state.reputation >= 6 && state.totalRevenue >= 50000 &&
+      state.totalHVP >= 8 && getCreativeSkill(state) >= 4 && state.turn >= 24 && Math.random() < 0.30) {
+    const evt = RANDOM_EVENTS.find(e => e.id === 'commercial_offer');
+    if (evt) return evt;
+  }
+
   // 2. Random events: 35% chance after turn 1
   if (state.turn < 1 || Math.random() > 0.35) return null;
 
@@ -1226,7 +1244,7 @@ export function executeAction(state, actionId) {
   const result = { action: actionId, actionName: action.name, actionEmoji: action.emoji, deltas: [], salesInfo: null, supplyDemand: null, feedback: 0, tip: null, partnerDrama: null };
 
   // Cache timeCost BEFORE action logic (some actions consume _restHours etc.)
-  const _cachedTimeCost = getTimeCost(state, actionId);
+  let _cachedTimeCost = getTimeCost(state, actionId);
 
   // --- Show savings dip from last turn's event (only on first action of month) ---
   if (state.monthActions.length === 0 && state._pendingEventDip) {
@@ -1507,6 +1525,7 @@ export function executeAction(state, actionId) {
           result.deltas.push({ icon: 'heart', label: '小遗憾', value: '-1', positive: false });
         }
         state.attendingEvent = null;
+        _cachedTimeCost = 0; // 流展不消耗闲暇时间
         result.tip = { label: '流展风险', text: '展会因故取消是同人创作者面临的真实风险。路费变成沉没成本，无法追回。经济学告诉我们：不要因为已经花了路费就做出非理性决策——关键是接下来怎么安排。' };
         // Skip all selling logic below
       } else {
@@ -1521,10 +1540,14 @@ export function executeAction(state, actionId) {
       if (isAttend) {
         state.recentEventTurns.push(state.turn);
         const recentCount = state.recentEventTurns.filter(t => state.turn - t < 6).length;
-        // Gentler fatigue curve: 1st=100%, 2nd=85%, 3rd=70%, 4th=55%, 5th+=40%
-        eventFatigue = recentCount <= 1 ? 1.0 : Math.max(0.40, 1.0 - (recentCount - 1) * 0.15);
-        // Extra passion drain for frequent attending (milder)
-        if (recentCount >= 4) fatigueDrain = (recentCount - 3) * 4; // 4th→-4, 5th→-8
+        // High resilience reduces fatigue buildup: each point widens the curve
+        const res = state.endowments.resilience || 0;
+        const fatigueRate = Math.max(0.08, 0.15 - res * 0.02); // res0=0.15, res1=0.13, res3=0.09
+        const fatigueFloor = Math.max(0.25, 0.40 - res * 0.05); // res0=0.40, res1=0.35, res3=0.25
+        eventFatigue = recentCount <= 1 ? 1.0 : Math.max(fatigueFloor, 1.0 - (recentCount - 1) * fatigueRate);
+        // Extra passion drain: resilience delays onset and reduces amount
+        const drainStart = 4 + Math.floor(res / 2); // res0→4th, res2→5th, res3→5th
+        if (recentCount >= drainStart) fatigueDrain = Math.max(1, (recentCount - drainStart + 1) * Math.max(1, 4 - res)); // res0: 4/8, res3: 1/2
       }
 
       if (isAttend && mg) {
@@ -1882,7 +1905,7 @@ export function executeAction(state, actionId) {
         result.deltas.push({ icon: 'battery-medium', label: '创作疲劳拖慢进度', value: `效率×0.85`, positive: false });
       }
       state.hvpProject.progress += progressEff;
-      if (getLifeStage(state.turn) === 'work' && !state.unemployed) {
+      if (getLifeStage(state.turn) === 'work' && !state.unemployed && !state.fullTimeDoujin) {
         result.deltas.push({ icon: 'smiley-sad', label: '下班后创作效率降低', value: '进度×0.7', positive: false });
       }
       const p = state.hvpProject;
@@ -1993,9 +2016,23 @@ export function executeAction(state, actionId) {
         }
 
         // Reputation gain — base floor + info-scaled + skill
-        const repGain = addReputation(state, (0.04 + 0.08 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus);
+        // Absurd pricing penalty: gouging damages reputation
+        const mktAvg = state.market ? getMarketAvgPrice(state.market, state, 'hvp') : 50;
+        const priceRatio = hvpPrice / Math.max(1, mktAvg);
+        let pricingRepMod = 1.0;
+        if (priceRatio > 2.0) {
+          // Overpriced: reputation hit instead of gain
+          const penalty = Math.min(0.3, (priceRatio - 2.0) * 0.1);
+          addReputation(state, -penalty);
+          result.deltas.push({ icon: 'trend-down', label: '定价过高引发争议', value: `声誉-${penalty.toFixed(2)}`, positive: false });
+          pricingRepMod = 0;
+        } else if (priceRatio > 1.5) {
+          pricingRepMod = 0.5; // reduced rep gain
+          result.deltas.push({ icon: 'smiley-meh', label: '定价偏高，口碑打了折扣', value: '', positive: false });
+        }
+        const repGain = addReputation(state, (0.04 + 0.08 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus * pricingRepMod);
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
-        result.deltas.push({ icon: 'star', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: true });
+        result.deltas.push({ icon: 'star', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: repGain > 0 });
 
         // Community feedback (people know you released something new)
         const feedback = calculateFeedback(state);
@@ -2091,10 +2128,22 @@ export function executeAction(state, actionId) {
     state.totalLVP++;
     state.recentLVP = 1;
 
-    // Reputation gain — base floor + info-scaled + skill
-    const repGain = addReputation(state, (0.01 + 0.02 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus);
+    // Reputation gain — with pricing penalty for absurd prices
+    const lvpMktAvg = state.market ? getMarketAvgPrice(state.market, state, 'lvp') : 15;
+    const lvpPriceRatio = lvpPrice / Math.max(1, lvpMktAvg);
+    let lvpPricingMod = 1.0;
+    if (lvpPriceRatio > 2.0) {
+      const penalty = Math.min(0.15, (lvpPriceRatio - 2.0) * 0.05);
+      addReputation(state, -penalty);
+      result.deltas.push({ icon: 'trend-down', label: '定价过高引发争议', value: `声誉-${penalty.toFixed(2)}`, positive: false });
+      lvpPricingMod = 0;
+    } else if (lvpPriceRatio > 1.5) {
+      lvpPricingMod = 0.5;
+      result.deltas.push({ icon: 'smiley-meh', label: '定价偏高，口碑打了折扣', value: '', positive: false });
+    }
+    const repGain = addReputation(state, (0.01 + 0.02 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus * lvpPricingMod);
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
-    result.deltas.push({ icon: 'star', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: true });
+    result.deltas.push({ icon: 'star', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: repGain > 0 });
 
     // Community feedback
     const feedback = calculateFeedback(state);
@@ -2120,30 +2169,27 @@ export function executeAction(state, actionId) {
     result.tip = TIPS.lvp;
 
   } else if (action.type === 'reprint') {
-    // === REPRINT: add more copies to selected works ===
-    const workIds = state._reprintWorkIds || [];
-    state._reprintWorkIds = null;
+    // === REPRINT: multi-work with per-work custom quantity ===
+    const orders = state._reprintOrders || [];
+    state._reprintOrders = null;
 
-    if (workIds.length === 0) {
+    if (orders.length === 0) {
       result.deltas.push({ icon: 'warning', label: '没有选择追印的作品', value: '', positive: false });
-      result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。' };
     } else {
       state.passion -= 3;
       result.deltas.push({ icon: 'heart', label: '安排印刷', value: '-3', positive: false });
 
       let totalReprintCost = 0;
-
-      for (const workId of workIds) {
-        const work = state.inventory.works.find(w => w.id === workId);
+      for (const order of orders) {
+        const work = state.inventory.works.find(w => w.id === order.id);
         if (!work) continue;
+        const qty = order.qty;
         const isHVP = work.type === 'hvp';
         const sub = isHVP ? (HVP_SUBTYPES[work.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[work.subtype] || LVP_SUBTYPES.acrylic);
-        const qty = isHVP ? 60 : 20;
         const unitCost = isHVP ? 20 : 6;
         const cost = qty * unitCost;
         addMoney(state, -cost);
         totalReprintCost += cost;
-        // Reprinting a marked rare work → schedule speculator crash
         if (work.isRareWork) {
           work.isRareWork = false;
           state.reprintCrashTurn = state.turn + 2 + Math.floor(Math.random() * 3);
@@ -2480,58 +2526,60 @@ export function endMonth(state) {
     }
   }
 
-  // --- Student debt bailout: family intervenes at -¥15000 ---
+  // --- Student debt bailout: family intervenes at -¥10000 ---
+  // Tycoon: unlimited bailouts. Everyone else: first time help, second time game over.
   if (getLifeStage(state.turn) === 'university' && state.money <= -10000 && !state._debtBailoutDone) {
-    state._debtBailoutDone = true; // only triggers once
+    state._debtBailoutDone = true;
     const bg = state.background;
     const debt = Math.abs(state.money);
 
-    if (bg === 'poor') {
-      // 困难家庭：无力兜底，给一次缓冲警告
-      if (!state._debtFinalWarning) {
-        // First hit: warning + small help
-        state._debtFinalWarning = true;
-        addMoney(state, 3000); // 家里东拼西凑了一点
+    if (bg === 'tycoon') {
+      // 超级富哥：无限兜底
+      state.money = 0;
+      addMoney(state, 8000);
+      result.deltas.push({ icon: 'crown', label: '家里帮你还清了欠款', value: `¥${debt}`, positive: false });
+      result.deltas.push({ icon: 'diamond', label: '"想做就做，钱不是问题"', value: '额外给了¥8000', positive: true });
+      // Tycoon resets flag — can bail out again
+      state._debtBailoutDone = false;
+    } else if (state._debtBailedOnce) {
+      // Second bailout for non-tycoon: game over
+      state.passion = 0;
+      state.phase = 'gameover';
+      const reasons = {
+        poor: '家里已经借遍了亲戚，再也拿不出一分钱了。你不得不放弃同人创作，打工还债……',
+        ordinary: '父母说上次已经是最后一次了。"我们没有那么多钱给你挥霍，把心思放在学业上。"',
+        comfort: '家里虽然还能承受，但父母对你彻底失望了。"既然管不好钱，就别再搞这些了。"',
+        educated: '"我们支持你创作，但不支持你这样挥霍。"父母取消了所有经济支持。',
+        wealthy: '即使家里不缺钱，父母也对你的财务能力完全失去了信心。"先学会管钱再说别的。"',
+      };
+      state.gameOverReason = reasons[bg] || reasons.ordinary;
+      return result;
+    } else {
+      // First bailout for non-tycoon
+      state._debtBailedOnce = true;
+      if (bg === 'poor') {
+        addMoney(state, 3000);
         state.passion = Math.max(0, state.passion - 20);
         result.deltas.push({ icon: 'house-simple', label: '家里来电话了…', value: '东拼西凑帮你还了¥3000', positive: false });
         result.deltas.push({ icon: 'smiley-sad', label: '"家里实在拿不出更多了"', value: '热情-20', positive: false });
-        result.deltas.push({ icon: 'warning', label: '再欠下去家里真的撑不住了', value: '', positive: false });
+      } else if (bg === 'ordinary' || bg === 'comfort') {
+        state.money = 0;
+        state.passion = Math.max(0, state.passion - 15);
+        result.deltas.push({ icon: 'house', label: '父母帮你还清了欠款', value: `¥${debt}`, positive: false });
+        result.deltas.push({ icon: 'smiley-sad', label: '"以后花钱悠着点"', value: '热情-15', positive: false });
       } else {
-        // Second time: game over
-        state.passion = 0;
-        state.phase = 'gameover';
-        state.gameOverReason = '欠债太多，家里已经借遍了亲戚也无力偿还。你不得不放弃同人创作，打工还债……';
-        return result;
+        // educated / wealthy: 兜底 + 支持
+        state.money = 0;
+        const support = bg === 'wealthy' ? 3000 : 1500;
+        addMoney(state, support);
+        result.deltas.push({ icon: BACKGROUNDS[bg].emoji, label: '家里帮你还清了欠款', value: `¥${debt}`, positive: false });
+        result.deltas.push({ icon: bg === 'educated' ? 'books' : 'diamond', label: '"这是最后一次了"', value: `额外给了¥${support}`, positive: true });
+        state.passion = Math.max(0, state.passion - 10);
       }
-    } else if (bg === 'ordinary' || bg === 'comfort') {
-      // 普通/小康家庭：兜底还债，但有概率禁止继续
-      state.money = 0; // 家里帮你还清
-      state.passion = Math.max(0, state.passion - 15);
-      result.deltas.push({ icon: 'house', label: '父母帮你还清了欠款', value: `¥${debt}`, positive: false });
-      result.deltas.push({ icon: 'smiley-sad', label: '"以后花钱悠着点"', value: '热情-15', positive: false });
-      // 30% chance parents forbid doujin
-      if (Math.random() < 0.3) {
-        state.passion = 0;
-        state.phase = 'gameover';
-        state.gameOverReason = '父母帮你还完债后非常生气，勒令你不许再搞同人了。"把心思放在学业上！"';
-        return result;
-      }
-      result.deltas.push({ icon: 'warning', label: '父母很不高兴，下不为例', value: '', positive: false });
-    } else {
-      // 书香门第/富裕/超级富哥：兜底 + 额外支持
-      state.money = 0;
-      const support = bg === 'wealthy' ? 3000 : bg === 'tycoon' ? 8000 : 1500;
-      addMoney(state, support);
-      result.deltas.push({ icon: BACKGROUNDS[bg].emoji, label: '家里帮你还清了欠款', value: `¥${debt}`, positive: false });
-      if (bg === 'educated') {
-        result.deltas.push({ icon: 'books', label: '"创作是好事，但要量力而行"', value: `额外给了¥${support}支持`, positive: true });
-      } else {
-        result.deltas.push({ icon: 'diamond', label: '"想做就做，钱不是问题"', value: `额外给了¥${support}`, positive: true });
-      }
+      result.deltas.push({ icon: 'warning', label: '下次不会再有人帮你了', value: '', positive: false });
     }
   }
-  // Reset bailout flag if debt recovered (allow re-trigger if they go back into deep debt)
-  if (state.money > -7000) state._debtBailoutDone = false;
+  // Only tycoon resets bailout flag (handled above); others keep it permanently
 
   // --- Passive income ---
   const stage = getLifeStage(state.turn);
@@ -2701,9 +2749,13 @@ export function endMonth(state) {
     if (state.inventory.hvpStock > 0) {
       const totalAlpha = nHVP * 1.0 + state.reputation;
       const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
-      const rawDemand = cs / 1000 * 5 * share * baseConv * onlineFactor * onlineShModHVP;
-      // Guarantee at least 1 sale if reputation > 0 and info > 0 (long tail online)
-      const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
+      // Price elasticity: player's pricing vs market avg affects online demand
+      const hvpMktAvg = state.market ? getMarketAvgPrice(state.market, state, 'hvp') : 50;
+      const hvpPlayerPrice = state.inventory.hvpPrice || 50;
+      const hvpPricePenalty = Math.pow(Math.max(0.01, hvpPlayerPrice / hvpMktAvg), -1.06);
+      const rawDemand = cs / 1000 * 5 * share * baseConv * onlineFactor * onlineShModHVP * hvpPricePenalty;
+      // No guarantee — market decides, absurd prices get zero sales
+      const demand = Math.max(0, Math.round(rawDemand));
       if (demand > 0) {
         const hvpResult = sellFromWorks(state, 'hvp', demand);
         if (hvpResult.sold > 0) {
@@ -2719,8 +2771,12 @@ export function endMonth(state) {
     if (state.inventory.lvpStock > 0) {
       const totalAlpha = nLVP * 0.2 + state.reputation;
       const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
-      const rawDemand = cs / 1000 * 15 * share * baseConv * onlineFactor * onlineShModLVP;
-      const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
+      // Price elasticity for LVP
+      const lvpMktAvg = state.market ? getMarketAvgPrice(state.market, state, 'lvp') : 15;
+      const lvpPlayerPrice = state.inventory.lvpPrice || 15;
+      const lvpPricePenalty = Math.pow(Math.max(0.01, lvpPlayerPrice / lvpMktAvg), -0.92);
+      const rawDemand = cs / 1000 * 15 * share * baseConv * onlineFactor * onlineShModLVP * lvpPricePenalty;
+      const demand = Math.max(0, Math.round(rawDemand));
       if (demand > 0) {
         const lvpResult = sellFromWorks(state, 'lvp', demand);
         if (lvpResult.sold > 0) {
@@ -2770,6 +2826,76 @@ export function endMonth(state) {
       state.totalRevenue += totalDigiRev;
       result.digitalSalesDetails = digiDetails;
       result.digitalSalesTotal = totalDigiRev;
+    }
+  }
+
+  // --- Resolve prediction market contracts (Polymarket-style shares) ---
+  if (state._predictions) {
+    const pm = state._predictions;
+    if (!pm.contracts) pm.contracts = [];
+    if (!pm.holdings) pm.holdings = [];
+    if (!pm.resolved) pm.resolved = [];
+    // Tick prices + generate daily candles for active contracts
+    for (const c of pm.contracts) {
+      if (state.turn < c.resolveTurn && c._lastTickTurn !== state.turn) {
+        if (!c.priceHistory) c.priceHistory = [c.price || 50];
+        if (!c.candles) c.candles = [];
+        const prevPrice = c.price;
+        const noise = (Math.random() - 0.5) * 12;
+        const turnsLeft = Math.max(1, c.resolveTurn - state.turn);
+        const drift = ((Math.random() < 0.5 ? c.price + (Math.random() - 0.4) * 10 : c.price) - c.price) * Math.min(0.3, 1 / turnsLeft);
+        c.price = Math.max(5, Math.min(95, Math.round(c.price + noise + drift)));
+        c.priceHistory.push(c.price);
+        // Generate daily ticks via Brownian bridge and append candles
+        const a = prevPrice, b = c.price;
+        const vol = Math.abs(b - a) * 0.4 + 1.5;
+        const dailyTicks = [a];
+        for (let s = 1; s < 30; s++) {
+          const t = s / 30;
+          dailyTicks.push(a + t * (b - a) + (Math.random() - 0.5) * 2 * vol * Math.sqrt(t * (1 - t)));
+        }
+        dailyTicks.push(b);
+        for (let di = 0; di < dailyTicks.length - 1; di += 2) {
+          const slice = dailyTicks.slice(di, Math.min(di + 3, dailyTicks.length));
+          if (slice.length < 2) break;
+          c.candles.push({ open: slice[0], close: slice[slice.length - 1], high: Math.max(...slice), low: Math.min(...slice) });
+        }
+        c._lastTickTurn = state.turn;
+      }
+    }
+    // Resolve matured contracts
+    const predSettlements = [];
+    pm.contracts = pm.contracts.filter(c => {
+      if (state.turn >= c.resolveTurn) {
+        const outcome = typeof c.resolveCheck === 'function' ? c.resolveCheck(state) : false;
+        const related = pm.holdings.filter(h => h.contractId === c.id);
+        for (const h of related) {
+          const won = (h.side === 'yes' && outcome) || (h.side === 'no' && !outcome);
+          const payout = won ? h.shares * 100 : 0;
+          const profit = payout - h.cost;
+          pm.totalProfit = (pm.totalProfit || 0) + profit;
+          if (payout > 0) addMoney(state, payout);
+          // Record loss in this month's expense for financial summary visibility
+          // (principal was deducted at bet time, but we show the loss in settlement month)
+          if (!won) state._monthExpense = (state._monthExpense || 0) + h.cost;
+          pm.resolved.push({ question: c.question, side: h.side, won, payout, profit, resolvedAt: state.turn });
+          predSettlements.push({ question: c.question, side: h.side, shares: h.shares, cost: h.cost, won, payout, profit, outcome: outcome ? 'YES' : 'NO' });
+        }
+        pm.holdings = pm.holdings.filter(h => h.contractId !== c.id);
+        if (pm.resolved.length > 15) pm.resolved = pm.resolved.slice(-15);
+        return false;
+      }
+      return true;
+    });
+    if (predSettlements.length > 0) {
+      result.predictionSettlements = predSettlements;
+      const totalPL = predSettlements.reduce((s, p) => s + p.profit, 0);
+      result.deltas.push({
+        icon: totalPL >= 0 ? 'chart-line-up' : 'chart-line-down',
+        label: `织梦交易结算 (${predSettlements.length}笔)`,
+        value: `${totalPL >= 0 ? '+' : ''}¥${totalPL}`,
+        positive: totalPL >= 0,
+      });
     }
   }
 
@@ -2927,9 +3053,9 @@ const TIPS = {
   hvpComplete: { label: `${ic('confetti')} 作品完成·入库`, text: '同人本完成并入库！现在去参加同人展售卖，或等待网上零售慢慢出货。同时携带同人本和谷子参展会触发联动加成。记得关注库存——卖光了要追加印刷！' },
   lvp: { label: '谷子入库', text: '同人谷一个月就能完成并入库，低门槛低风险。去同人展售卖可以一次卖出大量库存。网上也会有少量零售。注意库存管理——制作太多会积压资金，太少则展会上供不应求。' },
   rest: { label: '热情预算理论', text: '休息恢复热情的效率随入坑年限递减。长期疲惫是不可逆的。同时注意：停滞创作超过3个月后，热情会加速衰减——"不用就会生锈"。' },
-  doujinEvent: { label: '同人展经济学 (Stigler)', text: '同人展是"搜寻成本→0"的极端场景：消费者直接翻阅实物，面对面交易消除信息不对称。路费是参展的机会成本，大社群有更多展会选择（规模经济）。' },
+  doujinEvent: { label: '同人展经济学', text: '同人展是搜寻成本趋近于0的极端场景：消费者直接翻阅实物，面对面交易消除信息不对称。路费是参展的机会成本，大社群有更多展会选择（规模经济）。' },
   promoteLight: { label: '轻度宣发', text: '低成本维持曝光。信号通胀越严重效果越差。适合资源紧张时维持存在感。信息透明度每月快速衰减，注意节奏。' },
-  promoteHeavy: { label: '全力宣发 (Stigler)', text: '大规模宣发：发试阅、打样返图、详细介绍。宣发后立刻制作售卖，抓住窗口！' },
+  promoteHeavy: { label: '全力宣发', text: '大规模宣发：发试阅、打样返图、详细介绍。宣发后立刻制作售卖，抓住窗口！' },
   partnerFound: { label: '协作约束', text: '协作可得性是本子创作的第一大触发条件。默契搭档在热情和销量上都有正面加成。' },
   partnerFail: { label: '声誉与协作', text: '协作概率随声誉递增。声誉越高越容易找到搭档——这是声誉的隐性收益。' },
   partnerRisk: { label: '搭档风险', text: '搭档类型是随机的。严格搭档虽然出品好但压力大，不靠谱搭档可能临时消失。协作引入了额外的不确定性。' },

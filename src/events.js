@@ -3,7 +3,7 @@
  * Scheduled and random events, decoupled for maintainability
  */
 
-import { getLifeStage, getCreativeSkill, addMoney } from './engine.js';
+import { getLifeStage, getCreativeSkill, addMoney, addReputation } from './engine.js';
 
 // Internal helper — calendar month from turn
 function getCalendarMonth(turn) { return ((turn + 6) % 12) + 1; }
@@ -44,7 +44,7 @@ export const SCHEDULED_EVENTS = [
       id: 'uni_club', emoji: 'mask-happy', title: '社团招新',
       desc: '大学社团招新季！你加入了创作相关社团，认识了很多同好。',
       effect: '声誉+0.2 热情+5', effectClass: 'positive',
-      apply: (s) => { s.reputation += 0.2; s.passion = Math.min(100, s.passion + 5); },
+      apply: (s) => { addReputation(s, 0.2); s.passion = Math.min(100, s.passion + 5); },
       tip: '社群网络扩展降低了协作搜寻成本。认识的人越多，越容易找到搭档。',
     },
   },
@@ -78,7 +78,7 @@ export const RANDOM_EVENTS = [
     id: 'boom', emoji: 'fire', title: '圈内大佬出圈了！',
     desc: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; return big ? '一位知名创作者的作品在社交媒体上爆火，但无标度网络中流量集中在头部，你很难分到红利。' : '一位知名创作者的作品在社交媒体上爆火，整个圈子的关注度都上升了。'; },
     effect: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; return big ? '热情+10' : '声誉+0.3 热情+10'; }, effectClass: 'positive',
-    apply: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; if (!big) s.reputation += 0.3; s.passion = Math.min(100, s.passion + 10); },
+    apply: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; if (!big) addReputation(s, 0.3); s.passion = Math.min(100, s.passion + 10); },
     tip: (s) => { const big = s.advanced?.networkPhase === 'mature' || s.advanced?.networkPhase === 'fragmented'; return big ? '无标度网络中度分布服从幂律——少数超级节点占据绝大多数连接。普通创作者几乎分不到热度红利。' : '在无干预的同人市场中，任何创作者的出圈都是正外部性——别人把盘子做大了，你不花任何成本就能享受流量红利。'; },
     weight: 12, when: () => true, maxTotal: Infinity,
   },
@@ -118,7 +118,7 @@ export const RANDOM_EVENTS = [
     id: 'doujin_event', emoji: 'tent', title: '同人展开催！',
     desc: '本地同人展即将举办！面对面贩售，信息披露自动拉满。',
     effect: '声誉+0.2 资金+200 信息↑', effectClass: 'positive',
-    apply: (s) => { s.reputation += 0.2; addMoney(s, 200); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); },
+    apply: (s) => { addReputation(s, 0.2); addMoney(s, 200); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); },
     tip: '同人展是信息密集的面对面交易——消费者直接翻阅实物',
     weight: 8, when: (s) => s.totalHVP > 0 || s.totalLVP > 0, maxTotal: Infinity,
   },
@@ -206,7 +206,7 @@ export const RANDOM_EVENTS = [
     id: 'inspiration_burst', emoji: 'sparkle', title: '灵感爆发！',
     desc: '你的创作天赋在某个瞬间被点燃，脑海中涌现出绝妙的创意！',
     effect: '热情+8 声誉+0.2', effectClass: 'positive',
-    apply: (s) => { s.passion = Math.min(100, s.passion + 8); s.reputation += 0.2; },
+    apply: (s) => { s.passion = Math.min(100, s.passion + 8); addReputation(s, 0.2); },
     tip: '创作天赋高的创作者更容易进入"心流"状态。这种突发灵感是内在动机的体现',
     weight: 4, when: (s) => (s.endowments.talent || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
@@ -246,7 +246,7 @@ export const RANDOM_EVENTS = [
     id: 'viral_post', emoji: 'phone', title: '帖子意外火了！',
     desc: '你随手发的一条动态获得了大量转发，信息扩散到了意想不到的范围！',
     effect: '信息+30% 声誉+0.15', effectClass: 'positive',
-    apply: (s) => { s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); s.reputation += 0.15; },
+    apply: (s) => { s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); addReputation(s, 0.15); },
     tip: '营销直觉高的创作者更善于制造传播点。信息披露是比声誉更直接的转化驱动力。',
     weight: 3, when: (s) => (s.endowments.marketing || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
@@ -262,7 +262,7 @@ export const RANDOM_EVENTS = [
     id: 'harsh_review', emoji: 'smiley-angry', title: '遭遇恶评',
     desc: '你通过一些渠道知道了针对你的黑屁，言辞很伤人...',
     effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)} 声誉-${Math.round(15 * m)}%`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); s.reputation *= (1 - 0.15 * m); },
+    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); addReputation(s, -(s.reputation * 0.15 * m)); },
     tip: '恶评针对的是你个人，会直接损害声誉。心理韧性低的人受影响更大。和圈内塌方不同——塌方只伤心态，恶评伤口碑。',
     weight: 5, when: (s) => s.reputation > 0.5 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
@@ -313,7 +313,7 @@ export const RANDOM_EVENTS = [
     },
     effect: '资金+声誉加成 声誉+0.3', effectClass: 'positive',
     apply: (s) => {
-      addMoney(s, 500 + Math.round(s.maxReputation * 200)); s.reputation += 0.3;
+      addMoney(s, 500 + Math.round(s.maxReputation * 200)); addReputation(s, 0.3);
       const w = findRareWork(s);
       if (w) w.isRareWork = true;
     },
@@ -490,7 +490,7 @@ export const RANDOM_EVENTS = [
     id: 'bestie_promo', emoji: 'megaphone', title: '小柚帮你在朋友圈疯狂安利',
     desc: '闺蜜在各种群和社交媒体帮你转发作品，一波自来水带来了不少新关注。',
     effect: '声誉+0.3 信息+15%', effectClass: 'positive',
-    apply: (s) => { s.reputation += 0.3; s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.15); },
+    apply: (s) => { addReputation(s, 0.3); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.15); },
     tip: '口碑营销的本质是信任传递——朋友推荐的可信度远高于自卖自夸。这是社交资本最直接的变现方式。',
     weight: 3, when: (s) => (s.bestieAffinity || 0) >= 40 && s.totalHVP + s.totalLVP > 0, maxTotal: Infinity,
   },
@@ -506,7 +506,7 @@ export const RANDOM_EVENTS = [
     id: 'bestie_collab', emoji: 'handshake', title: '小柚提议一起做个小企划',
     desc: '闺蜜突然发来消息："我们一起做个联名谷子吧！我出文案你出图！" 合作过程充满欢笑。',
     effect: '热情+12 声誉+0.2 资金+500', effectClass: 'positive',
-    apply: (s) => { s.passion = Math.min(100, s.passion + 12); s.reputation += 0.2; addMoney(s, 500); },
+    apply: (s) => { s.passion = Math.min(100, s.passion + 12); addReputation(s, 0.2); addMoney(s, 500); },
     tip: '朋友间的非正式合作往往能产出最有灵气的作品——因为没有KPI的压力，只有纯粹的创作快乐。',
     weight: 2, when: (s) => (s.bestieAffinity || 0) >= 55 && s.turn > 12, maxTotal: 3,
   },
@@ -522,7 +522,7 @@ export const RANDOM_EVENTS = [
     id: 'bestie_network', emoji: 'users', title: '小柚介绍了一个圈内朋友给你',
     desc: '"我有个朋友也搞同人的，你们肯定聊得来！" 新认识的人给了你很多灵感和市场信息。',
     effect: '声誉+0.15 信息+10%', effectClass: 'positive',
-    apply: (s) => { s.reputation += 0.15; s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1); },
+    apply: (s) => { addReputation(s, 0.15); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1); },
     tip: '弱关系理论：你的闺蜜认识的人，跟你的社交圈重叠度低，因此能带来更多新信息和新机会。',
     weight: 3, when: (s) => (s.bestieAffinity || 0) >= 35, maxTotal: Infinity,
   },

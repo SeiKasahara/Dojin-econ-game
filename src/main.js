@@ -123,6 +123,8 @@ function handleAction(actionId) {
       openSNSPanel(state);
     } else if (appId === 'browser') {
       openBrowserApp();
+    } else if (appId === 'prediction') {
+      import('./prediction-market.js').then(({ openPredictionMarket }) => openPredictionMarket(state));
     } else if (appId === 'market') {
       openMarketApp(state);
     } else if (appId === 'rest') {
@@ -222,8 +224,8 @@ function handleAction(actionId) {
 
   // === Reprint: type selection → proceed ===
   if (actionId === 'reprint') {
-    renderReprintSelector(state, (workIds) => {
-      state._reprintWorkIds = workIds;
+    renderReprintSelector(state, (orders) => {
+      state._reprintOrders = orders; // [{ id, qty }, ...]
       executeInMonth(actionId);
     }, cancelBack);
     return;

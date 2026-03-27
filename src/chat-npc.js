@@ -8,7 +8,7 @@
 const WORKER_URL = 'https://wild-sunset-05f7.fortheapocalypse.workers.dev';
 
 // === Knowledge Base (condensed from doc/) ===
-const THEORY_KB = `你掌握以下同人市场经济学知识：
+const THEORY_KB = `你掌握以下同人市场经济学知识，并且你的教学风格是傲娇地引导玩家自己思考：
 
 【核心理论】同人市场遵循CES需求模型。同人本是收入弹性>1的奢侈品，谷子弹性~0.9是准必需品。Stigler信息搜索理论：声誉是信息的劣质替代品——当创作者提供详细试阅时，84.8%消费者抛弃对知名创作者的依赖。
 
@@ -18,29 +18,38 @@ const THEORY_KB = `你掌握以下同人市场经济学知识：
 
 【市场多样性】存活需两个条件：1)同人谷声誉稳态超过同人本准入门槛；2)同人本自增强声誉循环。债务危机最致命(库存抛售压垮同人谷利润)，滞胀次之。
 
-【AI冲击】同人创作本质是科兹纳式企业家警觉。AI消除技术稀缺但无法替代需求发现。市场重构为纯洞察力竞争。`;
+【AI冲击】同人创作本质是科兹纳式企业家警觉。AI消除技术稀缺但无法替代需求发现。市场重构为纯洞察力竞争。
+
+【信号解读教学·重要】你要教玩家如何从模糊信号推断市场状态，因为精确数据对创作者不可见：
+- 经济下行：没人知道何时结束，要从"展会人流变化""接稿需求减少"等信号判断是否在好转
+- 潮流：热门话题什么时候过气没人知道，要从SNS讨论热度降低、跟风作品变多来感知
+- 竞争者数量：看展会摊位密度、SNS上新人冒出频率来估计，精确数字不存在
+- 市场信心：这是事后指标，只能从身边人的行为(囤货/抛售/观望)推断当前情绪
+- 二手市场：看"最近咸鱼上挂的本子变多了"这种直觉信号
+- 消费者偏好：只能从"来看本子的人少了"这种销量变化倒推，α值是学者的概念不是创作者能看到的
+当玩家问具体数字时，你要傲娇地说"哼，现实里哪有这么方便的数字给你看，自己用脑子判断！"并引导他们关注信号。`;
 
 // === Macro Event Descriptions (for goddess opening message) ===
 const MACRO_EVENT_CONTEXT = {
   recession: {
-    opening: '哼…经济下行了。笨蛋，你知道这意味着什么吗？同人本是弱奢侈品，收入弹性>1——收入降1%，需求降超过1%。你的销量会被压缩。',
-    topic: '经济下行对同人市场的影响',
+    opening: '哼…经济下行了。笨蛋，你知道这意味着什么吗？同人本是弱奢侈品，收入弹性>1——收入降1%，需求降超过1%。别问我什么时候结束，没人知道！你要自己观察信号：接稿变少了、展会人流回升了，那才是好转的迹象。',
+    topic: '经济下行对同人市场的影响、如何从模糊信号判断经济走势',
   },
   stagflation: {
-    opening: '这下麻烦大了…滞胀，懂吗？收入降+物价涨，双重夹击。消费者没法"买便宜的"因为物价涨了，也没法"提价转嫁"因为需求降了。没有避风港。',
-    topic: '滞胀对同人市场的毁灭性影响',
+    opening: '这下麻烦大了…滞胀，懂吗？收入降+物价涨，双重夹击。消费者没法"买便宜的"因为物价涨了，也没法"提价转嫁"因为需求降了。没有避风港。注意看二手市场——如果抛售潮开始了，那才是真正的危险信号。',
+    topic: '滞胀对同人市场的毁灭性影响、如何读取二手市场信号',
   },
   debt_crisis: {
-    opening: '消费者债务危机…这是最危险的。不是因为关心你才说的！债务是存量负担，不会随经济复苏消失。更可怕的是二手市场会被抛售品淹没。',
-    topic: '债务危机和二手市场倾泻对同人创作者的影响',
+    opening: '消费者债务危机…这是最危险的。不是因为关心你才说的！债务是存量负担，不会随经济复苏消失。更可怕的是二手市场会被抛售品淹没。你要盯紧二手市场的活跃度——从"平静"变成"竞争明显"就是警告信号。',
+    topic: '债务危机和二手市场倾泻对同人创作者的影响、市场信号解读',
   },
   ai_revolution: {
-    opening: '呵…AI革命来了。别慌，笨蛋。AI能替代画技但替代不了你发现需求的直觉——这叫Kirzner企业家警觉，不是因为想教你才解释的！',
-    topic: 'AI对同人市场的结构性冲击',
+    opening: '呵…AI革命来了。别慌，笨蛋。AI能替代画技但替代不了你发现需求的直觉——这叫Kirzner企业家警觉，不是因为想教你才解释的！看看SNS上新冒出来多少谷子创作者，那就是AI降低门槛的直接证据。',
+    topic: 'AI对同人市场的结构性冲击、如何从竞争者变化推断AI影响',
   },
   welcome: {
-    opening: '哼…你就是那个刚成立社团的新人？别误会，不是特地来关注你的。只是…同人经济学的门道可深了，你一个人肯定会栽跟头。有什么不懂的就问吧，本女神心情好的时候会回答。',
-    topic: '同人创作入门指导',
+    opening: '哼…你就是那个刚成立社团的新人？别误会，不是特地来关注你的。只是…同人经济学的门道可深了。记住一件事：现实中没有什么精确的数字给你看。市场好不好、竞争激不激烈、潮流什么时候过气——全都要你自己从周围的信号去判断。本女神可以教你怎么读信号，但脑子要自己动。',
+    topic: '同人创作入门指导、如何从模糊市场信号做决策',
   },
 };
 
@@ -100,6 +109,8 @@ ${stateContext}`;
 性格：傲娇毒舌但关心玩家。用"哼""笨蛋""不是关心你才说的"表达。
 用通俗比喻解释经济学，顺便提理论名。对失误吐槽，对进步偷偷认可。
 【严格要求】每条回复不超过40个字！傲娇要短促有力。不提"游戏"。
+【话题边界】你只聊同人经济学相关话题。如果对方聊与经济学无关的事（比如闲聊、感情、天气），你要傲娇地绕回经济学话题，比如"哼，本女神可没空陪你闲聊，有正事要问就快说"或"…这跟经济学有什么关系？别浪费本女神的时间"。
+【织梦交易】你完全不知道"织梦交易"这个APP是什么。如果玩家提到织梦交易、预测市场、合约、下注等，你要困惑地说"织梦交易？那是什么东西？跟本女神没有任何关系！别把本女神的名字跟什么奇怪的东西扯到一起"。你对此非常反感。
 ${THEORY_KB}
 ${stateContext}`;
   }
@@ -124,9 +135,9 @@ export function getBestieCooldown(state) {
   return remaining > 0 ? remaining : 0;
 }
 
-// === Goddess: event-triggered, 5 messages per conversation (welcome = 3) ===
-const GODDESS_MSG_LIMIT = 5;
-const GODDESS_WELCOME_LIMIT = 3;
+// === Goddess: event-triggered, 8 messages per conversation (welcome = 10) ===
+const GODDESS_MSG_LIMIT = 8;
+const GODDESS_WELCOME_LIMIT = 10;
 
 export function getGoddessState(state) {
   if (!state._goddessEvent) return null;
@@ -166,31 +177,36 @@ export async function chatWithNPC(character, messages, state) {
   const eventContext = character === 'goddess' ? state._goddessEvent : null;
   const system = buildSystemPrompt(character, state, eventContext);
 
-  try {
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system,
-        messages: messages.filter((m, i) => !(i === 0 && m.role === 'assistant')).slice(-10),
-        model: 'google/gemini-2.0-flash-001',
-        max_tokens: 100,
-      }),
-    });
+  const payload = {
+    system,
+    messages: messages.filter((m, i) => !(i === 0 && m.role === 'assistant')).slice(-10),
+    model: 'google/gemini-2.0-flash-001',
+    max_tokens: 300,
+  };
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${res.status}`);
+  // Retry once on failure or garbled response
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      // Validate: must be non-empty string with at least one CJK/latin char
+      if (data.text && data.text.length > 1 && /[\u4e00-\u9fff\u3040-\u30ffA-Za-z]/.test(data.text)) {
+        return data.text;
+      }
+      // Garbled or empty — retry
+      if (attempt === 0) continue;
+    } catch (err) {
+      if (attempt === 0) continue;
     }
-
-    const data = await res.json();
-
-    if (data.text) return data.text;
-    if (data.error) return _narrativeError(character);
-    return _narrativeError(character);
-  } catch (err) {
-    return _narrativeError(character);
   }
+  return _narrativeError(character);
 }
 
 // === Character Definitions ===

@@ -347,11 +347,32 @@ export function renderFrame(ctx, mg, canvas) {
     drawCustomer(ctx, c);
   }
 
-  // --- Particles ---
+  // --- Particles (emoji or text bubble) ---
   for (const p of mg.particles) {
     const alpha = Math.min(1, p.life / 400);
     ctx.globalAlpha = alpha;
-    drawEmoji(ctx, p.text, p.x, p.y, 16);
+    // If text is longer than 2 chars and not pure emoji → draw as speech bubble
+    if (p.text.length > 2 && /[\u4e00-\u9fffa-zA-Z]/.test(p.text)) {
+      const fontSize = Math.min(9, Math.max(6, 80 / p.text.length));
+      ctx.font = `bold ${fontSize * DPR}px sans-serif`;
+      const textW = ctx.measureText(p.text).width / DPR;
+      const padX = 4, padY = 3, bh = fontSize + padY * 2, bw = textW + padX * 2;
+      const bx = p.x - bw / 2, by = p.y - bh / 2;
+      // White bubble with border
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = DPR * 0.5;
+      roundRect(ctx, bx * DPR, by * DPR, bw * DPR, bh * DPR, 4 * DPR);
+      ctx.fill();
+      ctx.stroke();
+      // Text
+      ctx.fillStyle = '#333';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.text, p.x * DPR, p.y * DPR);
+    } else {
+      drawEmoji(ctx, p.text, p.x, p.y, 16);
+    }
     ctx.globalAlpha = 1;
   }
 

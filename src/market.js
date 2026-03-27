@@ -110,7 +110,7 @@ export function tickMarket(market, playerState) {
     market.nLVP -= upgrades;
     market.nHVP += upgrades;
     market.cumHVPProduced += upgrades;
-    events.push(`${ic('book-open-text')} ${upgrades}位同人谷创作者转化为同人本创作者！`);
+    events.push(`${ic('book-open-text')} ${upgrades}位同人谷创作者官宣成为同人本创作者！`);
   }
 
   // --- 3. HVP exits ---
@@ -119,7 +119,7 @@ export function tickMarket(market, playerState) {
   if (hvpExits > 0) {
     market.nHVP = Math.max(0, market.nHVP - hvpExits);
     market.cumHVPExited += hvpExits;
-    events.push(`${ic('smiley-sad')} ${hvpExits}位同人本创作者退出了市场`);
+    events.push(`${ic('smiley-sad')} ${hvpExits}位同人本创作者退坑了`);
   }
 
   // --- 4. LVP exits ---
@@ -135,7 +135,7 @@ export function tickMarket(market, playerState) {
       events.push(`${ic('warning')} 市场已3个月没有同人本创作者，消费者对同人本的期待正在衰退...`);
     }
     if (market.hvpZeroStreak === 8) {
-      events.push(`${ic('arrow-circle-down')} 多样性陷阱形成中！没有人制作同人本，消费者偏好正在被遗忘...`);
+      events.push(`${ic('arrow-circle-down')} 多样性陷阱形成中！没有人制作同人本...`);
     }
     // Vacuum profit recovery: small chance someone brave enters
     if (market.hvpZeroStreak > 5 && Math.random() < 0.04) {

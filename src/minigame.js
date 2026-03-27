@@ -5,6 +5,7 @@
 
 import { renderMinigame, renderFrame, renderScoring, preloadSprites } from './minigame-canvas.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES } from './engine.js';
+import { getMarketAvgPrice } from './market.js';
 import dialogData from './minigame-dialogs.json';
 
 const CUSTOMER_EMOJIS = ['👤', '🧑', '👩', '👨', '🧒', '👧', '🧑‍🎓', '👩‍🎓'];
@@ -85,6 +86,27 @@ function createState(mainState, event) {
     }),
     hasHVP: mainState.inventory?.hvpStock > 0,
     hasLVP: mainState.inventory?.lvpStock > 0,
+    // Per-work price ratios for customer reactions
+    workPriceRatios: (() => {
+      const mkt = mainState.market;
+      if (!mkt) return [];
+      const works = mainState.inventory?.works?.filter(w => w.qty > 0) || [];
+      return works.map(w => {
+        const avg = getMarketAvgPrice(mkt, mainState, w.type);
+        const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
+        const name = sub.name + (w.name ? '·' + w.name : '');
+        return { price: w.price, ratio: w.price / Math.max(1, avg), type: w.type, name };
+      });
+    })(),
+    // Summary: worst and best price ratio across all works
+    priceRatio: (() => {
+      const mkt = mainState.market;
+      if (!mkt) return 1.0;
+      const works = mainState.inventory?.works?.filter(w => w.qty > 0) || [];
+      if (works.length === 0) return 1.0;
+      const ratios = works.map(w => w.price / Math.max(1, getMarketAvgPrice(mkt, mainState, w.type)));
+      return ratios.reduce((s, r) => s + r, 0) / ratios.length; // average, not max
+    })(),
     // Neighbor chat
     neighborChatAvailable: false,
     neighborChatTimer: 15000 + Math.random() * 20000, // first chat after 15-35s
@@ -392,6 +414,75 @@ function updateCustomers(mg, dt) {
       c.patience -= dt;
       c.x += (boothCX + (c.id % 2 === 0 ? -30 : 30) - c.x) * 0.02;
       c.y += (boothCY - 30 - c.y) * 0.02;
+
+      // Price reaction: customer gravitates toward reasonably priced works
+      // Absurd prices get naturally ignored (low attention weight)
+      const wpr = mg.workPriceRatios || [];
+      let pr = mg.priceRatio || 1.0;
+      let pickedWorkName = '';
+      let pickedWorkPrice = 0;
+      if (wpr.length > 0) {
+        const weighted = wpr.map(w => {
+          const weight = w.ratio > 2.5 ? 0.05 : w.ratio > 1.8 ? 0.2 : w.ratio < 0.15 ? 0.1 : w.ratio < 0.3 ? 0.3 : 1.0;
+          return { ...w, weight };
+        });
+        const totalW = weighted.reduce((s, w) => s + w.weight, 0);
+        let roll = Math.random() * totalW;
+        let picked = weighted[weighted.length - 1];
+        for (const w of weighted) { roll -= w.weight; if (roll <= 0) { picked = w; break; } }
+        pr = picked.ratio;
+        pickedWorkName = picked.name || '';
+        pickedWorkPrice = picked.price || 0;
+      }
+      if (!c._priceReacted) {
+        c._priceReacted = true;
+        const pn = pickedWorkName; // short alias
+        const pp = pickedWorkPrice;
+        const PRICE_REACTIONS_EXPENSIVE = [
+          `${pn}卖¥${pp}？太贵了吧`, `¥${pp}的${pn}？告辞`, `${pn}这价格认真的？`,
+          `隔壁的便宜多了`, `${pn}…我还是再看看`,
+        ];
+        const PRICE_REACTIONS_ABSURD = [
+          `${pn}¥${pp}哈哈哈`, `${pn}这价格是行为艺术吗`, `¥${pp}？建议去卖房`,
+          `快来看${pn}的定价`, `${pn}比商业出版还贵笑死`,
+        ];
+        const PRICE_REACTIONS_CHEAP = [
+          `${pn}才¥${pp}？不会是残次品吧`, `${pn}这么便宜你不亏吗`,
+          `¥${pp}的${pn}…干脆送我好了`, `${pn}便宜得让人不敢买`,
+        ];
+        const PRICE_REACTIONS_FREE = [
+          `${pn}白送？真的假的`, `${pn}不要钱？总觉得哪里不对`,
+          `这位创作者还好吗…`,
+        ];
+
+        if (pr > 3.0) {
+          // Absurd overpricing: laugh and leave immediately
+          const txt = PRICE_REACTIONS_ABSURD[Math.floor(Math.random() * PRICE_REACTIONS_ABSURD.length)];
+          mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1800, vy: -0.04 });
+          c.satisfaction = 0;
+          c.patience = 0; // leave immediately
+        } else if (pr > 2.0) {
+          // Very expensive: most leave, some stay with low satisfaction
+          const txt = PRICE_REACTIONS_EXPENSIVE[Math.floor(Math.random() * PRICE_REACTIONS_EXPENSIVE.length)];
+          mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1500, vy: -0.04 });
+          c.satisfaction = Math.max(0, c.satisfaction - 30);
+          if (Math.random() < 0.6) c.patience = Math.min(c.patience, 500); // likely leave
+        } else if (pr > 1.5) {
+          // Somewhat expensive: hesitant
+          c.satisfaction = Math.max(0, c.satisfaction - 15);
+        } else if (pr < 0.2) {
+          // Nearly free: suspicious
+          const txt = PRICE_REACTIONS_FREE[Math.floor(Math.random() * PRICE_REACTIONS_FREE.length)];
+          mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1500, vy: -0.04 });
+          c.satisfaction = Math.max(0, c.satisfaction - 20);
+        } else if (pr < 0.4) {
+          // Very cheap: suspicious but tempted
+          const txt = PRICE_REACTIONS_CHEAP[Math.floor(Math.random() * PRICE_REACTIONS_CHEAP.length)];
+          mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1500, vy: -0.04 });
+          c.satisfaction = Math.max(0, c.satisfaction - 10);
+        }
+      }
+
       if (c.satisfaction >= 60) {
         c.state = 'buying'; c.stateTimer = 800;
       } else if (c.patience <= 0) {
@@ -543,6 +634,48 @@ function generateContextDialog(actionId, customer, mg) {
 }
 
 // === Dialog System ===
+// Price-specific dialog overrides
+function makePriceDialogsExpensive(name, price) {
+  return [
+    { customer: `${name}卖¥${price}…是认真的吗？`, choices: [
+      { text: '品质值这个价', reply: '呵，那我看看再说吧', positive: false },
+      { text: '确实有点贵…', reply: '有自知之明就好', positive: false },
+    ]},
+    { customer: `隔壁同类的比${name}便宜一半诶`, choices: [
+      { text: '我的质量不一样', reply: '…随你怎么说吧', positive: false },
+      { text: '你说得对…', reply: '建议你认真考虑一下定价', positive: false },
+    ]},
+    { customer: `${name}这价格劝退了好多人你知道吗`, choices: [
+      { text: '我相信识货的人会买', reply: '（默默走开了）', positive: false },
+      { text: '我会考虑调整的', reply: '嗯…下次见吧', positive: false },
+    ]},
+  ];
+}
+function makePriceDialogsAbsurd(name, price) {
+  return [
+    { customer: `你们快来看${name}的价格哈哈哈`, choices: [
+      { text: '…', reply: '（带着朋友笑着走了）', positive: false },
+      { text: '这是限量版…', reply: '限量版也不是这么定的吧', positive: false },
+    ]},
+    { customer: `${name}¥${price}？请问这是行为艺术吗？`, choices: [
+      { text: '不是，这是正常定价', reply: '（震惊.jpg）', positive: false },
+      { text: '可以这么理解…', reply: '那确实很有创意（笑）', positive: false },
+    ]},
+  ];
+}
+function makePriceDialogsCheap(name, price) {
+  return [
+    { customer: `${name}才¥${price}？你不亏吗？`, choices: [
+      { text: '交个朋友嘛', reply: '虽然感动但总觉得哪里不对', positive: true },
+      { text: '薄利多销', reply: '希望你算过成本…', positive: true },
+    ]},
+    { customer: `${name}这个价格…你干脆送我好了`, choices: [
+      { text: '那不至于哈哈', reply: '好吧那我就买了…', positive: true },
+      { text: '下次涨价哦', reply: '那我趁现在多买几本', positive: true },
+    ]},
+  ];
+}
+
 function tryTriggerDialog(mg, actionId, nearby) {
   if (mg.activeDialog) return false;
   if (mg.dialogCount >= MAX_DIALOGS_PER_GAME) return false;
@@ -550,6 +683,44 @@ function tryTriggerDialog(mg, actionId, nearby) {
   if (Math.random() > DIALOG_CHANCE) return false;
 
   const target = nearby[Math.floor(Math.random() * nearby.length)];
+
+  // Pick a random work (weighted by attention) for dialog context
+  const wpr = mg.workPriceRatios || [];
+  let dialogPr = mg.priceRatio || 1.0, dialogWorkName = '', dialogWorkPrice = 0;
+  if (wpr.length > 0) {
+    const weighted = wpr.map(w => ({
+      ...w,
+      weight: w.ratio > 2.5 ? 0.3 : w.ratio > 1.8 ? 0.5 : w.ratio < 0.15 ? 0.3 : w.ratio < 0.3 ? 0.4 : 0.1,
+      // For dialogs: extremes are MORE likely to be mentioned (opposite of browsing)
+    }));
+    const totalW = weighted.reduce((s, w) => s + w.weight, 0);
+    let roll = Math.random() * totalW;
+    let picked = weighted[0];
+    for (const w of weighted) { roll -= w.weight; if (roll <= 0) { picked = w; break; } }
+    dialogPr = picked.ratio;
+    dialogWorkName = picked.name || '';
+    dialogWorkPrice = picked.price || 0;
+  }
+
+  // Extreme pricing overrides normal dialog
+  if (dialogPr > 3.0 && Math.random() < 0.8) {
+    const dialog = pick(makePriceDialogsAbsurd(dialogWorkName, dialogWorkPrice));
+    mg.phase = 'dialog'; mg.dialogCount++;
+    mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'troll' };
+    return true;
+  }
+  if (dialogPr > 2.0 && Math.random() < 0.6) {
+    const dialog = pick(makePriceDialogsExpensive(dialogWorkName, dialogWorkPrice));
+    mg.phase = 'dialog'; mg.dialogCount++;
+    mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'troll' };
+    return true;
+  }
+  if (dialogPr < 0.4 && Math.random() < 0.5) {
+    const dialog = pick(makePriceDialogsCheap(dialogWorkName, dialogWorkPrice));
+    mg.phase = 'dialog'; mg.dialogCount++;
+    mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'normal' };
+    return true;
+  }
 
   // 10% troll, 12% fan, rest normal
   const roll = Math.random();
@@ -762,7 +933,7 @@ function calculateResult(mg, event) {
     passionDelta,
     reputationDelta: Math.round(reputationDelta * 100) / 100,
     moneySpent: mg.moneySpent,
-    performance: Math.round(performance * 100),
+    performance: Math.min(100, Math.round(performance * 100)),
     sold, greeted, freebiesGiven, cardsExchanged, totalCustomers: total,
   };
 }

@@ -44,6 +44,8 @@ export function checkAchievements(state) {
     { id: 'elder_creator', cond: age >= 35 && state.totalHVP > 0 && state.passion > 0 },
     { id: 'rich_mogul', cond: state.money >= 30000 },
     { id: 'triple_threat', cond: (state.eventCounts['recession'] || 0) >= 2 && state.passion > 20 },
+    { id: 'prediction_mogul', cond: state._predictions && state._predictions.totalProfit >= 100000 },
+    { id: 'prediction_rekt', cond: state._predictions && state._predictions.totalProfit <= -50000 },
   ];
   for (const c of checks) if (c.cond && !state.achievements.includes(c.id)) state.achievements.push(c.id);
   if (state.partnerType === 'toxic' && !state.achievements.includes('toxic_encounter')) state.achievements.push('toxic_encounter');
@@ -83,6 +85,8 @@ const ACHIEVEMENT_MAP = {
   rich_mogul: { name: '同人大亨', desc: '资金超过¥30000，富可敌国', emoji: 'diamond' },
   triple_threat: { name: '经济周期收割者', desc: '经历两次以上经济下行仍保持热情', emoji: 'waves' },
   commercial_debut: { name: '商业出道', desc: '从同人创作者成功转型为商业创作者', emoji: 'star-four' },
+  prediction_mogul: { name: '织梦之王', desc: '织梦交易累计盈利超过¥100,000', emoji: 'chart-line-up' },
+  prediction_rekt: { name: '梦碎织梦', desc: '织梦交易累计亏损超过¥50,000', emoji: 'chart-line-down' },
 };
 
 export function getAchievementInfo(id) {
