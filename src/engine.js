@@ -485,6 +485,8 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     fullTimeDoujin: false,          // quit job to go full-time doujin creator
     doujinMonths: 0,                // months spent as full-time doujin creator
     doujinWorkYearReset: 0,         // turn at which work years reset (for salary calc after returning)
+    doujinQuitCount: 0,             // times player has quit for full-time doujin (penalizes frequent switching)
+    lastReturnToWorkTurn: 0,        // turn when player last returned to employment (cooldown gate)
   };
 }
 
@@ -544,7 +546,11 @@ export function getActionDisplay(actionId, state) {
     return { ...base, costLabel: `自选时长(1-${remaining}天) 效率${eff}%${extra}` };
   }
   if (actionId === 'jobSearch') {
-    return { ...base, costLabel: `已找${state.jobSearchTurns}月 成功率${Math.round(Math.min(85, (30 + state.jobSearchTurns * 10) * (state.recessionTurnsLeft > 0 ? 0.5 : 1)))}%` };
+    const switchMalus = Math.min(30, ((state.doujinQuitCount || 0) - 1) * 10);
+    const base30 = Math.max(5, 30 - switchMalus);
+    const prob = Math.round(Math.min(85, (base30 + state.jobSearchTurns * 10) * (state.recessionTurnsLeft > 0 ? 0.5 : 1)));
+    const tag = switchMalus > 0 ? ` 跳槽记录-${switchMalus}%` : '';
+    return { ...base, costLabel: `已找${state.jobSearchTurns}月 成功率${prob}%${tag}` };
   }
   if (actionId === 'freelance') {
     const tc = getFreelanceTimeCost(state);
@@ -610,7 +616,18 @@ export function getActionDisplay(actionId, state) {
   }
   if (actionId === 'quitForDoujin') {
     if (state.unemployed) {
-      return { ...base, name: '全职搞同人', costLabel: '不找工作了，把失业变成机遇！' };
+      const qc = state.doujinQuitCount || 0;
+      const warn = qc >= 1 ? ` (第${qc + 1}次·惩罚↑)` : '';
+      return { ...base, name: '全职搞同人', costLabel: `不找工作了，把失业变成机遇！${warn}` };
+    }
+    // Cooldown check display
+    if (state.lastReturnToWorkTurn > 0 && state.turn - state.lastReturnToWorkTurn < 6) {
+      const left = 6 - (state.turn - state.lastReturnToWorkTurn);
+      return { ...base, costLabel: `需要先稳定工作${left}个月才能再辞职` };
+    }
+    const qc = state.doujinQuitCount || 0;
+    if (qc >= 1) {
+      return { ...base, costLabel: `辞掉工作，全身心投入同人创作 (第${qc + 1}次·声誉↓ 求职更难)` };
     }
     return base;
   }
@@ -678,6 +695,8 @@ export function canPerformAction(state, actionId) {
       if ((state.eventLog?.length || 0) < 3) return false;
     } else {
       if ((state.eventLog?.length || 0) < 5) return false;
+      // Cooldown: must work at least 6 months before quitting again (prevents frequent switching)
+      if (state.lastReturnToWorkTurn > 0 && state.turn - state.lastReturnToWorkTurn < 6) return false;
     }
   }
   // partTimeJob: only students or unemployed
@@ -1638,11 +1657,14 @@ export function executeAction(state, actionId) {
     state.jobSearchTurns++;
     result.deltas.push({ icon: 'heart', label: '面试奔波消耗', value: '-10', positive: false });
     // Base find probability: 30%, +10% per month searching, recession halves it
-    const baseProb = 0.3 + state.jobSearchTurns * 0.1;
+    // Frequent doujin switchers have harder time finding jobs (HR dislikes job-hopping)
+    const switchMalus = Math.min(0.3, ((state.doujinQuitCount || 0) - 1) * 0.1); // 0, 0.1, 0.2, 0.3
+    const baseProb = Math.max(0.05, 0.3 - switchMalus) + state.jobSearchTurns * 0.1;
     const findProb = Math.min(0.85, state.recessionTurnsLeft > 0 ? baseProb * 0.5 : baseProb);
     if (Math.random() < findProb) {
       state.unemployed = false;
       state.jobSearchTurns = 0;
+      state.lastReturnToWorkTurn = state.turn; // record for cooldown gate
       // Salary reset if returning from full-time doujin
       if (state.doujinWorkYearReset > 0) state.doujinWorkYearReset = state.turn; // reset work year reference
       result.deltas.push({ icon: 'confetti', label: '找到工作了！', value: '恢复正常生活', positive: true });
@@ -2133,6 +2155,7 @@ export function executeAction(state, actionId) {
   // === Quit job for full-time doujin ===
   if (action.type === 'quitForDoujin') {
     const wasUnemployed = state.unemployed;
+    state.doujinQuitCount = (state.doujinQuitCount || 0) + 1;
     state.fullTimeDoujin = true;
     state.unemployed = false;
     state.doujinMonths = 0;
@@ -2142,18 +2165,35 @@ export function executeAction(state, actionId) {
     // Clear work-related debuffs (promotion, commute, 996 etc.)
     state.timeDebuffs = state.timeDebuffs.filter(d => !['promotion', '996'].includes(d.id) && !d.id.startsWith('commute_') && !d.id.startsWith('social_') && !d.id.startsWith('burnout_'));
     state.time = Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)));
-    state.passion = Math.min(100, state.passion + (wasUnemployed ? 15 : 10));
+    // Passion boost diminishes with each switch: 1st=full, 2nd=half, 3rd+=0
+    const basePBoost = wasUnemployed ? 15 : 10;
+    const switchPenalty = Math.min(state.doujinQuitCount - 1, 2); // 0, 1, 2
+    const passionBoost = Math.max(0, basePBoost - switchPenalty * 5);
+    state.passion = Math.min(100, state.passion + passionBoost);
+    // Reputation penalty for repeated switches (industry credibility erodes)
+    const repPenalty = Math.min(10, (state.doujinQuitCount - 1) * 3);
+    if (repPenalty > 0) {
+      state.reputation = Math.max(0, (state.reputation || 0) - repPenalty);
+    }
     if (wasUnemployed) {
       result.deltas.push({ icon: 'sparkle', label: '不找工作了！全职搞同人！', value: '闲暇拉满', positive: true });
-      result.deltas.push({ icon: 'heart', label: '把失业变成机遇', value: `热情+15`, positive: true });
+      result.deltas.push({ icon: 'heart', label: '把失业变成机遇', value: `热情+${passionBoost}`, positive: passionBoost > 0 });
     } else {
       result.deltas.push({ icon: 'sparkle', label: '辞职了！全身心投入同人创作！', value: '闲暇拉满 月收入→0', positive: true });
-      result.deltas.push({ icon: 'heart', label: '自由的感觉真好', value: '热情+10', positive: true });
+      result.deltas.push({ icon: 'heart', label: '自由的感觉真好', value: `热情+${passionBoost}`, positive: passionBoost > 0 });
+    }
+    if (state.doujinQuitCount >= 2) {
+      result.deltas.push({ icon: 'trend-down', label: `第${state.doujinQuitCount}次辞职，业界信用下降`, value: `声誉-${repPenalty}`, positive: false });
+      if (passionBoost < basePBoost) {
+        result.deltas.push({ icon: 'smiley-nervous', label: '反复折腾的新鲜感消退了', value: `热情加成减少`, positive: false });
+      }
     }
     result.deltas.push({ icon: 'warning', label: '每月生活费¥800自动扣除', value: '没有固定收入了', positive: false });
     result.tip = wasUnemployed
       ? { label: '化危为机', text: '失业不是问题，我们还有另一条路，全职同人创作，时间完全自由，但一切靠自己。存款低于¥5000时焦虑会严重侵蚀热情。撑不住随时可以重新找工作。' }
-      : { label: '全职同人创作者', text: '你选择了最勇敢的道路——辞掉工作，全身心投入同人创作。时间自由了，但收入完全靠自己。存款就是你的安全线，低于¥5000时焦虑会开始侵蚀热情。如果撑不住，随时可以回去找工作——但薪资要从头开始。' };
+      : state.doujinQuitCount >= 2
+        ? { label: '再次全职同人', text: `这是你第${state.doujinQuitCount}次辞职搞全职同人。频繁在职场和全职同人之间切换会侵蚀你的职业信用——每次回去找工作都会更难，起薪更低。想清楚了再走这条路。` }
+        : { label: '全职同人创作者', text: '你选择了最勇敢的道路——辞掉工作，全身心投入同人创作。时间自由了，但收入完全靠自己。存款就是你的安全线，低于¥5000时焦虑会开始侵蚀热情。如果撑不住，随时可以回去找工作——但薪资要从头开始。' };
   }
 
   if (action.type === 'goCommercial') {

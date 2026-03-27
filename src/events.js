@@ -168,7 +168,7 @@ export const RANDOM_EVENTS = [
     effect: '资金+1000 时间-1天（12~18月）', effectClass: 'neutral',
     apply: (s) => { addMoney(s, 1000); s.timeDebuffs.push({ id: 'promotion', reason: '升职加责', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '高收入者的时间机会成本更高。',
-    weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: 3,
+    weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed && !s.fullTimeDoujin, maxTotal: 3,
   },
   {
     id: 'work_996', emoji: 'building-office', title: '996加班季',
@@ -177,7 +177,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.timeDebuffs.push({ id: '996', reason: '996加班', turnsLeft: 3, delta: -4 }); s.time = computeTime(s.turn, s.timeDebuffs); addMoney(s, 500); },
     tip: '滞胀特征：需要更多工作时间维持生活',
     weight: 7, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin) return false;
       // Not during remote work, flexible hours, or dept transfer
       return !s.timeDebuffs.some(d => d.id.startsWith('remote_') || d.id.startsWith('flex_') || d.id.startsWith('transfer_'));
     }, maxTotal: Infinity,
@@ -294,7 +294,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.passion = Math.max(0, s.passion - 8); addMoney(s, -(300 + Math.floor(Math.random() * 300))); s.timeDebuffs.push({ id: 'burnout_' + s.turn, reason: '职业倦怠', turnsLeft: 3, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '职业倦怠不是懒——是长期高强度低回报工作的心理防御机制。',
     weight: 6, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin) return false;
       // Not during transfer to easy dept or partner support
       return !s.timeDebuffs.some(d => d.id.startsWith('transfer_') || d.id.startsWith('bestie_support_') || d.id.startsWith('bestie_save_'));
     }, maxTotal: Infinity,
@@ -305,7 +305,7 @@ export const RANDOM_EVENTS = [
     effect: '时间-2天(2回合) 资金-200 热情-2', effectClass: 'negative',
     apply: (s) => { s.timeDebuffs.push({ id: 'social_' + s.turn, reason: '社交应酬', turnsLeft: 2, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); addMoney(s, -200); s.passion = Math.max(0, s.passion - 2); },
     tip: '职场社交是一种"强制消费"——你用时间和金钱购买的不是快乐，而是职场关系的维护成本。',
-    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed, maxTotal: Infinity,
+    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed && !s.fullTimeDoujin, maxTotal: Infinity,
   },
   {
     id: 'commute_hell', emoji: 'train', title: '通勤地狱',
@@ -314,7 +314,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.timeDebuffs.push({ id: 'commute_' + s.turn, reason: '通勤时间增加', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '通勤是城市生活最大的时间黑洞。',
     weight: 3, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin) return false;
       // Not during remote work
       return !s.timeDebuffs.some(d => d.id.startsWith('remote_'));
     }, maxTotal: 2,
@@ -343,7 +343,7 @@ export const RANDOM_EVENTS = [
     tip: '从同人到商业是许多创作者的自然进化路径。',
     weight: 15,
     when: (s) => {
-      if (s.commercialOfferReceived || s.reputation < 16 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
+      if (s.commercialOfferReceived || s.reputation < 12 || s.totalRevenue < 50000 || s.totalHVP < 8 || getCreativeSkill(s) < 4 || s.turn < 24) return false;
       if (s.recessionTurnsLeft > 0 || (s.advanced && (s.advanced.stagflationTurnsLeft > 0 || s.advanced.debtCrisisActive))) return Math.random() < 0.3;
       return true;
     },
@@ -381,7 +381,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.timeDebuffs.push({ id: 'remote_' + s.turn, reason: '居家办公', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 5); },
     tip: '远程办公是职场创作者最大的福音——每天省下的通勤时间足够画一张草稿。',
     weight: 8, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 3) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin || (s.turn - 50) / 12 < 3) return false;
       // Not during 996 or commute hell
       return !s.timeDebuffs.some(d => d.id === '996' || d.id.startsWith('commute_'));
     }, maxTotal: 3,
@@ -393,7 +393,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.timeDebuffs.push({ id: 'efficient_' + s.turn, reason: '高效摸鱼', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '工作熟练度是时间的朋友——入职初期忙得焦头烂额，几年后同样的活半天就做完了。省下的时间就是你的创作本钱。',
     weight: 10, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 2) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin || (s.turn - 50) / 12 < 2) return false;
       // Not during burnout
       return !s.timeDebuffs.some(d => d.id.startsWith('burnout_'));
     }, maxTotal: Infinity,
@@ -405,7 +405,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.timeDebuffs.push({ id: 'annual_leave_' + s.turn, reason: '年假创作', turnsLeft: 3, delta: 3 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 8); },
     tip: '年假是打工人最宝贵的时间资产。有经验的创作者会把年假攒到展会前集中使用——备货、赶稿、参展一气呵成。',
     weight: 12, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 1) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin || (s.turn - 50) / 12 < 1) return false;
       // Can't take leave during 996
       return !s.timeDebuffs.some(d => d.id === '996');
     }, maxTotal: Infinity,
@@ -417,7 +417,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.timeDebuffs.push({ id: 'transfer_' + s.turn, reason: '清闲部门', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: 2 }); s.time = computeTime(s.turn, s.timeDebuffs); s.passion = Math.min(100, s.passion + 5); },
     tip: '不是所有职场变动都是坏事。有时候"被边缘化"反而是创作者的隐性福利——你要的不是升职加薪，是下班后的精力。',
     weight: 5, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 4) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin || (s.turn - 50) / 12 < 4) return false;
       // Not if recently promoted (promotion debuff active)
       return !s.timeDebuffs.some(d => d.id === 'promotion');
     }, maxTotal: 2,
@@ -429,7 +429,7 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.timeDebuffs.push({ id: 'flex_' + s.turn, reason: '弹性工时', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '弹性工时让创作者能按自己的生物钟安排创作。有人是夜猫子型，有人是早起型——找到自己的节奏比加班更重要。',
     weight: 8, when: (s) => {
-      if (getLifeStage(s.turn) !== 'work' || s.unemployed || (s.turn - 50) / 12 < 2) return false;
+      if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin || (s.turn - 50) / 12 < 2) return false;
       // Not during 996 or commute hell
       return !s.timeDebuffs.some(d => d.id === '996' || d.id.startsWith('commute_'));
     }, maxTotal: Infinity,
