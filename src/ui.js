@@ -1636,7 +1636,6 @@ async function renderBestieChat(state, onAction, onBack) {
           ${msgsHtml}
           ${gone ? `<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:0.78rem">${char.goneMessage}</div>` : ''}
         </div>
-        ${!gone ? choicesHtml : '<div style="padding:12px;text-align:center;font-size:0.75rem;color:var(--text-muted)">小柚可能去忙别的了~</div>'}
       </div>`;
 
     if (!document.body.contains(overlay)) document.body.appendChild(overlay);
