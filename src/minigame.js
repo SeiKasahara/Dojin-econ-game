@@ -401,9 +401,24 @@ function updateCustomers(mg, dt) {
       if (c.stateTimer <= 0) {
         // Diversity bonus: fans/any-preference customers with diverse inventory buy multiple
         const diversityBuy = (c.preference === 'any' && mg.hasHVP && mg.hasLVP) ? 2 : 1;
-        mg.score.sold += diversityBuy;
-        mg.particles.push({ x: c.x, y: c.y, text: diversityBuy > 1 ? '💰💰' : '💰', life: 1000, vy: -0.08 });
-        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = diversityBuy > 1 ? '🤩' : '😊';
+        // Late-game bulk buy: high reputation + info disclosure → customers buy extras (帮朋友带、多买收藏)
+        let bulkExtra = 0;
+        if (mg.playerReputation >= 3 && mg.playerInfoDisclosure >= 0.5) {
+          const isFan = c.target === 'player_fan';
+          const bulkChance = Math.min(0.55,
+            (mg.playerReputation - 2) * 0.04 +
+            (mg.playerInfoDisclosure - 0.4) * 0.25 +
+            (isFan ? 0.15 : 0)
+          );
+          if (Math.random() < bulkChance) {
+            bulkExtra = Math.random() < 0.3 ? 2 : 1;
+          }
+        }
+        const totalBuy = diversityBuy + bulkExtra;
+        mg.score.sold += totalBuy;
+        const coinText = totalBuy >= 3 ? '💰💰💰' : totalBuy >= 2 ? '💰💰' : '💰';
+        mg.particles.push({ x: c.x, y: c.y, text: coinText, life: 1000, vy: -0.08 });
+        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = totalBuy >= 2 ? '🤩' : '😊';
       }
 
     } else if (c.state === 'leaving') {
