@@ -412,6 +412,16 @@ function sellFromWorks(state, type, baseDemand) {
   }
   // Keep sold-out works in array (qty=0) so they can be reprinted
   syncInventoryAggregates(state);
+
+  // Word-of-mouth: high quality works sold → organic info disclosure boost
+  // Buyers of great works talk about them, slowly building awareness
+  for (const d of details) {
+    if (d.sold > 0 && (d.work.workQuality || 1.0) >= 1.2) {
+      const wom = d.sold * 0.003 * ((d.work.workQuality || 1.0) - 1.0); // Q1.5, sold 10 → +0.015
+      state.infoDisclosure = Math.min(1, state.infoDisclosure + wom);
+    }
+  }
+
   return { sold: Math.round(baseDemand) - remaining, revenue: totalRev, details };
 }
 
@@ -976,8 +986,13 @@ export function calculateSales(actionId, state) {
   // --- High info bonus: word-of-mouth effect when awareness ≥ 80% ---
   const infoHighBonus = state.infoDisclosure >= 0.6 ? 1.12 : 1.0;
 
-  // --- Calculate base demand (quality/trend now handled per-work in sellFromWorks) ---
-  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * catalogBonus * infoHighBonus;
+  // --- Best work quality bonus: great works attract demand on their own ---
+  // Uses best quality in stock — even low-rep creators sell more if work is exceptional
+  const bestQuality = Math.max(1.0, ...(state.inventory?.works?.filter(w => w.type === type && w.qty > 0).map(w => w.workQuality || 1.0) || [1.0]));
+  const qualityDemandBonus = Math.pow(bestQuality, 1.5); // Q1.0→1.0, Q1.25→1.40, Q1.5→1.84, Q1.8→2.41
+
+  // --- Calculate base demand ---
+  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * catalogBonus * infoHighBonus * qualityDemandBonus;
   const sales = Math.max(1, Math.round(rawSales));
 
   // === Full breakdown for educational display ===
@@ -1006,6 +1021,7 @@ export function calculateSales(actionId, state) {
     alphaMod: Math.round(alphaMod * 100),
     infoHighBonus: Math.round(infoHighBonus * 100),
     catalogBonus: Math.round(catalogBonus * 100),
+    qualityDemandBonus: Math.round(qualityDemandBonus * 100),
   };
 
   if (isHVP) {

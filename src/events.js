@@ -267,6 +267,29 @@ export const RANDOM_EVENTS = [
     weight: 5, when: (s) => s.reputation > 0.5 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
+    id: 'plagiarism', emoji: 'copy', title: '作品被抄袭/AI融合了！',
+    desc: (s) => {
+      const skill = getCreativeSkill(s);
+      const isAI = Math.random() < 0.5;
+      return isAI
+        ? '你发现有人用AI工具"融合"了你多张作品的风格，生成的图被大量传播，甚至有人误以为是你画的。你的独特风格正在被无成本复制...'
+        : '有人几乎原封不动地照搬了你最新作品的构图和创意，还在简介里标注"原创"。评论区有人认出来并@了你，但对方粉丝却反过来指责你碰瓷...';
+    },
+    effect: (s) => {
+      const r = s.endowments.resilience || 0;
+      const m = r >= 2 ? 0.7 : r >= 1 ? 1.0 : 1.5;
+      return `热情-${Math.round(12 * m)}${m > 1 ? ' (韧性低加重打击)' : m < 1 ? ' (韧性缓冲)' : ''}`;
+    },
+    effectClass: 'negative',
+    apply: (s) => {
+      const r = s.endowments.resilience || 0;
+      const m = r >= 2 ? 0.7 : r >= 1 ? 1.0 : 1.5;
+      s.passion = Math.max(0, s.passion - Math.round(12 * m));
+    },
+    tip: '声誉越高的创作者越容易被抄袭和AI模仿。法律维权成本极高且周期长，大多数同人创作者只能"认了"。这种无力感是对热情的巨大消耗——但记住，能被模仿本身就证明了你的价值。',
+    weight: 4, when: (s) => s.reputation >= 5 && s.totalHVP >= 3 && getCreativeSkill(s) >= 2, maxTotal: Infinity,
+  },
+  {
     id: 'speculator_rush', emoji: 'trend-up', title: '投机客涌入二手市场！',
     desc: '有人发现圈内某些旧作价格在涨，大量投机客开始囤货。二手市场价格被推高，普通消费者被挤出...',
     effect: '二手压力暂降 收藏品增值', effectClass: 'neutral',

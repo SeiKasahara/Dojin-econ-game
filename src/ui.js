@@ -2000,6 +2000,7 @@ function renderSalesBreakdown(s, salesDetails) {
   if (s.advMod !== 100) modifiers.push({ label: '宏观/AI/niche', val: s.advMod, icon: 'globe-simple' });
   if (s.eventBoost > 100) modifiers.push({ label: '同人展加成', val: s.eventBoost, icon: 'tent' });
   if (s.catalogBonus > 100) modifiers.push({ label: '产品线多样性', val: s.catalogBonus, icon: 'books' });
+  if (s.qualityDemandBonus > 105) modifiers.push({ label: '作品质量吸引力', val: s.qualityDemandBonus, icon: 'sparkle' });
   if (s.infoHighBonus > 100) modifiers.push({ label: '口碑效应(信息≥60%)', val: s.infoHighBonus, icon: 'megaphone' });
 
   const modHtml = modifiers.map(m => {
