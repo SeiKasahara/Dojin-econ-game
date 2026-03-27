@@ -341,31 +341,102 @@ export function syncInventoryAggregates(state) {
   state.inventory.lvpStock = state.inventory.works.filter(w => w.type === 'lvp').reduce((s, w) => s + w.qty, 0);
 }
 
-// Sell N items of a type from works array (FIFO: oldest first), returns { sold, revenue, details[] }
-// Secondhand pressure caps how many old copies can sell per turn:
-//   effectiveQty = qty × max(0.1, 1 - shPressure × ageFactor)
-//   ageFactor grows with months since creation (new works are protected)
-function sellFromWorks(state, type, count) {
+// === Per-Work Demand Parameters ===
+const NOVELTY_BONUS_NEW    = 1.5;   // 本月创建的作品 (新刊)
+const NOVELTY_BONUS_RECENT = 1.2;   // 1-2月内 (近期)
+const NOVELTY_THRESHOLD    = 2;     // 新刊窗口期(月)
+const SAT_COEFF_HVP  = 0.008;      // HVP饱和系数 (社群的0.8%拥有后开始饱和)
+const SAT_COEFF_LVP  = 0.012;      // LVP饱和系数 (谷子饱和更慢)
+const SAT_FLOOR      = 0.15;       // 饱和最低倍率
+const AGE_RAMP       = 8;          // 年龄惩罚爬满月数
+const BASE_AGE_DECAY = 0.15;       // 无二手压力时的基础年龄衰减
+
+// Sell items from works array, weighted by per-work attractiveness
+// Each work's demand share is determined by: quality, trend, novelty, saturation, age
+// Returns { sold, revenue, details[] } where details contains per-work breakdown
+function sellFromWorks(state, type, baseDemand) {
   const shPressure = state.official?.secondHandPressure?.[type] || 0;
+  const communitySize = state.market ? state.market.communitySize : 10000;
+  const currentTrend = state.market?.currentTrend || null;
   const works = state.inventory.works.filter(w => w.type === type && w.qty > 0);
-  let remaining = count;
-  let totalRev = 0;
-  const details = []; // { work, sold, rev }
-  for (const w of works) {
-    if (remaining <= 0) break;
-    // Age penalty: older works are more substitutable by secondhand copies
-    // ageFactor: 0 at creation month, ramps to 1.0 over 12 months
-    const age = Math.max(0, state.turn - (w.turn || state.turn));
-    const ageFactor = Math.min(1, age / 12);
-    const sellableFrac = Math.max(0.1, 1 - shPressure * ageFactor);
-    const effectiveQty = Math.max(1, Math.round(w.qty * sellableFrac));
-    const sell = Math.min(remaining, effectiveQty);
-    const rev = sell * w.price;
-    w.qty -= sell;
-    remaining -= sell;
-    totalRev += rev;
-    details.push({ work: w, sold: sell, rev });
+  if (works.length === 0 || baseDemand <= 0) {
+    return { sold: 0, revenue: 0, details: [] };
   }
+
+  // Phase 1: compute per-work attractiveness weight
+  const satCoeff = type === 'hvp' ? SAT_COEFF_HVP : SAT_COEFF_LVP;
+  const workData = works.map(w => {
+    const age = Math.max(0, state.turn - (w.turn || state.turn));
+    // Quality multiplier (per-work, was previously global)
+    const qualityMult = getWorkQualityEffects(w.workQuality || 1.0).salesMult;
+    // Trend multiplier (per-work)
+    const trendMult = getTrendBonus(w.styleTag, currentTrend).salesMult;
+    // Novelty bonus: new releases attract disproportionate attention
+    const noveltyBonus = age <= 0 ? NOVELTY_BONUS_NEW : age <= NOVELTY_THRESHOLD ? NOVELTY_BONUS_RECENT : 1.0;
+    // Saturation: cumulative sales reduce remaining potential buyers
+    const totalSold = w.totalSold || 0;
+    const saturationFactor = Math.max(SAT_FLOOR, 1 - totalSold / (communitySize * satCoeff));
+    // Age decay: older works lose appeal (strengthened from original)
+    const ageFactor = Math.min(1, age / AGE_RAMP);
+    const ageDecay = Math.max(0.05, 1 - (shPressure + BASE_AGE_DECAY) * ageFactor);
+    // Combined attractiveness
+    const workMult = qualityMult * trendMult * noveltyBonus * saturationFactor * ageDecay;
+    return { work: w, workMult, qualityMult, trendMult, noveltyBonus, saturationFactor, ageDecay };
+  });
+
+  // Phase 2: sort by attractiveness (best first)
+  workData.sort((a, b) => b.workMult - a.workMult);
+
+  // Phase 3: allocate baseDemand weighted by workMult
+  const totalWeight = workData.reduce((s, d) => s + d.workMult, 0);
+  let remaining = Math.round(baseDemand);
+  let totalRev = 0;
+  const details = [];
+  const soldMap = new Map(); // workId → detail index
+
+  for (const d of workData) {
+    if (remaining <= 0) break;
+    const share = totalWeight > 0 ? d.workMult / totalWeight : 1 / workData.length;
+    const workDemand = Math.max(1, Math.round(baseDemand * share));
+    const sell = Math.min(remaining, Math.min(workDemand, d.work.qty));
+    if (sell > 0) {
+      d.work.qty -= sell;
+      d.work.totalSold = (d.work.totalSold || 0) + sell;
+      const rev = sell * d.work.price;
+      totalRev += rev;
+      remaining -= sell;
+      details.push({ work: d.work, sold: sell, rev,
+        noveltyBonus: d.noveltyBonus, saturationFactor: d.saturationFactor,
+        qualityMult: d.qualityMult, trendMult: d.trendMult, ageDecay: d.ageDecay, workMult: d.workMult });
+      soldMap.set(d.work.id, details.length - 1);
+    }
+  }
+
+  // Phase 4: redistribute leftover demand (if attractive works were qty-limited)
+  if (remaining > 0) {
+    for (const d of workData) {
+      if (remaining <= 0) break;
+      if (d.work.qty <= 0) continue;
+      const sell = Math.min(remaining, d.work.qty);
+      if (sell > 0) {
+        d.work.qty -= sell;
+        d.work.totalSold = (d.work.totalSold || 0) + sell;
+        const rev = sell * d.work.price;
+        totalRev += rev;
+        remaining -= sell;
+        if (soldMap.has(d.work.id)) {
+          const idx = soldMap.get(d.work.id);
+          details[idx].sold += sell;
+          details[idx].rev += rev;
+        } else {
+          details.push({ work: d.work, sold: sell, rev,
+            noveltyBonus: d.noveltyBonus, saturationFactor: d.saturationFactor,
+            qualityMult: d.qualityMult, trendMult: d.trendMult, ageDecay: d.ageDecay, workMult: d.workMult });
+        }
+      }
+    }
+  }
+
   // Stamp sold-out turn on newly emptied works
   for (const d of details) {
     if (d.work.qty === 0 && !d.work.soldOutSinceTurn) {
@@ -374,7 +445,7 @@ function sellFromWorks(state, type, count) {
   }
   // Keep sold-out works in array (qty=0) so they can be reprinted
   syncInventoryAggregates(state);
-  return { sold: count - remaining, revenue: totalRev, details };
+  return { sold: Math.round(baseDemand) - remaining, revenue: totalRev, details };
 }
 
 // === Initial State ===
@@ -925,16 +996,16 @@ function calculateSales(actionId, state) {
   const advMod = state.advanced ? getAdvancedSalesMod(state.advanced, type) : 1.0;
   const noise = 0.85 + Math.random() * 0.3;
 
-  // --- Work quality & trend modifiers ---
-  const recentWork = state.inventory?.works?.filter(w => w.type === type).slice(-1)[0];
-  const wqFx = recentWork ? getWorkQualityEffects(recentWork.workQuality) : { salesMult: 1, repMult: 1, breakthroughMod: 0 };
-  const trendFx = recentWork ? getTrendBonus(recentWork.styleTag, state.market?.currentTrend) : { salesMult: 1, repMult: 1 };
+  // --- Catalog diversity bonus: multiple distinct works attract more browsers ---
+  const uniqueWorks = state.inventory?.works?.filter(w => w.type === type && w.qty > 0).length || 0;
+  const catalogBonus = 1 + Math.min(0.3, Math.max(0, uniqueWorks - 1) * 0.1);
+  // 1件=1.0, 2件=1.1, 3件=1.2, 4件+=1.3(上限)
 
   // --- High info bonus: word-of-mouth effect when awareness ≥ 80% ---
   const infoHighBonus = state.infoDisclosure >= 0.6 ? 1.12 : 1.0;
 
-  // --- Calculate final sales ---
-  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * wqFx.salesMult * trendFx.salesMult * infoHighBonus;
+  // --- Calculate base demand (quality/trend now handled per-work in sellFromWorks) ---
+  const rawSales = marketDemand * playerShare * conversion * partnerMult * shMod * advMod * eventBoost * noise * catalogBonus * infoHighBonus;
   const sales = Math.max(1, Math.round(rawSales));
 
   // === Full breakdown for educational display ===
@@ -962,6 +1033,7 @@ function calculateSales(actionId, state) {
     noise: Math.round(noise * 100),
     alphaMod: Math.round(alphaMod * 100),
     infoHighBonus: Math.round(infoHighBonus * 100),
+    catalogBonus: Math.round(catalogBonus * 100),
   };
 
   if (isHVP) {
@@ -1524,6 +1596,7 @@ export function executeAction(state, actionId) {
             eventRevenue += hvpResult.revenue;
             totalEventSold += hvpResult.sold;
             state.totalSales += hvpResult.sold;
+            result.salesDetails = (result.salesDetails || []).concat(hvpResult.details);
             result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpResult.sold}本`, value: `+¥${hvpResult.revenue}`, positive: true });
             const repGain = 0.08 * state.infoDisclosure * hvpResult.sold * 0.05;
             state.reputation += repGain;
@@ -1535,6 +1608,7 @@ export function executeAction(state, actionId) {
             eventRevenue += lvpResult.revenue;
             totalEventSold += lvpResult.sold;
             state.totalSales += lvpResult.sold;
+            result.salesDetails = (result.salesDetails || []).concat(lvpResult.details);
             result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
             const repGain = 0.01 * state.infoDisclosure * lvpResult.sold * 0.05;
             state.reputation += repGain;
@@ -1547,12 +1621,12 @@ export function executeAction(state, actionId) {
         if (state.inventory.hvpStock > 0) {
           state.playerPrice.hvp = state.inventory.hvpPrice;
           const sales = calculateSales('hvp', state);
-          const hvpSold = Math.min(sales.hvpSales, state.inventory.hvpStock);
-          const hvpResult = sellFromWorks(state, 'hvp', hvpSold);
+          const hvpResult = sellFromWorks(state, 'hvp', sales.hvpSales);
           eventRevenue += hvpResult.revenue;
           totalEventSold += hvpResult.sold;
           state.totalSales += hvpResult.sold;
           result.salesInfo = sales;
+          result.salesDetails = (result.salesDetails || []).concat(hvpResult.details);
           result.supplyDemand = getSupplyDemandData(state, sales);
           result.deltas.push({ icon: 'book-open-text', label: `同人本售出 ${hvpResult.sold}本`, value: `+¥${hvpResult.revenue}`, positive: true });
           if (sales.hvpSales > hvpResult.sold) result.deltas.push({ icon: 'fire', label: '同人本售罄！', value: `需求${sales.hvpSales}·库存仅${hvpResult.sold}`, positive: false });
@@ -1564,12 +1638,12 @@ export function executeAction(state, actionId) {
         if (state.inventory.lvpStock > 0) {
           state.playerPrice.lvp = state.inventory.lvpPrice;
           const sales = calculateSales('lvp', state);
-          const lvpSold = Math.min(sales.lvpSales, state.inventory.lvpStock);
-          const lvpResult = sellFromWorks(state, 'lvp', lvpSold);
+          const lvpResult = sellFromWorks(state, 'lvp', sales.lvpSales);
           eventRevenue += lvpResult.revenue;
           totalEventSold += lvpResult.sold;
           state.totalSales += lvpResult.sold;
           if (!result.salesInfo) { result.salesInfo = sales; result.supplyDemand = getSupplyDemandData(state, sales); }
+          result.salesDetails = (result.salesDetails || []).concat(lvpResult.details);
           result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
           if (sales.lvpSales > lvpResult.sold) result.deltas.push({ icon: 'fire', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpResult.sold}`, positive: false });
           const repGain = 0.01 * state.infoDisclosure * lvpResult.sold * 0.05;
@@ -1848,6 +1922,7 @@ export function executeAction(state, actionId) {
           styleTag: savedProject.styleTag || null,
           isCultHit: savedProject.isCultHit || false,
           turn: state.turn,
+          totalSold: 0,
         });
         state.inventory.hvpStock += batchQty;
         syncInventoryAggregates(state);
@@ -1988,6 +2063,7 @@ export function executeAction(state, actionId) {
       workQuality: lvpQuality,
       styleTag: null, isCultHit: false,
       turn: state.turn,
+      totalSold: 0,
     });
     state.inventory.lvpStock += batchQty;
     syncInventoryAggregates(state);
@@ -2059,6 +2135,7 @@ export function executeAction(state, actionId) {
         }
         work.qty += qty;
         work.soldOutSinceTurn = null;
+        work.reprintCount = (work.reprintCount || 0) + 1;
         result.deltas.push({ icon: 'printer', label: `追印${sub.name}${work.name ? '·' + escapeHtml(work.name) : ''} +${qty}`, value: `-¥${cost}`, positive: false });
       }
       syncInventoryAggregates(state);
@@ -2609,15 +2686,16 @@ export function endMonth(state) {
       const rawDemand = cs / 1000 * 5 * share * baseConv * onlineFactor * onlineShModHVP;
       // Guarantee at least 1 sale if reputation > 0 and info > 0 (long tail online)
       const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
-      const sold = Math.min(demand, state.inventory.hvpStock);
-      if (sold > 0) {
-        const hvpResult = sellFromWorks(state, 'hvp', sold);
-        addMoney(state, hvpResult.revenue);
-        state.totalRevenue += hvpResult.revenue;
-        state.totalSales += hvpResult.sold;
-        const repGain = (0.02 + 0.06 * state.infoDisclosure) * hvpResult.sold * 0.03;
-        state.reputation += repGain;
-        result.deltas.push({ icon: 'globe-simple', label: `网上售出同人本×${hvpResult.sold}`, value: `+¥${hvpResult.revenue}`, positive: true });
+      if (demand > 0) {
+        const hvpResult = sellFromWorks(state, 'hvp', demand);
+        if (hvpResult.sold > 0) {
+          addMoney(state, hvpResult.revenue);
+          state.totalRevenue += hvpResult.revenue;
+          state.totalSales += hvpResult.sold;
+          const repGain = (0.02 + 0.06 * state.infoDisclosure) * hvpResult.sold * 0.03;
+          state.reputation += repGain;
+          result.deltas.push({ icon: 'globe-simple', label: `网上售出同人本×${hvpResult.sold}`, value: `+¥${hvpResult.revenue}`, positive: true });
+        }
       }
     }
 
@@ -2626,13 +2704,14 @@ export function endMonth(state) {
       const share = totalAlpha > 0 ? state.reputation / totalAlpha : 0.1;
       const rawDemand = cs / 1000 * 15 * share * baseConv * onlineFactor * onlineShModLVP;
       const demand = Math.max(state.reputation > 0.1 && state.infoDisclosure > 0.08 ? 1 : 0, Math.round(rawDemand));
-      const sold = Math.min(demand, state.inventory.lvpStock);
-      if (sold > 0) {
-        const lvpResult = sellFromWorks(state, 'lvp', sold);
-        addMoney(state, lvpResult.revenue);
-        state.totalRevenue += lvpResult.revenue;
-        state.totalSales += lvpResult.sold;
-        result.deltas.push({ icon: 'globe-simple', label: `网上售出谷子×${lvpResult.sold}`, value: `+¥${lvpResult.revenue}`, positive: true });
+      if (demand > 0) {
+        const lvpResult = sellFromWorks(state, 'lvp', demand);
+        if (lvpResult.sold > 0) {
+          addMoney(state, lvpResult.revenue);
+          state.totalRevenue += lvpResult.revenue;
+          state.totalSales += lvpResult.sold;
+          result.deltas.push({ icon: 'globe-simple', label: `网上售出谷子×${lvpResult.sold}`, value: `+¥${lvpResult.revenue}`, positive: true });
+        }
       }
     }
 
