@@ -2144,6 +2144,7 @@ function renderSalesBreakdown(s, salesDetails) {
   if (s.qualityDemandBonus > 110) insights.push({ icon: 'sparkle', text: '作品质量本身就是最好的广告', positive: true });
   if (s.infoHighBonus > 100) insights.push({ icon: 'chat-circle', text: '口碑效应带来了额外的客流', positive: true });
   if (s.alphaMod < 95) insights.push({ icon: 'warning', text: '消费者对同人本的兴趣在衰退，市场在萎缩', positive: false });
+  if (s.communitySize < 5000 && s.playerShare > 30) insights.push({ icon: 'crown', text: '小圈子里的绝对核心——但市场天花板也近在咫尺', positive: true });
 
   const insightsHtml = insights.map(i =>
     `<div style="display:flex;align-items:flex-start;gap:6px;padding:3px 0;font-size:0.72rem">
@@ -3013,9 +3014,21 @@ function buildNarrativeSections(state) {
     }
   }
 
-  if (state.reputation >= 8) personal.push('你是圈内公认的大手，作品发布就有人翘首以盼。');
-  else if (state.reputation >= 5) personal.push('越来越多人认识你了，社群里经常能看到对你作品的讨论。');
-  else if (state.reputation < 0.5) personal.push('圈子里还没什么人知道你。试试宣发推广？');
+  const cs = state.market?.communitySize || 10000;
+  const smallCircle = cs < 5000;
+  if (state.reputation >= 8 && smallCircle) {
+    personal.push(`${ic('crown')} 这个${cs < 2000 ? '微型' : '小众'}圈子几乎就是围着你转的——你就是这里的"镇圈之宝"。虽然外面的世界不认识你，但这里的每个人都视你为传说。`);
+    personal.push(`<span style="font-size:0.78rem;color:var(--text-muted);font-style:italic">"在一千个人心中封神，胜过在一百万人眼里路过。"</span>`);
+  } else if (state.reputation >= 5 && smallCircle) {
+    personal.push(`${ic('star')} 圈子虽小，但你已经是这里响当当的名字了。几乎每个人都认识你的作品——大鱼，小池塘。`);
+    if (cs < 3000) personal.push(`<span style="font-size:0.78rem;color:var(--text-muted);font-style:italic">社群不到${cs.toLocaleString()}人，市场天花板就在头顶。但这份被所有人认识的归属感，大圈子里可得不到。</span>`);
+  } else if (state.reputation >= 8) {
+    personal.push('你是圈内公认的大手，作品发布就有人翘首以盼。');
+  } else if (state.reputation >= 5) {
+    personal.push('越来越多人认识你了，社群里经常能看到对你作品的讨论。');
+  } else if (state.reputation < 0.5) {
+    personal.push('圈子里还没什么人知道你。试试宣发推广？');
+  }
 
   if (state.infoDisclosure < 0.15) {
     personal.push(`${ic('lightbulb')} 信息透明度很低——先"宣发推广"，然后立刻制作售卖！`);

@@ -665,14 +665,18 @@ export function getActionDisplay(actionId, state) {
     return { ...base, costLabel: `${parts.join(' / ')} 库存:本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}` };
   }
   if (actionId === 'buyGoods') {
+    const m = Math.max(0, state.money);
+    const cost = m < 3000 ? 200 : m < 6000 ? 600 : m < 9000 ? 1500 : m < 15000 ? 3000 : 5000;
     const yearsIn = state.turn / 12;
     const eff = Math.max(30, Math.round((1 - yearsIn * 0.08) * 100));
-    return { ...base, costLabel: `¥200 热情+${Math.round(12 * eff / 100)} 效率${eff}%${state.money < 200 ? ` ${ic('warning')}资金不足` : ''}` };
+    const passionGain = Math.round(12 * eff / 100);
+    return { ...base, costLabel: `¥${cost} 热情+${passionGain}${eff < 100 ? ` 效率${eff}%` : ''}${state.money < cost ? ` ${ic('warning')}资金不足` : ''}` };
   }
   if (actionId === 'sellGoods') {
     if (state.goodsCollection <= 0) return { ...base, costLabel: '没有收藏品可出' };
-    const sellPrice = Math.round(120 + (state.official?.secondHandPressure?.lvp || 0) * -80);
-    return { ...base, costLabel: `收藏${state.goodsCollection}件 预估¥${Math.max(50, sellPrice)}/件 热情-3` };
+    const shPressure = state.official?.secondHandPressure?.lvp || 0;
+    const unitPrice = Math.max(50, Math.round(120 * (1 - shPressure * 0.5)));
+    return { ...base, costLabel: `收藏${state.goodsCollection}件 预估¥${unitPrice}/件` };
   }
   if (actionId === 'quitForDoujin') {
     if (state.unemployed) {
@@ -779,7 +783,7 @@ export function canPerformAction(state, actionId) {
   if (actionId === 'reprint') {
     if (!state.inventory.works || state.inventory.works.length === 0) return false;
   }
-  // buyGoods: need money
+  // buyGoods: need money (minimum cost is ¥200)
   if (actionId === 'buyGoods') {
     if (state.money < 200) return false;
   }
@@ -2209,16 +2213,18 @@ export function executeAction(state, actionId) {
     result.tip = { label: '库存管理', text: '追加印刷的单价比首印便宜（印版/模具已有）。关键是预判展会需求——印太多积压资金，印太少展会上售罄错失收入。' };
 
   } else if (action.type === 'buyGoods') {
-    // === BUY GOODS AS CONSUMER: cost scales with wealth, passion stays constant ===
+    // === BUY GOODS AS CONSUMER: cost scales with wealth, passion diminishes over years ===
     const m = Math.max(0, state.money);
     const cost = m < 3000 ? 200 : m < 6000 ? 600 : m < 9000 ? 1500 : m < 15000 ? 3000 : 5000;
     addMoney(state, -cost);
     result.deltas.push({ icon: 'coins', label: `购买谷子${cost > 200 ? '(眼光变高了)' : ''}`, value: `-¥${cost}`, positive: false });
 
-    // Fixed passion gain — buying goods always feels good
-    const passionGain = 12;
+    // Passion gain diminishes over years (novelty wears off)
+    const yearsIn = state.turn / 12;
+    const eff = Math.max(30, Math.round((1 - yearsIn * 0.08) * 100));
+    const passionGain = Math.max(3, Math.round(12 * eff / 100));
     state.passion = Math.min(100, state.passion + passionGain);
-    result.deltas.push({ icon: 'heart', label: '买到心仪的谷子！', value: `热情+${passionGain}`, positive: true });
+    result.deltas.push({ icon: 'heart', label: '买到心仪的谷子！', value: `热情+${passionGain}${eff < 100 ? ` (效率${eff}%)` : ''}`, positive: true });
 
     if (cost > 200) {
       result.deltas.push({ icon: 'sparkle', label: '钱多了品味也上来了', value: `花费¥${cost}`, positive: false });
@@ -2961,6 +2967,19 @@ export function endMonth(state) {
   state.time = (state.unemployed || state.fullTimeDoujin)
     ? Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)))
     : computeEffectiveTime(state.turn, state.timeDebuffs);
+
+  // --- Small-circle big-reputation milestone ---
+  const _cs = state.market?.communitySize || 10000;
+  if (_cs < 5000 && !state._smallCircleBigRepShown && state.reputation >= 5) {
+    state._smallCircleBigRepShown = true;
+    result.deltas.push({ icon: 'crown', label: '小圈子的大人物', value: '圈内几乎人尽皆知', positive: true });
+    result.tip = { label: '大鱼与小池塘', text: `社群只有${_cs.toLocaleString()}人，但你的声誉已达到${state.reputation.toFixed(1)}——在这个小世界里，你就是标杆。小圈子的好处是归属感极强、粉丝忠诚度高；坏处是市场天花板低，收入增长会很快触顶。这是很多冷门圈创作者的真实写照：不是不够好，只是舞台太小。` };
+  }
+  if (_cs < 5000 && !state._smallCircleLegendShown && state.reputation >= 8) {
+    state._smallCircleLegendShown = true;
+    result.deltas.push({ icon: 'crown', label: '镇圈之宝', value: '你定义了这个圈子', positive: true });
+    result.tip = { label: '一个人撑起一个圈', text: `在不到${_cs.toLocaleString()}人的社群里达到声誉${state.reputation.toFixed(1)}，你已经不只是"有名的创作者"——你的作品就是这个圈子的文化符号。新人因为你入坑，老人因为你留下。但这也意味着，如果你停下来，这个小世界可能会跟着安静下去。` };
+  }
 
   // Capture month financial summary BEFORE reset
   result.monthFinancial = { income: state._monthIncome || 0, expense: state._monthExpense || 0 };

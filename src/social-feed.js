@@ -104,6 +104,21 @@ function fanPosts(playerState) {
   if (playerState.totalHVP === 0 && playerState.totalLVP === 0) return items;
 
   const pool = [];
+  const cs = playerState.market?.communitySize || 10000;
+  const smallCircle = cs < 5000;
+  if (playerState.reputation > 5 && smallCircle) pool.push(
+    '"这个圈子要是没有太太，我可能早就退坑了" ——有人在时间线上这么说',
+    '有人发帖："在这么小的圈子里能遇到这种水平的创作者，是我们的幸运"',
+    '"太太就是我们圈子的定海神针" ——看到有人这么评价你',
+    '有人在安利帖里写："圈子虽然冷，但有这位太太在就值得留下"',
+    '新人入坑，第一个被推荐的就是你的作品——在这里你就是活招牌',
+    '"整个圈子都在等太太更新" ——你打开时间线时看到的第一条',
+  );
+  if (playerState.reputation >= 8 && smallCircle) pool.push(
+    '有人说"太太要是哪天退坑了，这个圈子就真的散了"，评论区一片心酸',
+    '被做成了"入坑必看指南"的第一推荐位——圈内人尽皆知的存在',
+    '"我跟圈外朋友解释你是谁，他们完全没听过，但在我们这里你就是神"',
+  );
   if (playerState.reputation > 5) pool.push(
     '你的新作被好几个大号转发了，评论区全是夸',
     '"必入的一位太太" ——看到有人这么推荐你',

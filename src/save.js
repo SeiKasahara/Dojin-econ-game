@@ -60,6 +60,8 @@ const PERSISTENT_UNDERSCORED = new Set([
   '_lastBacklashTurn',    // backlash cooldown
   '_partnerRenewalOffer', // pending partner renewal offer
   '_tamperCountdown',     // anti-tamper system
+  '_smallCircleBigRepShown',  // milestone: rep≥5 in small circle (one-time)
+  '_smallCircleLegendShown',  // milestone: rep≥8 in small circle (one-time)
 ]);
 
 function cleanState(state) {
