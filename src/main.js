@@ -617,12 +617,34 @@ function executeInMonth(actionId) {
     return;
   }
 
-  // Every action shows full result page, then return to game (same month)
-  renderResult(state, result, () => {
-    state.phase = 'action';
-    saveGame(state);
-    renderGame(state, handleAction, handleRetire);
-  });
+  // Show savings injection popup before result (first-time full-time doujin)
+  const showResultFn = () => {
+    renderResult(state, result, () => {
+      state.phase = 'action';
+      saveGame(state);
+      renderGame(state, handleAction, handleRetire);
+    });
+  };
+
+  if (result.savingsInjection) {
+    const popup = document.createElement('div');
+    popup.className = 'event-overlay';
+    popup.innerHTML = `
+      <div class="event-card" style="max-width:340px;text-align:center">
+        <div style="font-size:1.5rem;margin-bottom:8px">${ic('wallet')}</div>
+        <div style="font-weight:700;font-size:1.05rem;margin-bottom:8px">积蓄取出</div>
+        <div style="font-size:0.82rem;color:var(--text-light);line-height:1.7;margin-bottom:12px;text-align:left">
+          这些年工作攒下的存款<b>¥${result.savingsInjection.toLocaleString()}</b>，现在全部取出来了。<br><br>
+          从现在起，右上角的金额就是你的<b>全部身家</b>——没有工资兜底，每月固定扣除¥1,300生活费。<br><br>
+          <span style="color:var(--danger)">存款低于¥5,000时焦虑会开始消耗热情，归零就真的撑不下去了。</span>
+        </div>
+        <button class="btn btn-primary btn-block" id="savings-ok">明白了，开始搏斗</button>
+      </div>`;
+    document.body.appendChild(popup);
+    popup.querySelector('#savings-ok').addEventListener('click', () => { popup.remove(); showResultFn(); });
+  } else {
+    showResultFn();
+  }
 }
 
 function finishMonth() {

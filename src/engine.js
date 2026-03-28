@@ -2338,14 +2338,32 @@ export function executeAction(state, actionId) {
     if (state.doujinQuitCount >= 2 && passionBoost < basePBoost) {
       result.deltas.push({ icon: 'smiley-nervous', label: '反复折腾的新鲜感消退了', value: `热情加成减少`, positive: false });
     }
-    result.deltas.push({ icon: 'warning', label: '每月生活费¥800自动扣除', value: '没有固定收入了', positive: false });
+
+    // --- Inject accumulated general savings (first time only, not from unemployment) ---
+    if (state.doujinQuitCount === 1 && !wasUnemployed) {
+      const workStart = state.doujinWorkYearReset > 0 ? state.doujinWorkYearReset : 50;
+      const workMonths = Math.max(0, state.turn - workStart);
+      const bgSalaryMult = BACKGROUNDS[state.background]?.salaryMult || 1.0;
+      const startSalary = Math.round(800 * bgSalaryMult);
+      const endSalary = Math.round((800 + Math.max(0, Math.floor(workMonths / 12)) * 200) * bgSalaryMult);
+      const avgSalary = Math.round((startSalary + endSalary) / 2);
+      // 隐含储蓄 = 工作月数 × 平均月薪 × 0.8(储蓄率) × 0.6(投入同人比例)
+      const savingsInjection = Math.min(35000, Math.round(workMonths * avgSalary * 0.8 * 0.6));
+      if (savingsInjection > 0) {
+        addMoney(state, savingsInjection);
+        result.deltas.push({ icon: 'wallet', label: '取出多年积蓄', value: `+¥${savingsInjection.toLocaleString()}`, positive: true });
+        result.savingsInjection = savingsInjection; // flag for UI popup
+      }
+    }
+
+    result.deltas.push({ icon: 'warning', label: '每月生活费¥1300自动扣除', value: '没有固定收入了', positive: false });
     // Quitting consumes the rest of the month (resignation paperwork, handover, etc.)
     state.monthTimeSpent = state.time;
     result.tip = wasUnemployed
       ? { label: '化危为机', text: '失业不是问题，我们还有另一条路，全职同人创作，时间完全自由，但一切靠自己。存款低于¥5000时焦虑会严重侵蚀热情。撑不住随时可以重新找工作。' }
       : state.doujinQuitCount >= 2
         ? { label: '再次全职同人', text: `这是你第${state.doujinQuitCount}次辞职搞全职同人。频繁在职场和全职同人之间切换会让回去找工作越来越难。想清楚了再走这条路。` }
-        : { label: '全职同人创作者', text: '你选择了最勇敢的道路——辞掉工作，全身心投入同人创作。时间自由了，但收入完全靠自己。存款就是你的安全线，低于¥5000时焦虑会开始侵蚀热情。如果撑不住，随时可以回去找工作——但薪资要从头开始。' };
+        : { label: '全部身家', text: `你这些年攒下的积蓄已经全部取出，加上同人资金，右上角的¥${state.money.toLocaleString()}就是你的全部家当。每月固定生活费¥1,300，没有工资兜底了。存款低于¥5000时焦虑会侵蚀热情，归零就真的撑不下去了。` };
   }
 
   if (action.type === 'goCommercial') {
@@ -2658,7 +2676,7 @@ export function endMonth(state) {
       // Full-time doujin: no salary, fixed living cost, anxiety based on savings
       state.doujinMonths = (state.doujinMonths || 0) + 1;
       state.monthlyIncome = 0;
-      const livingCost = 800;
+      const livingCost = 1300;
       addMoney(state, -livingCost);
       result.deltas.push({ icon: 'house', label: '生活费', value: `-¥${livingCost}`, positive: false });
 
