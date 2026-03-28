@@ -1,11 +1,49 @@
 /**
  * 织梦交易 — 合约定义
- * 每个合约工厂函数接收 state，返回 { id, question, icon, odds, resolveTurn, resolveCheck, category } 或 null（不可用）
+ * 每个合约工厂函数接收 state，返回 { id, question, icon, odds, resolveTurn, resolveCheck, resolveType, resolveParams, category } 或 null（不可用）
+ *
+ * resolveCheck: runtime function (lost on JSON serialize)
+ * resolveType + resolveParams: serializable descriptor (survives save/load)
  */
 
 // === 辅助 ===
 function rng(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// === Serializable resolve check registry ===
+const RESOLVE_REGISTRY = {
+  trend_tag_eq:    (s, p) => s.market?.currentTrend?.tag === p.tag,
+  community_gt:    (s, p) => s.market && s.market.communitySize > p.threshold,
+  community_gte:   (s, p) => s.market && s.market.communitySize >= p.threshold,
+  community_lt:    (s, p) => s.market && s.market.communitySize < p.threshold,
+  community_range: (s, p) => s.market && s.market.communitySize >= p.lo && s.market.communitySize <= p.hi,
+  nhvp_gt:         (s, p) => s.market && s.market.nHVP > p.threshold,
+  nhvp_lt:         (s, p) => s.market && s.market.nHVP < p.threshold,
+  nhvp_lte:        (s, p) => s.market && s.market.nHVP <= p.threshold,
+  nlvp_gt:         (s, p) => s.market && s.market.nLVP > p.threshold,
+  recession_active:(s) => s.recessionTurnsLeft > 0,
+  sh_pressure_gt:  (s, p) => { const sp = s.official?.secondHandPressure; return sp && (sp.hvp > p.threshold || sp.lvp > p.threshold); },
+  cum_hvp_gte:     (s, p) => s.market && s.market.cumHVPProduced >= p.target,
+  event_count_gt:  (s, p) => { const keys = p.keys || [p.key]; return keys.reduce((sum, k) => sum + (s.eventCounts?.[k] || 0), 0) > p.count; },
+  ip_heat_gt:      (s, p) => (s.official?.ipHeat || 0) > p.threshold,
+  ip_heat_lt:      (s, p) => (s.official?.ipHeat || 0) < p.threshold,
+};
+
+/** Rebuild resolveCheck function from resolveType + resolveParams (used after loading save) */
+export function rebuildResolveCheck(contract) {
+  if (typeof contract.resolveCheck === 'function') return; // already has it
+  const fn = RESOLVE_REGISTRY[contract.resolveType];
+  if (fn) {
+    contract.resolveCheck = (s) => fn(s, contract.resolveParams || {});
+  }
+}
+
+/** Resolve a contract using either resolveCheck or resolveType+resolveParams */
+export function resolveContract(contract, state) {
+  if (typeof contract.resolveCheck === 'function') return contract.resolveCheck(state);
+  const fn = RESOLVE_REGISTRY[contract.resolveType];
+  return fn ? fn(state, contract.resolveParams || {}) : false;
+}
 
 // === 潮流类 ===
 function trendExact(state) {
@@ -20,6 +58,7 @@ function trendExact(state) {
     odds: 5.0,
     resolveTurn: state.turn + m.currentTrend.turnsLeft + 1,
     resolveCheck: (s) => s.market?.currentTrend?.tag === target,
+    resolveType: 'trend_tag_eq', resolveParams: { tag: target },
     category: '潮流',
   };
 }
@@ -36,6 +75,7 @@ function trendRepeat(state) {
     odds: 15.0,
     resolveTurn: state.turn + m.currentTrend.turnsLeft + 1,
     resolveCheck: (s) => s.market?.currentTrend?.tag === lastTag,
+    resolveType: 'trend_tag_eq', resolveParams: { tag: lastTag },
     category: '潮流',
   };
 }
@@ -54,6 +94,7 @@ function communityGrowth(state) {
     odds: 4.0,
     resolveTurn: state.turn + 3,
     resolveCheck: (s) => s.market && s.market.communitySize > threshold,
+    resolveType: 'community_gt', resolveParams: { threshold },
     category: '社群',
   };
 }
@@ -70,6 +111,7 @@ function communityDecline(state) {
     odds: 5.0,
     resolveTurn: state.turn + 3,
     resolveCheck: (s) => s.market && s.market.communitySize < threshold,
+    resolveType: 'community_lt', resolveParams: { threshold },
     category: '社群',
   };
 }
@@ -94,6 +136,8 @@ function hvpCreatorSwing(state) {
     resolveCheck: direction === 'up'
       ? (s) => s.market && s.market.nHVP > target
       : (s) => s.market && s.market.nHVP < target,
+    resolveType: direction === 'up' ? 'nhvp_gt' : 'nhvp_lt',
+    resolveParams: { threshold: target },
     category: '竞争',
   };
 }
@@ -109,6 +153,7 @@ function lvpFlood(state) {
     odds: 6.0,
     resolveTurn: state.turn + 6,
     resolveCheck: (s) => s.market && s.market.nLVP > threshold,
+    resolveType: 'nlvp_gt', resolveParams: { threshold },
     category: '竞争',
   };
 }
@@ -123,6 +168,7 @@ function recessionBet(state) {
     odds: 7.0,
     resolveTurn: state.turn + 6,
     resolveCheck: (s) => s.recessionTurnsLeft > 0,
+    resolveType: 'recession_active', resolveParams: {},
     category: '宏观',
   };
 }
@@ -137,6 +183,7 @@ function doubleRecession(state) {
     odds: 10.0,
     resolveTurn: state.turn + 6,
     resolveCheck: (s) => s.recessionTurnsLeft > 0,
+    resolveType: 'recession_active', resolveParams: {},
     category: '宏观',
   };
 }
@@ -158,6 +205,7 @@ function secondHandSpike(state) {
       const p = s.official?.secondHandPressure;
       return p && (p.hvp > threshold || p.lvp > threshold);
     },
+    resolveType: 'sh_pressure_gt', resolveParams: { threshold },
     category: '二手',
   };
 }
@@ -181,6 +229,7 @@ function npcCollabRumor(state) {
     odds: 3.5,
     resolveTurn: state.turn + 3,
     resolveCheck: (s) => s.market && s.market.cumHVPProduced >= target,
+    resolveType: 'cum_hvp_gte', resolveParams: { target },
     category: '传闻',
   };
 }
@@ -199,6 +248,7 @@ function npcRetirementRumor(state) {
     odds: 4.0,
     resolveTurn: state.turn + 4,
     resolveCheck: (s) => s.market && s.market.nHVP <= threshold,
+    resolveType: 'nhvp_lte', resolveParams: { threshold },
     category: '传闻',
   };
 }
@@ -216,6 +266,7 @@ function officialAnnouncementBet(state) {
     odds: 5.0,
     resolveTurn: state.turn + 4,
     resolveCheck: (s) => s.market && s.market.communitySize >= boom,
+    resolveType: 'community_gte', resolveParams: { threshold: boom },
     category: '传闻',
   };
 }
@@ -232,6 +283,7 @@ function printingCrisisRumor(state) {
     odds: 5.5,
     resolveTurn: state.turn + 6,
     resolveCheck: (s) => (s.eventCounts?.inflation || 0) > currentInflationCount,
+    resolveType: 'event_count_gt', resolveParams: { key: 'inflation', count: currentInflationCount },
     category: '传闻',
   };
 }
@@ -247,6 +299,7 @@ function fandomWarRumor(state) {
     odds: 4.5,
     resolveTurn: state.turn + 3,
     resolveCheck: (s) => (s.eventCounts?.collapse || 0) > collapseCount,
+    resolveType: 'event_count_gt', resolveParams: { key: 'collapse', count: collapseCount },
     category: '八卦',
   };
 }
@@ -262,6 +315,7 @@ function viralPrediction(state) {
     odds: 3.5,
     resolveTurn: state.turn + 4,
     resolveCheck: (s) => ((s.eventCounts?.boom || 0) + (s.eventCounts?.viral_post || 0)) > viralCount,
+    resolveType: 'event_count_gt', resolveParams: { keys: ['boom', 'viral_post'], count: viralCount },
     category: '八卦',
   };
 }
@@ -279,6 +333,7 @@ function speculatorCrash(state) {
     odds: 6.0,
     resolveTurn: state.turn + 6,
     resolveCheck: (s) => (s.eventCounts?.bubble_burst || 0) > burstCount,
+    resolveType: 'event_count_gt', resolveParams: { key: 'bubble_burst', count: burstCount },
     category: '二手',
   };
 }
@@ -302,6 +357,7 @@ function exactCommunitySize(state) {
     odds: 15.0,
     resolveTurn: state.turn + 2,
     resolveCheck: (s) => s.market && s.market.communitySize >= lo && s.market.communitySize <= hi,
+    resolveType: 'community_range', resolveParams: { lo, hi },
     category: '精准',
   };
 }
@@ -322,6 +378,8 @@ function ipHeatShift(state) {
     resolveCheck: direction
       ? (s) => (s.official?.ipHeat || 0) > threshold
       : (s) => (s.official?.ipHeat || 0) < threshold,
+    resolveType: direction ? 'ip_heat_gt' : 'ip_heat_lt',
+    resolveParams: { threshold },
     category: 'IP',
   };
 }

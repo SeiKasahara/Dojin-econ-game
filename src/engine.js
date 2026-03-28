@@ -231,6 +231,7 @@ const CHOICE_EFFECTS = {
 
 // Creative journal — per-subtype flavor text (see creative-journal.js)
 import { getCreativeJournal, getJournalMilestone } from './creative-journal.js';
+import { resolveContract } from './prediction-contracts.js';
 
 // Quality star rating (0.5-1.8 → ★☆ display)
 export function getQualityStars(quality) {
@@ -2867,7 +2868,7 @@ export function endMonth(state) {
     const predSettlements = [];
     pm.contracts = pm.contracts.filter(c => {
       if (state.turn >= c.resolveTurn) {
-        const outcome = typeof c.resolveCheck === 'function' ? c.resolveCheck(state) : false;
+        const outcome = resolveContract(c, state);
         const related = pm.holdings.filter(h => h.contractId === c.id);
         for (const h of related) {
           const won = (h.side === 'yes' && outcome) || (h.side === 'no' && !outcome);

@@ -8,6 +8,7 @@
  */
 
 import { getAge, getLifeStageLabel } from './engine.js';
+import { rebuildResolveCheck } from './prediction-contracts.js';
 
 const SAVE_KEY = 'dojin_save';
 const SAVE_VERSION = 2; // v2 = signed saves
@@ -47,11 +48,24 @@ function fromBase64(b64) {
   );
 }
 
-// --- Clean state (remove temporary _ properties) ---
+// --- Clean state (remove temporary _ properties, preserve persistent ones) ---
+const PERSISTENT_UNDERSCORED = new Set([
+  '_predictions',         // prediction market: contracts, holdings, profit history
+  '_debtBailoutDone',     // achievement tracking: debt bailout this cycle
+  '_debtBailedOnce',      // achievement tracking: permanent first-bailout flag
+  '_debtPassionStreak',   // achievement tracking: consecutive low-money high-passion months
+  '_lowPassionHit',       // achievement tracking: ever had passion<=15
+  '_passionRecovered',    // achievement tracking: recovered from <=15 to >=80
+  '_recessionEndTurn',    // tracks when recession ended (for doubleRecession contract)
+  '_lastBacklashTurn',    // backlash cooldown
+  '_partnerRenewalOffer', // pending partner renewal offer
+  '_tamperCountdown',     // anti-tamper system
+]);
+
 function cleanState(state) {
   const cleaned = {};
   for (const [k, v] of Object.entries(state)) {
-    if (k.startsWith('_')) continue;
+    if (k.startsWith('_') && !PERSISTENT_UNDERSCORED.has(k)) continue;
     cleaned[k] = v;
   }
   return cleaned;
@@ -123,6 +137,13 @@ export function loadGame() {
     // Migrate skillExp for saves from before the experience-based skill system
     // getCreativeSkill will handle the actual migration on first call
     if (state.skillExp == null) state.skillExp = 0;
+
+    // Rebuild prediction market resolveCheck functions from serializable descriptors
+    if (state._predictions?.contracts) {
+      for (const c of state._predictions.contracts) {
+        rebuildResolveCheck(c);
+      }
+    }
 
     return state;
   } catch (e) {
