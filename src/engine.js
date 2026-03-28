@@ -1604,48 +1604,39 @@ export function executeAction(state, actionId) {
         state.passion -= 2;
         addMoney(state, -shipCost);
         const consignDiscount = 0.55; // consignment agent takes a cut + less engagement
-        const consignBoost = Math.round(evt.salesBoost * consignDiscount * 10) / 10;
+        // Random variance: not being there means less control (0.7~0.95)
+        const consignRNG = 0.7 + Math.random() * 0.25;
+        const consignBoost = Math.round(evt.salesBoost * consignDiscount * consignRNG * 10) / 10;
         state.attendingEvent = { ...evt, salesBoost: consignBoost };
+        const rngPct = Math.round(consignRNG * 100);
         result.deltas.push({ icon: 'package', label: `寄售 ${evt.name}@${evt.city}`, value: `委托代售 销量×${consignBoost}`, positive: true });
+        if (rngPct < 85) result.deltas.push({ icon: 'shuffle', label: '代理摆摊状态一般', value: `发挥${rngPct}%`, positive: false });
         result.deltas.push({ icon: 'coins', label: '邮寄费用', value: `-¥${shipCost}`, positive: false });
 
-        // --- Consignment agent mishap: risk scales with consecutive consigns ---
-        const mishapChance = Math.min(0.7, (state.consecutiveConsigns - 1) * 0.15); // 0% first, 15% second, 30% third...
-        if (mishapChance > 0 && Math.random() < mishapChance) {
+        // --- Consignment agent mishap: flat 12% each time (normal probability event) ---
+        if (Math.random() < 0.12) {
           const roll = Math.random();
-          // Low resilience amplifies interpersonal mishap pain
-          const _r = state.endowments.resilience || 0;
-          const _im = _r <= 1 ? 2.3 - _r * 0.5 : Math.max(0.7, 1.0 - (_r - 2) * 0.15);
-          if (roll < 0.35) {
-            // 代理不靠谱：丢失部分库存
-            const lostHVP = Math.min(state.inventory.hvpStock, Math.ceil(Math.random() * 2));
-            const lostLVP = Math.min(state.inventory.lvpStock, Math.ceil(Math.random() * 3));
+          if (roll < 0.45) {
+            // 代理粗心：丢失少量库存
+            const lostHVP = Math.min(state.inventory.hvpStock, Math.ceil(Math.random() * 1));
+            const lostLVP = Math.min(state.inventory.lvpStock, Math.ceil(Math.random() * 2));
             state.inventory.hvpStock -= lostHVP;
             state.inventory.lvpStock -= lostLVP;
-            const lostPassion = Math.round(5 * _im);
-            result.deltas.push({ icon: 'smiley-x-eyes', label: '代理弄丢了部分库存！', value: `本-${lostHVP} 谷-${lostLVP}`, positive: false });
-            state.passion = Math.max(0, state.passion - lostPassion);
-            result.deltas.push({ icon: 'heart', label: '货都丢了...', value: `热情-${lostPassion}`, positive: false });
-          } else if (roll < 0.65) {
-            // 代理私吞货款：在已折扣的寄售boost上再扣一层
-            const skimRate = 0.15 + Math.random() * 0.15; // 15-30%
+            state.passion = Math.max(0, state.passion - 3);
+            result.deltas.push({ icon: 'smiley-x-eyes', label: '代理弄丢了部分库存', value: `本-${lostHVP} 谷-${lostLVP} 热情-3`, positive: false });
+          } else if (roll < 0.80) {
+            // 代理漏算：少收了一些钱
+            const skimRate = 0.10 + Math.random() * 0.10; // 10-20%
             state.attendingEvent = { ...evt, salesBoost: consignBoost * (1 - skimRate) };
-            const skimPassion = Math.round(3 * _im);
-            result.deltas.push({ icon: 'money', label: '代理疑似私吞部分货款', value: `预计损失${Math.round(skimRate * 100)}%收入`, positive: false });
-            state.passion = Math.max(0, state.passion - skimPassion);
+            state.passion = Math.max(0, state.passion - 2);
+            result.deltas.push({ icon: 'money', label: '代理漏算了部分货款', value: `收入-${Math.round(skimRate * 100)}% 热情-2`, positive: false });
           } else {
-            // 和代理吵架：热情大幅下降 + 声誉损失
-            const fightPassion = Math.round(8 * _im);
-            const repLoss = Math.min(0.5, state.reputation * 0.05 * _im);
-            state.passion = Math.max(0, state.passion - fightPassion);
+            // 代理态度差引发纠纷，传出去影响口碑
+            const repLoss = Math.min(0.3, state.reputation * 0.03);
+            state.passion = Math.max(0, state.passion - 4);
             state.reputation = Math.max(0, state.reputation - repLoss);
-            result.deltas.push({ icon: 'smiley-angry', label: '和寄售代理大吵一架！', value: `热情-${fightPassion} 声誉受损`, positive: false });
-            result.deltas.push({ icon: 'star', label: '争吵传出去了...', value: `-${repLoss.toFixed(2)}`, positive: false });
+            result.deltas.push({ icon: 'chat-circle', label: '和代理发生纠纷', value: `热情-4 声誉-${repLoss.toFixed(2)}`, positive: false });
           }
-          if (_im > 1.1) result.deltas.push({ icon: 'shield', label: '心理韧性低，人际冲突打击更大', value: `×${_im.toFixed(1)}`, positive: false });
-        }
-        if (state.consecutiveConsigns >= 3) {
-          result.deltas.push({ icon: 'warning', label: `已连续寄售${state.consecutiveConsigns}次`, value: '代理风险上升中', positive: false });
         }
       }
 
@@ -2348,6 +2339,8 @@ export function executeAction(state, actionId) {
       result.deltas.push({ icon: 'smiley-nervous', label: '反复折腾的新鲜感消退了', value: `热情加成减少`, positive: false });
     }
     result.deltas.push({ icon: 'warning', label: '每月生活费¥800自动扣除', value: '没有固定收入了', positive: false });
+    // Quitting consumes the rest of the month (resignation paperwork, handover, etc.)
+    state.monthTimeSpent = state.time;
     result.tip = wasUnemployed
       ? { label: '化危为机', text: '失业不是问题，我们还有另一条路，全职同人创作，时间完全自由，但一切靠自己。存款低于¥5000时焦虑会严重侵蚀热情。撑不住随时可以重新找工作。' }
       : state.doujinQuitCount >= 2
