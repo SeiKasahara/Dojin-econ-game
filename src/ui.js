@@ -2129,6 +2129,8 @@ export function renderResult(state, result, onContinue) {
           ${renderGroupedDeltas(result.deltas)}
         </div>
 
+        ${result.salesDetails && result.salesDetails.length > 0 ? renderSalesLedger(result.salesDetails) : ''}
+
         ${result.salesInfo ? renderSalesBreakdown(result.salesInfo, result.salesDetails) : ''}
 
         ${chartId ? `<div class="result-box" style="padding:12px">
@@ -2251,6 +2253,31 @@ export function renderResult(state, result, onContinue) {
 }
 
 // === Event Overlay ===
+// === Sales Ledger (per-work sales list) ===
+function renderSalesLedger(salesDetails) {
+  const rows = salesDetails.map(d => {
+    const w = d.work;
+    const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
+    const name = `${sub.name}${w.name ? '·' + escapeHtml(w.name) : ''}`;
+    const unit = w.type === 'hvp' ? '本' : '个';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.72rem;border-bottom:1px dashed var(--border)">
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ic(sub.emoji)} ${name}</span>
+      <span style="flex-shrink:0;color:var(--text-muted);margin:0 6px;font-size:0.68rem">×${d.sold}${unit} @¥${w.price}</span>
+      <span style="flex-shrink:0;font-weight:600;color:var(--success)">+¥${d.rev}</span>
+    </div>`;
+  }).join('');
+  const totalSold = salesDetails.reduce((s, d) => s + d.sold, 0);
+  const totalRev = salesDetails.reduce((s, d) => s + d.rev, 0);
+  return `<div class="result-box" style="padding:10px 12px;margin-bottom:10px">
+    <h3 style="font-size:0.85rem;margin-bottom:6px">${ic('list-checks')} 销售清单</h3>
+    ${rows}
+    <div style="display:flex;justify-content:space-between;padding:6px 0 0;font-size:0.75rem;font-weight:700">
+      <span>合计</span>
+      <span style="color:var(--success)">售出${totalSold} · +¥${totalRev}</span>
+    </div>
+  </div>`;
+}
+
 // === Sales Breakdown (educational waterfall) ===
 function renderSalesBreakdown(s, salesDetails) {
   // Narrative intuition panel — no precise numbers, only causal signals
