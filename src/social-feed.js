@@ -179,6 +179,64 @@ function ipFlavorPosts(official) {
   return pool.length > 0 && r() < 0.45 ? [{ text: pool[Math.floor(r() * pool.length)], type: 'flavor' }] : [];
 }
 
+function predictionMarketPosts(playerState) {
+  const pm = playerState._predictions;
+  if (!pm) return [];
+  const hasHoldings = pm.holdings?.length > 0;
+  const hasResolved = pm.resolved?.length > 0;
+  const profit = pm.totalProfit || 0;
+
+  const pool = [];
+
+  // 反对派：质疑同人金融化
+  pool.push(
+    () => '同人创作什么时候变成金融产品了？织梦交易这东西真的好吗...',
+    () => '好好画画不行吗，非要搞什么预测市场，圈子越来越魔幻了',
+    () => '"同人本创作者数量"居然能拿来下注，感觉创作者被当成了赌桌上的筹码',
+    () => '织梦交易让人心态变了，关注点从"作品好不好"变成了"数据涨不涨"',
+  );
+
+  // 赚钱的人
+  if (hasResolved) pool.push(
+    () => '上个月在织梦交易买了YES，结算赚了一笔，比出本还快（小声）',
+    () => '靠预测市场赚的钱够印下一本了，算不算用魔法打败魔法？',
+    () => '织梦交易真香，判断对了直接翻倍，感觉自己是同人圈巴菲特',
+    () => '连续猜对三次了，我是不是有预言天赋？',
+  );
+
+  // 亏钱的人
+  if (hasResolved) pool.push(
+    () => '织梦交易亏麻了，早知道这钱拿去印本子...',
+    () => '买了NO结果人家真涨了，¥200打水漂，心在滴血',
+    () => '再也不玩织梦交易了（第三次说这句话）',
+    () => '亏的钱比我上次展会摊位费还多，我在干什么啊',
+  );
+
+  // 看热闹的人
+  pool.push(
+    () => '每天打开织梦交易看看行情已经成了新习惯，虽然从来不买',
+    () => '看别人在织梦交易里大起大落，比追剧还刺激',
+    () => '有人截图晒织梦交易的收益，评论区一半恭喜一半骂街',
+    () => '织梦交易的合约问题都好有意思，虽然我看不懂该买什么',
+    () => '围观织梦交易群里的讨论，多空双方吵得比CP论战还凶',
+  );
+
+  // 玩家自身相关
+  if (profit > 50) pool.push(
+    () => '听说有人在织梦交易上赚了不少，眼光真准',
+  );
+  if (profit < -50) pool.push(
+    () => '又有人在织梦交易里翻车了...劝大家量力而行',
+  );
+
+  if (pool.length === 0) return [];
+  if (r() < 0.3) {
+    const fn = pool[Math.floor(r() * pool.length)];
+    return [{ text: fn(), type: 'market' }];
+  }
+  return [];
+}
+
 function generalChatter() {
   const pool = [
     '又到周末了，打开画板却不知道画什么...',
@@ -317,6 +375,20 @@ function generateComments(text, type) {
   if (text.includes('收藏')) pool.push(
     '默默关注了好久终于等到被发现', '有眼光的人迟早会被看到', '这位太太的作品真的被严重低估了');
 
+  // Prediction market posts
+  if (text.includes('织梦交易') || text.includes('预测市场')) pool.push(
+    '同人圈搞金融真的越来越离谱了', '有人靠这个赚到钱了吗？纯好奇', '我就看看不买，当免费连续剧了',
+    '这东西本质就是赌博吧，披了个同人的皮', '不懂就问，这个合法吗', '小赌怡情大赌伤身，各位量力而行',
+    '说实话挺有意思的，比单纯看数据有参与感', '赚了请大家吃饭亏了别来哭就行');
+  if (text.includes('赚了') || text.includes('翻倍') || text.includes('真香')) pool.push(
+    '别晒了别晒了，怕你下次就亏回去', '这运气可以去买彩票了吧', '跟单跟单，下次买什么带带我',
+    '幸存者偏差罢了，亏钱的人不会发帖');
+  if (text.includes('亏') || text.includes('打水漂') || text.includes('翻车')) pool.push(
+    '抱抱你，我也亏了...', '这钱拿去买谷子至少还能摸到实物', '同人圈韭菜的自我修养',
+    '别玩了别玩了，老老实实画画吧');
+  if (text.includes('金融') || text.includes('筹码') || text.includes('赌桌')) pool.push(
+    '说得好，创作不该被数据绑架', '虽然但是，看别人玩确实很上头', '同意，感觉圈子风气变了');
+
   // Market posts
   if (text.includes('二手') && text.includes('难卖')) pool.push(
     '二手冲击太大了，新品根本竞争不过', '有什么办法能让买家优先选择新品呢', '供大于求的时候只能卷质量了');
@@ -390,7 +462,10 @@ export function generateSocialFeed(market, official, playerState) {
   // 6. IP flavor
   feed.push(...ipFlavorPosts(official));
 
-  // 7. General chatter
+  // 7. Prediction market chatter
+  feed.push(...predictionMarketPosts(playerState));
+
+  // 8. General chatter
   feed.push(...generalChatter());
 
   // Assign authors and metadata

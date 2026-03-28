@@ -329,8 +329,12 @@ function handleAction(actionId) {
             <div style="font-size:0.8rem;color:var(--text-light);margin:4px 0 12px">"还想继续合作吗？"</div>
             <button class="btn btn-primary btn-block" id="renew-yes" style="margin-bottom:6px">${ic('arrows-clockwise')} 续约合作</button>
             <button class="btn btn-block" id="renew-no" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">换个人试试</button>
+            <button class="btn btn-block" id="renew-back" style="margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.78rem">返回</button>
           </div>`;
         document.body.appendChild(renewOverlay);
+        const closeRenew = () => { renewOverlay.remove(); cancelBack(); };
+        renewOverlay.addEventListener('click', (ev) => { if (ev.target === renewOverlay) closeRenew(); });
+        renewOverlay.querySelector('#renew-back').addEventListener('click', closeRenew);
         renewOverlay.querySelector('#renew-yes').addEventListener('click', () => {
           renewOverlay.remove();
           state._selectedPartnerCandidate = {
@@ -408,6 +412,7 @@ function handleAction(actionId) {
         </div>`;
       document.body.appendChild(overlay);
       overlay.querySelector('#partner-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+      overlay.addEventListener('click', (ev) => { if (ev.target === overlay) { overlay.remove(); cancelBack(); } });
       overlay.querySelectorAll('.app-action-card').forEach(el => {
         el.addEventListener('click', () => {
           const idx = parseInt(el.dataset.idx);

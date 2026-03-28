@@ -2909,6 +2909,7 @@ export function endMonth(state) {
   if (state.recessionTurnsLeft > 0) {
     state.recessionTurnsLeft--;
     if (state.recessionTurnsLeft === 0) {
+      state._recessionEndTurn = state.turn;
       result.deltas.push({ icon: 'trend-up', label: '经济复苏', value: '下行周期结束', positive: true });
     }
   }

@@ -189,25 +189,46 @@ export function openPredictionMarket(state) {
       </span>
     </div>`).join('') : '';
 
+  // My holdings summary
+  const activeContracts2 = pm.contracts.filter(c => state.turn < c.resolveTurn);
+  const holdingSummaryHtml = pm.holdings.length > 0 ? (() => {
+    let totalCost = 0, totalVal = 0;
+    const rows = pm.holdings.map((h, hidx) => {
+      const contract = pm.contracts.find(c => c.id === h.contractId);
+      if (!contract) return '';
+      const currentPrice = h.side === 'yes' ? contract.price : 100 - contract.price;
+      const currentVal = h.shares * currentPrice;
+      const pl = currentVal - h.cost;
+      totalCost += h.cost; totalVal += currentVal;
+      const remaining = contract.resolveTurn - state.turn;
+      const resolved = remaining <= 0;
+      return `<div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:0.68rem">
+        <span style="flex-shrink:0;font-weight:700;color:${h.side === 'yes' ? 'var(--success)' : 'var(--danger)'}">${h.side.toUpperCase()}</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${contract.question}">${contract.question}</span>
+        <span style="flex-shrink:0;color:var(--text-muted)">×${h.shares}</span>
+        <span style="flex-shrink:0;font-weight:600;color:${pl >= 0 ? 'var(--success)' : 'var(--danger)'}">${pl >= 0 ? '+' : ''}¥${pl}</span>
+        <span style="flex-shrink:0;font-size:0.58rem;color:var(--text-muted)">${resolved ? '待结算' : remaining + '月'}</span>
+        ${!resolved ? `<button class="pm-sell" data-hidx="${hidx}" style="flex-shrink:0;font-size:0.58rem;padding:1px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer">卖</button>` : ''}
+      </div>`;
+    }).filter(Boolean).join('');
+    const totalPL = totalVal - totalCost;
+    return `<div style="margin-bottom:10px;padding:10px;border-radius:10px;background:linear-gradient(135deg,#FFF8E8,#FFF3D0);border:1.5px solid #F39C12">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:700;font-size:0.78rem">${ic('wallet','0.78rem')} 我的持仓</span>
+        <span style="font-size:0.72rem;font-weight:600;color:${totalPL >= 0 ? 'var(--success)' : 'var(--danger)'}">持仓 ¥${totalCost} · 浮动 ${totalPL >= 0 ? '+' : ''}¥${totalPL}</span>
+      </div>
+      ${rows}
+    </div>`;
+  })() : '';
+
   // Active contracts
-  const contractsHtml = pm.contracts.filter(c => state.turn < c.resolveTurn).map((c, i) => {
-    const myHoldings = pm.holdings.filter(h => h.contractId === c.id);
-    const holdingHtml = myHoldings.length > 0
-      ? myHoldings.map(h => {
-          const currentVal = h.side === 'yes' ? h.shares * c.price : h.shares * (100 - c.price);
-          const pl = currentVal - h.cost;
-          return `<div style="font-size:0.65rem;padding:2px 0;color:${pl >= 0 ? 'var(--success)' : 'var(--danger)'}">
-            持有 ${h.side.toUpperCase()} ×${h.shares} 成本¥${h.cost} 现值¥${currentVal} (${pl >= 0 ? '+' : ''}${pl})
-            <button class="pm-sell" data-hidx="${pm.holdings.indexOf(h)}" style="font-size:0.6rem;padding:1px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;margin-left:4px">卖出</button>
-          </div>`;
-        }).join('')
-      : '';
+  const contractsHtml = activeContracts2.map((c, i) => {
     const chart = renderPriceChart(c, 160, 36);
     return `
       <div class="pm-contract" data-cidx="${i}" style="padding:10px;margin-bottom:8px;border:1.5px solid var(--border);border-radius:10px">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600;font-size:0.78rem;flex:1">${ic(c.icon || 'question', '0.78rem')} ${c.question}</span>
-          <span style="font-size:0.6rem;color:var(--text-muted)">${c.resolveTurn - state.turn}月后</span>
+          <span style="font-size:0.6rem;color:var(--text-muted)">${c.resolveTurn - state.turn}月后结算</span>
         </div>
         <div style="margin:4px 0">${chart}</div>
         <div style="display:flex;gap:6px;align-items:center;font-size:0.75rem">
@@ -218,7 +239,6 @@ export function openPredictionMarket(state) {
           <button class="pm-buy" data-cidx="${i}" data-side="yes" style="font-size:0.68rem;padding:3px 10px;border-radius:6px;border:1.5px solid var(--success);background:#E8F8F0;color:var(--success);font-weight:700;cursor:pointer">买YES</button>
           <button class="pm-buy" data-cidx="${i}" data-side="no" style="font-size:0.68rem;padding:3px 10px;border-radius:6px;border:1.5px solid var(--danger);background:#FDF0F0;color:var(--danger);font-weight:700;cursor:pointer">买NO</button>
         </div>
-        ${holdingHtml}
       </div>`;
   }).join('');
 
@@ -242,6 +262,7 @@ export function openPredictionMarket(state) {
       </div>
       <div style="flex:1;overflow-y:auto;padding:12px">
         ${resolvedHtml}
+        ${holdingSummaryHtml}
         ${contractsHtml || '<div style="font-size:0.72rem;color:var(--text-muted);text-align:center;padding:16px">暂无可交易的合约</div>'}
         ${historyHtml}
         <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:10px 0;line-height:1.5">

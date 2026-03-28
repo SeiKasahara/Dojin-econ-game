@@ -1116,6 +1116,7 @@ export function openMarketApp(state) {
   document.body.appendChild(overlay);
 
   overlay.querySelector('#market-back').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
   // Reprice: click row → show slider panel → confirm to apply
   let activeRepriceWid = null;
   const repricePanel = overlay.querySelector('#reprice-panel');

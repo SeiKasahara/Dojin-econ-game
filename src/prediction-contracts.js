@@ -128,14 +128,14 @@ function recessionBet(state) {
 }
 
 function doubleRecession(state) {
-  // Will a SECOND recession hit within 6 months after the current one ends?
-  if (state.recessionTurnsLeft <= 0 || state.turn < 24) return null;
+  // Only available the month right after a recession ends
+  if (state._recessionEndTurn == null || state.turn !== state._recessionEndTurn + 1) return null;
   return {
     id: `double_rec_${state.turn}`,
     question: '本轮经济下行结束后6个月内会再次衰退吗？',
     icon: 'arrows-clockwise',
     odds: 10.0,
-    resolveTurn: state.turn + state.recessionTurnsLeft + 6,
+    resolveTurn: state.turn + 6,
     resolveCheck: (s) => s.recessionTurnsLeft > 0,
     category: '宏观',
   };
