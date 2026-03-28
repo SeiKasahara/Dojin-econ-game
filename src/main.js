@@ -357,7 +357,15 @@ function handleAction(actionId) {
       state._partnerRenewalOffer = null;
     }
 
-    showPartnerSelector();
+    const busyThisMonth = new Set(); // candidate indices unavailable this month
+    const BUSY_EXCUSES = [
+      '最近太忙了，下个月再说吧…',
+      '不好意思，这个月有别的安排',
+      '家里有点事，暂时没法合作',
+      '刚接了个急稿，抽不开身',
+      '最近身体不太好，先休息一阵',
+      '正在赶自己的本子，没有余力',
+    ];
     function showPartnerSelector() {
       const candidates = generatePartnerCandidates(state);
       if (!candidates) {
@@ -385,9 +393,10 @@ function handleAction(actionId) {
             ${candidates.map((c, i) => {
               const tc = tierColors[c.tier] || '#95a5a6';
               const tl = tierLabels[c.tier] || '';
+              const busy = busyThisMonth.has(i);
               const avatarHtml = c.avatarIdx
-                ? `<img src="partner/${c.avatarIdx}.webp" style="width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid ${tc};flex-shrink:0">`
-                : `<div style="width:42px;height:42px;border-radius:50%;background:#27AE60;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0">${ic('user')}</div>`;
+                ? `<img src="partner/${c.avatarIdx}.webp" style="width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid ${busy ? '#ccc' : tc};flex-shrink:0;${busy ? 'filter:grayscale(0.8);opacity:0.5' : ''}">`
+                : `<div style="width:42px;height:42px;border-radius:50%;background:${busy ? '#ccc' : '#27AE60'};display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0">${ic('user')}</div>`;
               const typeHint = c.visibleType
                 ? `<span style="font-size:0.65rem;color:${c.visibleType === 'supportive' ? 'var(--success)' : c.visibleType === 'toxic' ? 'var(--danger)' : 'var(--accent)'}">${PARTNER_TYPES[c.visibleType]?.name || ''}</span>`
                 : '';
@@ -395,7 +404,7 @@ function handleAction(actionId) {
                 ? '<span style="font-size:0.6rem;color:' + tc + '">' + '●'.repeat(Math.floor(c.affinity)) + '○'.repeat(5 - Math.floor(c.affinity)) + '</span>'
                 : '';
               return `
-                <div class="app-action-card" data-idx="${i}" style="cursor:pointer">
+                <div class="app-action-card" data-idx="${i}" style="cursor:${busy ? 'default' : 'pointer'};${busy ? 'opacity:0.5;pointer-events:none' : ''}">
                   ${avatarHtml}
                   <div class="app-action-body">
                     <div class="app-action-name" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -403,7 +412,7 @@ function handleAction(actionId) {
                       ${c.tier ? `<span style="font-size:0.58rem;padding:1px 5px;border-radius:6px;background:${tc}18;color:${tc};font-weight:600">${tl}</span>` : ''}
                       ${typeHint}
                     </div>
-                    <div class="app-action-cost">${c.bio}</div>
+                    <div class="app-action-cost">${busy ? '<span style="color:var(--danger)">本月没空</span>' : c.bio}</div>
                     ${affinityDots ? `<div style="margin-top:2px">${affinityDots}</div>` : ''}
                   </div>
                 </div>`;
@@ -416,12 +425,47 @@ function handleAction(actionId) {
       overlay.querySelectorAll('.app-action-card').forEach(el => {
         el.addEventListener('click', () => {
           const idx = parseInt(el.dataset.idx);
-          state._selectedPartnerCandidate = candidates[idx];
+          if (busyThisMonth.has(idx)) return;
+          const candidate = candidates[idx];
+          // Busy chance: acquaintance 25%, familiar 15%, trusted 5%
+          const busyChance = candidate.tier === 'trusted' ? 0.05 : candidate.tier === 'familiar' ? 0.15 : 0.25;
+          if (Math.random() < busyChance) {
+            busyThisMonth.add(idx);
+            const excuse = BUSY_EXCUSES[Math.floor(Math.random() * BUSY_EXCUSES.length)];
+            const busyPopup = document.createElement('div');
+            busyPopup.className = 'event-overlay';
+            busyPopup.style.zIndex = '110';
+            busyPopup.innerHTML = `
+              <div class="event-card" style="max-width:300px;text-align:center">
+                ${candidate.avatarIdx ? `<img src="partner/${candidate.avatarIdx}.webp" style="width:48px;height:48px;border-radius:50%;object-fit:cover;margin-bottom:8px">` : ''}
+                <div style="font-weight:700;font-size:0.95rem;margin-bottom:4px">${candidate.name}</div>
+                <div style="font-size:0.82rem;color:var(--text-light);margin:8px 0 14px;line-height:1.5">"${excuse}"</div>
+                <button class="btn btn-primary btn-block" id="busy-ok">知道了</button>
+              </div>`;
+            document.body.appendChild(busyPopup);
+            const allBusy = busyThisMonth.size >= candidates.length;
+            const dismissBusy = () => {
+              busyPopup.remove();
+              overlay.remove();
+              if (allBusy) {
+                // Everyone is busy → treat as search failed
+                state._partnerSearchFailed = true;
+                executeInMonth(actionId);
+              } else {
+                showPartnerSelector(); // re-render with this candidate greyed out
+              }
+            };
+            busyPopup.querySelector('#busy-ok').addEventListener('click', dismissBusy);
+            busyPopup.addEventListener('click', (ev) => { if (ev.target === busyPopup) dismissBusy(); });
+            return;
+          }
+          state._selectedPartnerCandidate = candidate;
           overlay.remove();
           executeInMonth(actionId);
         });
       });
     } // end showPartnerSelector
+    showPartnerSelector();
     return;
   }
 

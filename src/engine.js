@@ -795,8 +795,8 @@ export function canPerformAction(state, actionId) {
   if (actionId === 'goCommercial') {
     if (!state.commercialOfferReceived) return false;
   }
-  // findPartner: can't find a new partner if you already have one
-  if (actionId === 'findPartner' && state.hasPartner) return false;
+  // findPartner: can't find a new partner if you already have one, or already tried this month
+  if (actionId === 'findPartner' && (state.hasPartner || state.findPartnerTriedThisMonth)) return false;
   if (actionId === 'hvp' && state.hvpWorkedThisMonth) return false;
   if (actionId === 'lvp' && state.lvpWorkedThisMonth) return false;
   // Promote: only one promotion action per month (light OR heavy, not both)
@@ -1358,6 +1358,8 @@ export function executeAction(state, actionId) {
         result.deltas.push({ icon: 'medal', label: '老炮加成', value: '长期活跃+10%', positive: true });
       }
     }
+    // Mark as tried this month (one attempt per month)
+    state.findPartnerTriedThisMonth = true;
     // Check if candidate was selected via UI or if search failed
     const candidate = state._selectedPartnerCandidate;
     state._selectedPartnerCandidate = null;
@@ -1427,7 +1429,7 @@ export function executeAction(state, actionId) {
       result.tip = pType === 'toxic' ? TIPS.partnerToxic : pType === 'supportive' ? TIPS.partnerFound : TIPS.partnerRisk;
     } else {
       // No candidates or search failed
-      result.deltas.push({ icon: 'handshake', label: '本月没找到合适的搭档', value: '', positive: false });
+      result.deltas.push({ icon: 'handshake', label: '本次没找到合适的搭档', value: '', positive: false });
       if (getLifeStage(state.turn) === 'work') {
         result.deltas.push({ icon: 'briefcase', label: '工作后同人圈子变小，找搭档更难了', value: '', positive: false });
       }
@@ -3002,6 +3004,7 @@ export function endMonth(state) {
   state.lvpWorkedThisMonth = false;
   state.eventsAttendedThisMonth = [];
   state.monthHadCreativeAction = false;
+  state.findPartnerTriedThisMonth = false;
   state._monthIncome = 0;
   state._monthExpense = 0;
   // Reset chat usage (monthly cooldowns)
