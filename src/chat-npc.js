@@ -135,6 +135,29 @@ export function getBestieCooldown(state) {
   return remaining > 0 ? remaining : 0;
 }
 
+// === Partner Chat: trusted contacts (affinity >= 4), 1 dialog every 2 months ===
+const PARTNER_CHAT_COOLDOWN_MONTHS = 2;
+const PARTNER_CHAT_MSG_LIMIT = 1;
+
+export function getPartnerChatContact(state) {
+  if (!state.contacts || state.contacts.length === 0) return null;
+  return state.contacts
+    .filter(c => c.affinity >= 3.95)
+    .sort((a, b) => b.affinity - a.affinity || a.metTurn - b.metTurn)[0] || null;
+}
+
+export function getPartnerChatRemaining(state) {
+  const lastTurn = state._partnerChatLastTurn || -99;
+  if (state.turn - lastTurn < PARTNER_CHAT_COOLDOWN_MONTHS) return 0;
+  return Math.max(0, PARTNER_CHAT_MSG_LIMIT - ((state._chatUsage || {}).partnerChat || 0));
+}
+
+export function getPartnerChatCooldown(state) {
+  const lastTurn = state._partnerChatLastTurn || -99;
+  const remaining = PARTNER_CHAT_COOLDOWN_MONTHS - (state.turn - lastTurn);
+  return remaining > 0 ? remaining : 0;
+}
+
 // === Goddess: event-triggered, 8 messages per conversation (welcome = 10) ===
 const GODDESS_MSG_LIMIT = 8;
 const GODDESS_WELCOME_LIMIT = 10;

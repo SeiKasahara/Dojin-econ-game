@@ -62,6 +62,7 @@ const PERSISTENT_UNDERSCORED = new Set([
   '_tamperCountdown',     // anti-tamper system
   '_smallCircleBigRepShown',  // milestone: rep≥5 in small circle (one-time)
   '_smallCircleLegendShown',  // milestone: rep≥8 in small circle (one-time)
+  '_partnerChatLastTurn',     // partner chat cooldown tracking
 ]);
 
 function cleanState(state) {

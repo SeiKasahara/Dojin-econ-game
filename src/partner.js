@@ -226,9 +226,17 @@ export function tickContacts(state, result) {
   const maxContacts = getMaxContacts(state);
 
   // Monthly affinity decay for inactive contacts (not current partner)
+  const lastPartnerChat = state._partnerChatLastTurn || -99;
+  const chatNeglected = state.turn - lastPartnerChat >= 4; // 4+ months no chat
   for (const c of state.contacts) {
     if (c.id === state.activeContactId) continue;
-    c.affinity = Math.max(0, c.affinity - 0.05);
+    // Trusted contacts who haven't been chatted with decay faster
+    const isTrusted = c.affinity >= 3.95;
+    const decay = (isTrusted && chatNeglected) ? 0.15 : 0.05;
+    c.affinity = Math.max(0, c.affinity - decay);
+    if (isTrusted && chatNeglected && c.affinity >= 2) {
+      result.deltas.push({ icon: 'chat-circle', label: `你和${c.name}的联系在变少…`, value: '好感加速衰减中', positive: false });
+    }
     const newTier = getContactTier(c.affinity);
     if (newTier !== c.tier) { c.tier = newTier; c.bio = getContactBio(c.pType, newTier, c.source); }
   }

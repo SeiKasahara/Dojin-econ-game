@@ -232,6 +232,7 @@ const CHOICE_EFFECTS = {
 // Creative journal — per-subtype flavor text (see creative-journal.js)
 import { getCreativeJournal, getJournalMilestone } from './creative-journal.js';
 import { resolveContract } from './prediction-contracts.js';
+import { PARTNER_NUDGE_MESSAGES } from './partner-dialogs.js';
 
 // Quality star rating (0.5-1.8 → ★☆ display)
 export function getQualityStars(quality) {
@@ -2496,6 +2497,23 @@ export function endMonth(state) {
   // --- Contacts pool maintenance: cap + natural decay ---
   tickContacts(state, result);
 
+  // --- Partner chat: nudge message if long time no chat ---
+  if (!state._partnerChatNudgeSent && state.contacts?.length > 0) {
+    const lastChat = state._partnerChatLastTurn || -99;
+    if (state.turn - lastChat >= 3) {
+      const trustedContact = state.contacts.find(c => c.affinity >= 3.95 && c.id !== state.activeContactId);
+      if (trustedContact) {
+        const msgs = PARTNER_NUDGE_MESSAGES[trustedContact.pType] || PARTNER_NUDGE_MESSAGES.supportive;
+        const nudge = msgs[Math.floor(Math.random() * msgs.length)];
+        if (!state._chatHistory) state._chatHistory = {};
+        const histKey = `partner_${trustedContact.id}`;
+        if (!state._chatHistory[histKey]) state._chatHistory[histKey] = [];
+        state._chatHistory[histKey].push({ role: 'assistant', content: nudge });
+        state._partnerChatNudgeSent = true;
+      }
+    }
+  }
+
   // --- Track creative activity (resets inactivity counter) ---
   if (state.monthHadCreativeAction) state.lastCreativeTurn = state.turn;
 
@@ -3005,6 +3023,8 @@ export function endMonth(state) {
   state.eventsAttendedThisMonth = [];
   state.monthHadCreativeAction = false;
   state.findPartnerTriedThisMonth = false;
+  if (state._chatUsage) state._chatUsage.partnerChat = 0;
+  state._partnerChatNudgeSent = false;
   state._monthIncome = 0;
   state._monthExpense = 0;
   // Reset chat usage (monthly cooldowns)
