@@ -457,7 +457,7 @@ const TUTORIAL_STEPS = [
   { target: '.phone-clock', title: '时间显示', body: '这是你的年龄和当前人生阶段。游戏从18岁高考后暑假开始，经历大学和工作。' },
   { target: '.phone-stats-grid', title: '核心属性', body: `四大核心数值一目了然：<br/><b>${ic('heart')} 热情</b> 生命值，归零=Game Over<br/><b>${ic('star')} 声誉</b> 决定市场份额和销量<br/><b>${ic('timer')} 闲暇</b> 每月可用天数，行动消耗天数<br/><b>${ic('megaphone')} 信息</b> 买家认知度，每月衰减` },
   { target: '.schedule-card', title: '月度日程', body: '每个月你可以执行<b>多个行动</b>，每个行动消耗若干天闲暇。时间轴会显示本月安排。<b>闲暇用完或手动点击「结束本月」</b>进入月末结算。剩余天数会自动转为休息恢复。' },
-  { target: '.money-badge', title: '同人资金', body: '用于<b>同人创作和消费</b>的资金。印刷、参展路费、购买谷子等都从这里扣。打工、接稿、售卖收入会增加。<b>变为负数时焦虑会消耗热情</b>。' },
+  { target: '.money-badge', title: '同人资金', body: '用于<b>同人创作和消费</b>的资金。印刷、参展路费、购买同人等都从这里扣。打工、接稿、售卖收入会增加。<b>变为负数时焦虑会消耗热情</b>。' },
   { target: '.app-icon[data-app="enzao"]', title: '嗯造', body: '创作同人本（多月项目）、制作谷子（单月完成）、追加印刷。<b>创作是你的核心活动</b>，完成后作品入库。同人本和谷子每月只能各做一次。' },
   { target: '.app-icon[data-app="xuanfa"]', title: '次元宣发机', body: '提高信息透明度，让更多潜在买家看到你的作品。<b>全力宣发</b>会进入社媒运营小游戏！信息每月衰减，要持续维护。' },
   { target: '.app-icon[data-app="manzhan"]', title: '漫展通', body: '参加同人展是<b>销售的黄金机会</b>，亲参会进入摊位小游戏。展会会消耗当月全部剩余闲暇。也可以在这里购买或出售谷子。' },

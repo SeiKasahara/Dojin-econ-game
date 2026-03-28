@@ -577,8 +577,8 @@ export const ACTIONS = {
                  costLabel: '辞掉工作，全身心投入同人创作', requires: {} },
   reprint:     { id: 'reprint',     name: '追加印刷',   emoji: 'printer', type: 'reprint',
                  costLabel: '补印库存 需有旧作', requires: { passion: 3 } },
-  buyGoods:    { id: 'buyGoods',    name: '购买谷子',   emoji: 'shopping-bag', type: 'buyGoods',
-                 costLabel: '¥200 热情↑(效果逐年递减)', requires: {} },
+  buyGoods:    { id: 'buyGoods',    name: '购买同人制品',   emoji: 'shopping-bag', type: 'buyGoods',
+                 costLabel: '¥200 热情上升', requires: {} },
   sellGoods:   { id: 'sellGoods',   name: '出售闲置',   emoji: 'export', type: 'sellGoods',
                  costLabel: '卖掉收藏品换钱 需有收藏', requires: { time: 1 } },
   goCommercial: { id: 'goCommercial', name: '商业出道',  emoji: 'star', type: 'goCommercial',
@@ -1281,7 +1281,7 @@ export function executeAction(state, actionId) {
     if (state.money < 0) estDrain += Math.min(10, Math.floor(Math.abs(state.money) / 500) * 2);
     if (restore < estDrain) {
       result.deltas.push({ icon: 'warning', label: '休息无法抵消消耗', value: `恢复${restore} < 预计消耗${Math.round(estDrain)}`, positive: false });
-      result.deltas.push({ icon: 'lightbulb', label: '如果还有空的话...试试接稿、买谷子、参展?', value: '', positive: false });
+      result.deltas.push({ icon: 'lightbulb', label: '如果还有空的话...试试接稿、买制品、参展?', value: '', positive: false });
     }
     // Decay scales with √rep: high rep decays slowly (matches √ growth curve)
     const decay = 0.02 * Math.sqrt(state.reputation);
@@ -1673,7 +1673,7 @@ export function executeAction(state, actionId) {
             totalEventSold += lvpResult.sold;
             state.totalSales += lvpResult.sold;
             result.salesDetails = (result.salesDetails || []).concat(lvpResult.details);
-            result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
+            result.deltas.push({ icon: 'key', label: `同人制品售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
             addReputation(state, 0.01 * state.infoDisclosure * lvpResult.sold * 0.05);
             state.maxReputation = Math.max(state.maxReputation, state.reputation);
             if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpResult.sold);
@@ -1706,8 +1706,8 @@ export function executeAction(state, actionId) {
           state.totalSales += lvpResult.sold;
           if (!result.salesInfo) { result.salesInfo = sales; result.supplyDemand = getSupplyDemandData(state, sales); }
           result.salesDetails = (result.salesDetails || []).concat(lvpResult.details);
-          result.deltas.push({ icon: 'key', label: `谷子售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
-          if (sales.lvpSales > lvpResult.sold) result.deltas.push({ icon: 'fire', label: '谷子售罄！', value: `需求${sales.lvpSales}·库存仅${lvpResult.sold}`, positive: false });
+          result.deltas.push({ icon: 'key', label: `同人制品售出 ${lvpResult.sold}个`, value: `+¥${lvpResult.revenue}`, positive: true });
+          if (sales.lvpSales > lvpResult.sold) result.deltas.push({ icon: 'fire', label: '同人制品售罄！', value: `需求${sales.lvpSales}·库存仅${lvpResult.sold}`, positive: false });
           addReputation(state, 0.01 * state.infoDisclosure * lvpResult.sold * 0.05);
           state.maxReputation = Math.max(state.maxReputation, state.reputation);
           if (state.official) recordPlayerWork(state.official, 'lvp', state.turn, state.reputation, lvpResult.sold);
@@ -2215,7 +2215,7 @@ export function executeAction(state, actionId) {
     const eff = Math.max(30, Math.round((1 - yearsIn * 0.08) * 100));
     const passionGain = Math.max(3, Math.round(12 * eff / 100));
     state.passion = Math.min(100, state.passion + passionGain);
-    result.deltas.push({ icon: 'heart', label: '买到心仪的谷子！', value: `热情+${passionGain}${eff < 100 ? ` (效率${eff}%)` : ''}`, positive: true });
+    result.deltas.push({ icon: 'heart', label: '买到心仪的同人制品！', value: `热情+${passionGain}${eff < 100 ? ` (效率${eff}%)` : ''}`, positive: true });
 
     if (cost > 200) {
       result.deltas.push({ icon: 'sparkle', label: '钱多了品味也上来了', value: `花费¥${cost}`, positive: false });
@@ -2229,7 +2229,7 @@ export function executeAction(state, actionId) {
     state.goodsCollection++;
     result.deltas.push({ icon: 'package', label: '加入收藏', value: `收藏品${state.goodsCollection}件`, positive: true });
 
-    result.tip = { label: '消费者身份 (双重角色)', text: '同人创作者同时也是消费者——买别人的谷子是维持热情的重要方式。钱多了之后眼光也会变高，花费也随之增加。购入的谷子日后可以在二手市场出售回血。' };
+    result.tip = { label: '消费者身份 (双重角色)', text: '同人创作者同时也是消费者——买别人的制品是维持热情的重要方式。钱多了之后眼光也会变高，花费也随之增加。购入的制品日后可以在二手市场出售回血。' };
 
   } else if (action.type === 'sellGoods') {
     // === SELL COLLECTION TO SECONDHAND MARKET ===
