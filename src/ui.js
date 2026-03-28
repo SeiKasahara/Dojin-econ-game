@@ -2380,6 +2380,49 @@ export function renderSubtypeSelector(state, productType, onSelect, onCancel) {
   overlay.querySelector('.btn-cancel-overlay').addEventListener('click', () => { overlay.remove(); if (onCancel) onCancel(); });
 }
 
+// === Random Work Name Generator ===
+const _namePartA = [
+  '星', '月', '花', '风', '雪', '梦', '光', '影', '夜', '空',
+  '海', '云', '雨', '虹', '樱', '蝶', '猫', '鸟', '鹿', '狐',
+  '春', '夏', '秋', '冬', '朝', '暮', '黄昏', '黎明', '午后', '深夜',
+  '琉璃', '翡翠', '珀', '银', '苍', '绯', '藏蓝', '茜', '墨', '白',
+];
+const _namePartB = [
+  '之歌', '物语', '幻想', '日记', '旅途', '信笺', '碎片', '回响', '轨迹', '余韵',
+  '庭院', '街角', '渡口', '窗台', '阁楼', '彼岸', '尽头', '入口', '站台', '长廊',
+  '约定', '告白', '秘密', '预言', '独白', '呢喃', '心跳', '叹息', '微笑', '眼泪',
+  '奏鸣曲', '协奏曲', '小夜曲', '圆舞曲', '进行曲', '摇篮曲', '狂想曲', '变奏曲', '叙事诗', '安魂曲',
+];
+const _nameTemplates = [
+  (a, b) => a + b,
+  (a, b) => a + '与' + _namePartA[Math.floor(Math.random() * _namePartA.length)] + '的' + b,
+  (a, b) => '致' + a + '的' + b,
+  (a, b) => a + '色' + b,
+  (a, b) => '最后的' + a + b,
+  (a, b) => a + b + ' Vol.' + (Math.floor(Math.random() * 9) + 1),
+  (a, _) => a + '限定',
+  (_, b) => '那年' + b,
+  (a, _) => a + '不眠夜',
+  (a, b) => '在' + a + '的' + b.slice(0, 2),
+];
+const _usedNames = new Set();
+function generateRandomWorkName() {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const a = _namePartA[Math.floor(Math.random() * _namePartA.length)];
+    const b = _namePartB[Math.floor(Math.random() * _namePartB.length)];
+    const tpl = _nameTemplates[Math.floor(Math.random() * _nameTemplates.length)];
+    const name = tpl(a, b);
+    if (name.length <= 20 && !_usedNames.has(name)) {
+      _usedNames.add(name);
+      return name;
+    }
+  }
+  // fallback: always unique via counter
+  const a = _namePartA[Math.floor(Math.random() * _namePartA.length)];
+  const b = _namePartB[Math.floor(Math.random() * _namePartB.length)];
+  return a + b;
+}
+
 // === Work Naming Input ===
 export function renderWorkNameInput(subtypeName, emoji, onConfirm, onCancel) {
   const overlay = document.createElement('div');
@@ -2389,8 +2432,11 @@ export function renderWorkNameInput(subtypeName, emoji, onConfirm, onCancel) {
       <div style="font-size:1.3rem;margin-bottom:4px">${ic(emoji, '1.3rem')}</div>
       <div style="font-weight:700;font-size:1rem;margin-bottom:4px">为你的${subtypeName}起个名字</div>
       <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">这个名字会显示在库存和销售记录中</div>
-      <input type="text" id="work-name-input" maxlength="20" placeholder="例：星之彼方、夏日限定…"
-        style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:0.9rem;text-align:center;outline:none;margin-bottom:12px">
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input type="text" id="work-name-input" maxlength="20" placeholder="例：星之彼方、夏日限定…"
+          style="flex:1;min-width:0;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:0.9rem;text-align:center;outline:none">
+        <button id="btn-name-random" style="flex-shrink:0;padding:8px 12px;border:2px solid var(--primary);border-radius:8px;background:var(--bg);color:var(--primary);font-size:0.8rem;font-weight:600;cursor:pointer">${ic('arrows-clockwise', '0.85rem')} 随机</button>
+      </div>
       <button class="btn btn-primary btn-block" id="btn-name-confirm" style="margin-bottom:6px">确认</button>
       <button class="btn btn-block" id="btn-name-skip" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.78rem">跳过（使用默认名称）</button>
     </div>`;
@@ -2399,6 +2445,10 @@ export function renderWorkNameInput(subtypeName, emoji, onConfirm, onCancel) {
   const input = overlay.querySelector('#work-name-input');
   setTimeout(() => input.focus(), 50);
 
+  overlay.querySelector('#btn-name-random').addEventListener('click', () => {
+    input.value = generateRandomWorkName();
+    input.focus();
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { overlay.remove(); onConfirm(input.value.trim() || null); }
   });
