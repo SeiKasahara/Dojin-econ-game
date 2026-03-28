@@ -1619,9 +1619,9 @@ export function renderMessageApp(state, onAction, onBack) {
       const pCd = getPartnerChatCooldown(state);
       const pHasNudge = state._partnerChatNudgeSent && pRemain > 0;
       let pSubtitle;
-      if (pRemain > 0) pSubtitle = '好友 · 有空聊天';
-      else if (pCd > 0) pSubtitle = `好友 · ${pCd}个月后再聊`;
-      else pSubtitle = '好友 · 忙去了';
+      if (pRemain > 0) pSubtitle = '社团成员 · 有空聊天';
+      else if (pCd > 0) pSubtitle = `社团成员 · ${pCd}个月后再聊`;
+      else pSubtitle = '社团成员 · 忙去了';
       contacts.push({ id: `partner_${partnerContact.id}`, name: partnerContact.name, subtitle: pSubtitle, color: '#3498DB', avatar: `partner/${partnerContact.avatarIdx}.webp`, disabled: pRemain <= 0, badge: pHasNudge || pRemain > 0 });
     }
     if (state.commercialOfferReceived) {

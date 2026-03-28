@@ -63,6 +63,8 @@ const PERSISTENT_UNDERSCORED = new Set([
   '_smallCircleBigRepShown',  // milestone: rep≥5 in small circle (one-time)
   '_smallCircleLegendShown',  // milestone: rep≥8 in small circle (one-time)
   '_partnerChatLastTurn',     // partner chat cooldown tracking
+  '_clubContractFired',       // player club prediction contract (one-time)
+  '_marketManipulated',       // achievement flag: won a club contract
 ]);
 
 function cleanState(state) {

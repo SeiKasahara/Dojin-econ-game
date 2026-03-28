@@ -475,6 +475,7 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
   const bg = BACKGROUNDS[bgId];
   return {
     turn: 0, phase: 'action',
+    clubName: null,         // player's doujin circle name (set at game start)
     endowments: e,
     background: bgId,
     passion: 90, reputation: 0.3, time: 9, money: bg.money,
@@ -2913,9 +2914,9 @@ export function endMonth(state) {
           const profit = payout - h.cost;
           pm.totalProfit = (pm.totalProfit || 0) + profit;
           if (payout > 0) addMoney(state, payout);
-          // Record loss in this month's expense for financial summary visibility
-          // (principal was deducted at bet time, but we show the loss in settlement month)
           if (!won) state._monthExpense = (state._monthExpense || 0) + h.cost;
+          // Detect market manipulation: player won a club contract they could influence
+          if (won && c._isClubContract) state._marketManipulated = true;
           pm.resolved.push({ question: c.question, side: h.side, won, payout, profit, resolvedAt: state.turn });
           predSettlements.push({ question: c.question, side: h.side, shares: h.shares, cost: h.cost, won, payout, profit, outcome: outcome ? 'YES' : 'NO' });
         }

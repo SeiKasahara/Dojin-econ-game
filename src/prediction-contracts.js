@@ -27,6 +27,7 @@ const RESOLVE_REGISTRY = {
   event_count_gt:  (s, p) => { const keys = p.keys || [p.key]; return keys.reduce((sum, k) => sum + (s.eventCounts?.[k] || 0), 0) > p.count; },
   ip_heat_gt:      (s, p) => (s.official?.ipHeat || 0) > p.threshold,
   ip_heat_lt:      (s, p) => (s.official?.ipHeat || 0) < p.threshold,
+  player_hvp_gt:   (s, p) => (s.totalHVP || 0) > p.baseline,
 };
 
 /** Rebuild resolveCheck function from resolveType + resolveParams (used after loading save) */
@@ -384,6 +385,27 @@ function ipHeatShift(state) {
   };
 }
 
+// === 玩家社团合约（操纵市场）===
+function playerClubContract(state) {
+  // Only when rep 6-7, once per game, club name exists
+  if (!state.clubName || state.reputation < 6 || state.reputation >= 8) return null;
+  if (state._clubContractFired) return null;
+  // Record baseline so resolution checks delta
+  const baseHVP = state.totalHVP || 0;
+  state._clubContractFired = true;
+  return {
+    id: `club_hvp_${state.turn}`,
+    question: `「${state.clubName}」会在3个月内出新本吗？`,
+    icon: 'flag-banner',
+    odds: 2.5,
+    resolveTurn: state.turn + 3,
+    resolveCheck: (s) => (s.totalHVP || 0) > baseHVP,
+    resolveType: 'player_hvp_gt', resolveParams: { baseline: baseHVP },
+    category: '社团',
+    _isClubContract: true, // flag for achievement detection
+  };
+}
+
 // === 全部合约池 ===
 const ALL_CONTRACTS = [
   // 潮流
@@ -411,6 +433,8 @@ const ALL_CONTRACTS = [
   // 高难度
   exactCommunitySize,
   ipHeatShift,
+  // 玩家社团
+  playerClubContract,
 ];
 
 /**

@@ -44,17 +44,39 @@ function startGame(communityPreset, ipType) {
   renderEndowments((endowments, backgroundId) => {
     state = createInitialState(selectedPreset, endowments, backgroundId, selectedIpType);
     state._prevAchievementCount = 0;
-    renderGame(state, handleAction, handleRetire);
-    syncBGM('game');
-    // Show tutorial on first game start
-    renderTutorial(() => {
-      // First month: bestie & goddess send welcome messages
-      import('./chat-npc.js').then(({ triggerWelcomeMessages }) => {
-        triggerWelcomeMessages(state);
-        // Re-render to show message badge
-        renderGame(state, handleAction, handleRetire);
+
+    // Ask player to name their doujin circle
+    const nameOverlay = document.createElement('div');
+    nameOverlay.className = 'event-overlay';
+    nameOverlay.innerHTML = `
+      <div class="event-card" style="max-width:340px;text-align:center">
+        <div style="font-size:1.3rem;margin-bottom:4px">${ic('flag-banner', '1.3rem')}</div>
+        <div style="font-weight:700;font-size:1rem;margin-bottom:4px">为你的同人社团起个名字</div>
+        <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">这个名字会出现在市场和社交动态中</div>
+        <input type="text" id="club-name-input" maxlength="15" placeholder="例：星屑工房、月光社…"
+          style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:0.9rem;text-align:center;outline:none;margin-bottom:12px">
+        <button class="btn btn-primary btn-block" id="btn-club-confirm" style="margin-bottom:6px">确认</button>
+        <button class="btn btn-block" id="btn-club-skip" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.78rem">跳过（使用默认名称）</button>
+      </div>`;
+    document.body.appendChild(nameOverlay);
+    const clubInput = nameOverlay.querySelector('#club-name-input');
+    setTimeout(() => clubInput.focus(), 50);
+
+    function finishNaming(name) {
+      state.clubName = name || '无名社团';
+      nameOverlay.remove();
+      renderGame(state, handleAction, handleRetire);
+      syncBGM('game');
+      renderTutorial(() => {
+        import('./chat-npc.js').then(({ triggerWelcomeMessages }) => {
+          triggerWelcomeMessages(state);
+          renderGame(state, handleAction, handleRetire);
+        });
       });
-    });
+    }
+    clubInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') finishNaming(clubInput.value.trim() || null); });
+    nameOverlay.querySelector('#btn-club-confirm').addEventListener('click', () => finishNaming(clubInput.value.trim() || null));
+    nameOverlay.querySelector('#btn-club-skip').addEventListener('click', () => finishNaming(null));
   });
 }
 

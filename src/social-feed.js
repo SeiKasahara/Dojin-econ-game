@@ -252,6 +252,86 @@ function predictionMarketPosts(playerState) {
   return [];
 }
 
+function clubObserverPosts(market, playerState) {
+  const club = playerState.clubName;
+  if (!club || club === '无名社团') return [];
+  const pool = [];
+
+  // 基础：有作品后才会被观察到
+  if (playerState.totalHVP > 0 || playerState.totalLVP > 0) {
+    pool.push(() => `有人在问「${club}」的通贩链接在哪`);
+    pool.push(() => `"${club}这个社团有人了解吗？" ——有新人在群里问`);
+  }
+
+  // 声誉阶段
+  if (playerState.reputation >= 8) {
+    pool.push(() => `"「${club}」出品必属精品" ——已经成了圈子里的共识`);
+    pool.push(() => `有人把「${club}」历年作品做成了收藏清单，转发量很高`);
+    pool.push(() => `"现在谁不知道「${club}」？入坑第一天就被推荐了"`);
+  } else if (playerState.reputation >= 5) {
+    pool.push(() => `"「${club}」的本子质量越来越稳了" ——评论区在讨论`);
+    pool.push(() => `看到有人在做圈内社团排名，「${club}」排得挺靠前`);
+    pool.push(() => `有人发帖安利「${club}」最近的作品，评论区反响不错`);
+  } else if (playerState.reputation >= 2) {
+    pool.push(() => `"「${club}」最近好像挺活跃的" ——看到有人在讨论`);
+    pool.push(() => `有人在展会帖里提到了「${club}」，说摊位上东西不少`);
+  } else if (playerState.reputation < 1 && playerState.totalHVP >= 1) {
+    pool.push(() => `"「${club}」是谁？没听过…" ——你看到了一条扎心的评论`);
+  }
+
+  // 高产
+  if (playerState.totalHVP >= 5) {
+    pool.push(() => `"「${club}」也太能产了吧" ——有人在感慨`);
+  }
+  if (playerState.totalHVP >= 10) {
+    pool.push(() => `有人统计了圈内高产社团，「${club}」榜上有名`);
+  }
+
+  // 经济状态
+  if (playerState.money > 20000) {
+    pool.push(() => `有人猜测「${club}」赚了不少，"每次展会都卖得很好的样子"`);
+  }
+  if (playerState.money < -2000) {
+    pool.push(() => `"「${club}」最近是不是遇到什么困难了？好像没怎么出新品"——有粉丝在担心`);
+  }
+
+  // 全职同人
+  if (playerState.fullTimeDoujin) {
+    pool.push(() => `"听说「${club}」的太太辞职专心搞同人了，真有勇气" ——时间线上在讨论`);
+    if (playerState.doujinMonths > 6) {
+      pool.push(() => `"「${club}」全职半年了还活着，看来真的能靠同人吃饭"`);
+    }
+  }
+
+  // 有搭档
+  if (playerState.hasPartner) {
+    pool.push(() => `有人注意到「${club}」最近作品风格有变化，"是不是换了搭档？"`);
+  }
+
+  // 展会相关
+  if ((playerState.recentEventTurns || []).length >= 3) {
+    pool.push(() => `"「${club}」最近展会出勤率好高" ——有人在感慨`);
+  }
+
+  // 库存
+  const totalStock = (playerState.inventory?.hvpStock || 0) + (playerState.inventory?.lvpStock || 0);
+  if (totalStock > 50) {
+    pool.push(() => `"「${club}」的产品线好丰富，每次去摊位都有新东西"`);
+  }
+
+  // 织梦交易相关
+  if (playerState._predictions?.holdings?.length > 0) {
+    pool.push(() => `"「${club}」的人好像也在玩织梦交易" ——有人在八卦`);
+  }
+
+  if (pool.length === 0) return [];
+  if (r() < 0.35) {
+    const fn = pool[Math.floor(r() * pool.length)];
+    return [{ text: fn(), type: 'fan' }];
+  }
+  return [];
+}
+
 function generalChatter() {
   const pool = [
     '又到周末了，打开画板却不知道画什么...',
@@ -404,6 +484,13 @@ function generateComments(text, type) {
   if (text.includes('金融') || text.includes('筹码') || text.includes('赌桌')) pool.push(
     '说得好，创作不该被数据绑架', '虽然但是，看别人玩确实很上头', '同意，感觉圈子风气变了');
 
+  // Club observer posts
+  if (text.includes('社团') || text.includes('出品') || text.includes('高产') || text.includes('摊位')) pool.push(
+    '关注了关注了', '求通贩链接！', '下次展会一定要去蹲', '一直在关注这个社团', '实力说话，没什么好质疑的',
+    '慢慢做大的感觉真好', '有组织有纪律', '啊啊啊我也想加入这个社团');
+  if (text.includes('辞职') || text.includes('全职')) pool.push(
+    '真的假的？太勇了吧', '佩服有勇气追梦的人', '希望能撑下去，现实很残酷', '全职同人是梦想但也是豪赌');
+
   // Market posts
   if (text.includes('二手') && text.includes('难卖')) pool.push(
     '二手冲击太大了，新品根本竞争不过', '有什么办法能让买家优先选择新品呢', '供大于求的时候只能卷质量了');
@@ -477,10 +564,13 @@ export function generateSocialFeed(market, official, playerState) {
   // 6. IP flavor
   feed.push(...ipFlavorPosts(official));
 
-  // 7. Prediction market chatter
+  // 7. Club observer posts (他者视角观察社团)
+  feed.push(...clubObserverPosts(market, playerState));
+
+  // 8. Prediction market chatter
   feed.push(...predictionMarketPosts(playerState));
 
-  // 8. General chatter
+  // 9. General chatter
   feed.push(...generalChatter());
 
   // Assign authors and metadata
