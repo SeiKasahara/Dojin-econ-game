@@ -3,7 +3,7 @@
  * Generates ending text based on player journey
  */
 
-import { getLifeStage, getAge, getCreativeSkill } from './engine.js';
+import { getLifeStage, getAge, getCreativeSkill } from './engine/core.js';
 
 export function generateEnding(state) {
   const stage = getLifeStage(state.turn);

@@ -606,125 +606,50 @@ function updateCustomers(mg, dt) {
   }
 }
 
-// === Context-Aware Dialog Generator ===
-// Generates dialogs that reference the player's actual works
-function generateContextDialog(actionId, customer, mg) {
-  const w = customer.preferredWork; // may be null
-  const wName = w?.displayName;     // e.g. "漫画本·星之彼方"
-  const wType = w?.subtypeName;     // e.g. "漫画本" or "亚克力"
-  const hasMulti = mg.hasHVP && mg.hasLVP;
-
-  // Helper: pick an HVP or LVP work reference
+// === Template Dialog System ===
+// Resolves {placeholder} variables in dialog templates from JSON
+function fillTemplate(str, vars) {
+  return str.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '');
+}
+function resolveDialog(tmpl, vars) {
+  return {
+    customer: fillTemplate(tmpl.customer, vars),
+    choices: tmpl.choices.map(c => ({ ...c, text: fillTemplate(c.text, vars), reply: fillTemplate(c.reply, vars) })),
+  };
+}
+// Build template variables from game state and pick matching templates from a pool
+function buildDialogVars(customer, mg) {
+  const w = customer.preferredWork;
   const anyHVP = mg.playerHVPWorks.length ? pick(mg.playerHVPWorks) : null;
   const anyLVP = mg.playerLVPWorks.length ? pick(mg.playerLVPWorks) : null;
-
-  if (actionId === 'greet' && wName) {
-    const templates = [
-      { customer: `你好！这个「${wName}」看起来好棒！`, choices: [
-        { text: '谢谢！这是我最近的新作，来仔细看看吧～', positive: true, reply: '好的！让我翻翻看！' },
-        { text: '啊...就随便做的...', positive: false, reply: '哦...那我看看别家的吧。' },
-      ]},
-      { customer: `请问「${wName}」还有货吗？朋友推荐我来的！`, choices: [
-        { text: '有的有的！你朋友眼光真好，来这边看～', positive: true, reply: '太好了！让我看看！' },
-        { text: '应该还有吧...你自己找找。', positive: false, reply: '嗯...那我自己看看。' },
-      ]},
-    ];
-    if (wType) templates.push(
-      { customer: `哇，你们有${wType}！我正好在找这类的～`, choices: [
-        { text: `对！这款${wType}是我特别用心做的，摸摸看质感～`, positive: true, reply: '手感真好！我喜欢！' },
-        { text: '嗯，就摆在那边。', positive: false, reply: '好吧...（自己拿起来看）' },
-      ]}
-    );
-    return pick(templates);
-  }
-
-  if (actionId === 'explain' && wName) {
-    const templates = [
-      { customer: `「${wName}」讲的是什么故事呀？`, choices: [
-        { text: '这是一个很用心的作品！让我给你介绍一下～', positive: true, reply: '听起来好有趣！我要买！' },
-        { text: '就...你自己翻翻看吧。', positive: false, reply: '这样啊...我再看看别家的。' },
-      ]},
-      { customer: `这个${wType || '作品'}做了多久？看起来好精致！`, choices: [
-        { text: '花了很多心血！每个细节都反复打磨过～', positive: true, reply: '能感受到用心！支持你！' },
-        { text: '记不清了...反正做了挺久的。', positive: false, reply: '哦...那挺辛苦的。' },
-      ]},
-    ];
-    if (hasMulti) templates.push(
-      { customer: `除了${wType || '这个'}，你们还有别的作品吗？`, choices: [
-        { text: `有的！${anyHVP ? anyHVP.displayName : ''}${anyHVP && anyLVP ? '和' : ''}${anyLVP ? anyLVP.displayName : ''}都可以看看～`, positive: true, reply: '种类好丰富！让我都看看！' },
-        { text: '就这些了。', positive: false, reply: '好吧...那我先看看这个。' },
-      ]}
-    );
-    return pick(templates);
-  }
-
-  if (actionId === 'fan') {
-    const refWork = w || anyHVP || anyLVP;
-    const refName = refWork?.displayName || '你的作品';
-    const templates = [
-      { customer: `啊啊啊终于找到你了！我是看了「${refName}」入坑的！`, choices: [
-        { text: '谢谢一直支持！今天有新作哦～', positive: true, reply: '新作！给我来一份！不，两份！' },
-        { text: '真的吗？太开心了...', positive: true, reply: '真的！你每次的作品我都买了！' },
-      ]},
-      { customer: `「${refName}」太棒了！我安利给了好多朋友！`, choices: [
-        { text: '感动！这次的新作也请多多支持～', positive: true, reply: '必须买！朋友们也让我帮她们带！' },
-        { text: '谢谢你帮我宣传...', positive: true, reply: '应该的！好作品值得被更多人看到！' },
-      ]},
-    ];
-    if (hasMulti) templates.push(
-      { customer: `大大！你的${anyHVP?.subtypeName || '本子'}和${anyLVP?.subtypeName || '谷子'}我全都要！`, choices: [
-        { text: '全都要？太豪气了！给你包好～', positive: true, reply: '嘿嘿，钱包准备好了！全部打包！' },
-        { text: '真的全要吗？会不会太多了...', positive: true, reply: '不多不多！买了就是赚到！' },
-      ]}
-    );
-    return pick(templates);
-  }
-
-  // freebie, exchange, troll: fall back to static dialogs
-  return null;
+  const refWork = w || anyHVP || anyLVP;
+  const allParts = [anyHVP?.displayName, anyLVP?.displayName].filter(Boolean);
+  return {
+    wName: w?.displayName || '',
+    wType: w?.subtypeName || '',
+    refName: refWork?.displayName || '你的作品',
+    anyHVPType: anyHVP?.subtypeName || '本子',
+    anyLVPType: anyLVP?.subtypeName || '谷子',
+    allWorks: allParts.join('和') || '',
+  };
 }
-
-// === Dialog System ===
-// Price-specific dialog overrides
-function makePriceDialogsExpensive(name, price) {
-  return [
-    { customer: `${name}卖¥${price}…是认真的吗？`, choices: [
-      { text: '品质值这个价', reply: '呵，那我看看再说吧', positive: false },
-      { text: '确实有点贵…', reply: '有自知之明就好', positive: false },
-    ]},
-    { customer: `隔壁同类的比${name}便宜一半诶`, choices: [
-      { text: '我的质量不一样', reply: '…随你怎么说吧', positive: false },
-      { text: '你说得对…', reply: '建议你认真考虑一下定价', positive: false },
-    ]},
-    { customer: `${name}这价格劝退了好多人你知道吗`, choices: [
-      { text: '我相信识货的人会买', reply: '（默默走开了）', positive: false },
-      { text: '我会考虑调整的', reply: '嗯…下次见吧', positive: false },
-    ]},
-  ];
+function pickContextDialog(pool, vars) {
+  if (!pool || pool.length === 0) return null;
+  const eligible = pool.filter(t => !t.requires || t.requires.every(k => vars[k]));
+  if (eligible.length === 0) return null;
+  return resolveDialog(pick(eligible), vars);
 }
-function makePriceDialogsAbsurd(name, price) {
-  return [
-    { customer: `你们快来看${name}的价格哈哈哈`, choices: [
-      { text: '…', reply: '（带着朋友笑着走了）', positive: false },
-      { text: '这是限量版…', reply: '限量版也不是这么定的吧', positive: false },
-    ]},
-    { customer: `${name}¥${price}？请问这是行为艺术吗？`, choices: [
-      { text: '不是，这是正常定价', reply: '（震惊.jpg）', positive: false },
-      { text: '可以这么理解…', reply: '那确实很有创意（笑）', positive: false },
-    ]},
-  ];
+function generateContextDialog(actionId, customer, mg) {
+  const vars = buildDialogVars(customer, mg);
+  const key = actionId === 'greet' ? 'contextGreet' : actionId === 'explain' ? 'contextExplain' : actionId === 'fan' ? 'contextFan' : null;
+  if (!key) return null;
+  return pickContextDialog(dialogData[key], vars);
 }
-function makePriceDialogsCheap(name, price) {
-  return [
-    { customer: `${name}才¥${price}？你不亏吗？`, choices: [
-      { text: '交个朋友嘛', reply: '虽然感动但总觉得哪里不对', positive: true },
-      { text: '薄利多销', reply: '希望你算过成本…', positive: true },
-    ]},
-    { customer: `${name}这个价格…你干脆送我好了`, choices: [
-      { text: '那不至于哈哈', reply: '好吧那我就买了…', positive: true },
-      { text: '下次涨价哦', reply: '那我趁现在多买几本', positive: true },
-    ]},
-  ];
+function pickPriceDialog(poolKey, workName, workPrice) {
+  const pool = dialogData[poolKey];
+  if (!pool || pool.length === 0) return null;
+  const vars = { workName, workPrice };
+  return resolveDialog(pick(pool), vars);
 }
 
 function tryTriggerDialog(mg, actionId, nearby) {
@@ -755,22 +680,28 @@ function tryTriggerDialog(mg, actionId, nearby) {
 
   // Extreme pricing overrides normal dialog
   if (dialogPr > 3.0 && Math.random() < 0.8) {
-    const dialog = pick(makePriceDialogsAbsurd(dialogWorkName, dialogWorkPrice));
-    mg.phase = 'dialog'; mg.dialogCount++;
-    mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'troll' };
-    return true;
+    const dialog = pickPriceDialog('priceAbsurd', dialogWorkName, dialogWorkPrice);
+    if (dialog) {
+      mg.phase = 'dialog'; mg.dialogCount++;
+      mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'troll' };
+      return true;
+    }
   }
   if (dialogPr > 2.0 && Math.random() < 0.6) {
-    const dialog = pick(makePriceDialogsExpensive(dialogWorkName, dialogWorkPrice));
-    mg.phase = 'dialog'; mg.dialogCount++;
-    mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'troll' };
-    return true;
+    const dialog = pickPriceDialog('priceExpensive', dialogWorkName, dialogWorkPrice);
+    if (dialog) {
+      mg.phase = 'dialog'; mg.dialogCount++;
+      mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'troll' };
+      return true;
+    }
   }
   if (dialogPr < 0.4 && Math.random() < 0.5) {
-    const dialog = pick(makePriceDialogsCheap(dialogWorkName, dialogWorkPrice));
-    mg.phase = 'dialog'; mg.dialogCount++;
-    mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'normal' };
-    return true;
+    const dialog = pickPriceDialog('priceCheap', dialogWorkName, dialogWorkPrice);
+    if (dialog) {
+      mg.phase = 'dialog'; mg.dialogCount++;
+      mg.activeDialog = { customerSprite: target.spriteId ? `c${target.spriteId}` : null, customerText: dialog.customer, choices: dialog.choices, targetCustomer: target, dialogType: 'normal' };
+      return true;
+    }
   }
 
   // 10% troll, 12% fan, rest normal

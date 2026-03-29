@@ -4,7 +4,7 @@
  * 
  */
 
-import { getLifeStage, activeCrisisCount, addMoney, addReputation } from './engine.js';
+import { getLifeStage, activeCrisisCount, addMoney, addReputation } from './engine/core.js';
 import { ic } from './icons.js';
 
 // =============================================

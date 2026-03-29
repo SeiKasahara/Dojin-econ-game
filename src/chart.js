@@ -173,7 +173,7 @@ export function drawSupplyDemand(canvas, data, animate = true) {
       ctx.fillText(`信息透明 ${Math.round(infoDisclosure * 100)}%`, bx, by + barH + 10);
 
       // Reputation indicator
-      ctx.fillText(`声誉 θ=${reputation.toFixed(1)}`, bx, by + barH + 22);
+      ctx.fillText(`声誉 =${reputation.toFixed(1)}`, bx, by + barH + 22);
     }
 
     frame++;

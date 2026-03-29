@@ -3,10 +3,7 @@
  * Scheduled and random events, decoupled for maintainability
  */
 
-import { getLifeStage, getCreativeSkill, addMoney, addReputation } from './engine.js';
-
-// Internal helper — calendar month from turn
-function getCalendarMonth(turn) { return ((turn + 6) % 12) + 1; }
+import { getLifeStage, getCreativeSkill, addMoney, addReputation, computeEffectiveTime, getCalendarMonth } from './engine/core.js';
 
 // Find an HVP work eligible to become a "rare work" (海景房):
 // sold out 12+ months, quality >= 1.0 or cult hit, not already marked
@@ -27,12 +24,8 @@ function activeCrisisCount(s) {
   return c;
 }
 
-// computeEffectiveTime needs to be passed in since it's internal to engine.js
-let _computeEffectiveTime = null;
-export function setComputeEffectiveTime(fn) { _computeEffectiveTime = fn; }
 function computeTime(turn, debuffs) {
-  if (_computeEffectiveTime) return _computeEffectiveTime(turn, debuffs);
-  return 5; // fallback
+  return computeEffectiveTime(turn, debuffs);
 }
 
 // === Scheduled Events ===

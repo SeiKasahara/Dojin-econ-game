@@ -3,7 +3,7 @@
  * Check conditions and award achievements
  */
 
-import { getLifeStage, getAge } from './engine.js';
+import { getLifeStage, getAge } from './engine/core.js';
 
 export function checkAchievements(state) {
   // --- Update tracking counters ---

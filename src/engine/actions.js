@@ -1,0 +1,295 @@
+import { getLifeStage, getAge } from './core.js';
+import { HVP_SUBTYPES } from './definitions.js';
+import { getSignalCost } from '../advanced.js';
+import { ic } from '../icons.js';
+
+// === Actions ===
+// Time is monthly leisure: 0-10 scale (10=entire month free, 0=no free time)
+// HVP is multi-turn: solo 3 months, with partner 2 months
+export const ACTIONS = {
+  hvp:         { id: 'hvp',         name: '创作同人本', emoji: 'book-open-text', type: 'hvp',
+                 costLabel: '热情-15/月 印刷¥2500~3000 需闲暇≥4天(有搭档≥2天)', requires: { passion: 15, time: 4 } },
+  lvp:         { id: 'lvp',         name: '制作谷子',   emoji: 'key', type: 'lvp',
+                 costLabel: '热情-8 资金-200 需闲暇≥2天', requires: { passion: 10, time: 2 } },
+  rest:        { id: 'rest',        name: '休息充电',   emoji: 'coffee', type: 'rest',
+                 costLabel: '热情+15~25', requires: {} },
+  promote_light: { id: 'promote_light', name: '轻度宣发', emoji: 'megaphone', type: 'promote',
+                   costLabel: '热情-3 小幅提升信息', requires: { passion: 3, time: 1 }, promoteIntensity: 'light' },
+  promote_heavy: { id: 'promote_heavy', name: '全力宣发', emoji: 'megaphone-simple', type: 'promote',
+                   costLabel: '热情-8 大幅提升信息 需闲暇≥3天', requires: { passion: 8, time: 3 }, promoteIntensity: 'heavy' },
+  findPartner: { id: 'findPartner', name: '寻找搭档',   emoji: 'handshake', type: 'social',
+                 costLabel: '热情-3 搭档有稿费成本', requires: { passion: 3, time: 2 } },
+  partTimeJob: { id: 'partTimeJob', name: '普通打工',   emoji: 'storefront', type: 'work',
+                 costLabel: '赚¥300~500 下月闲暇-1天 仅学生/失业', requires: { passion: 2, time: 3 } },
+  freelance:   { id: 'freelance',   name: '接稿赚钱',   emoji: 'paint-brush', type: 'freelance',
+                 costLabel: '热情-4 下月闲暇-2天 收入看声誉', requires: { passion: 4, time: 2 } },
+  attendEvent: { id: 'attendEvent', name: '参加同人展', emoji: 'tent', type: 'attendEvent',
+                 costLabel: '需有同人展·路费·亲参≥3天/寄售≥1天', requires: { passion: 5, time: 1 } },
+  jobSearch:   { id: 'jobSearch',   name: '找工作',     emoji: 'briefcase', type: 'jobSearch',
+                 costLabel: '热情-10 面试奔波', requires: { passion: 5 } },
+  quitForDoujin: { id: 'quitForDoujin', name: '辞职全职同人', emoji: 'sparkle', type: 'quitForDoujin',
+                 costLabel: '辞掉工作，全身心投入同人创作', requires: {} },
+  reprint:     { id: 'reprint',     name: '追加印刷',   emoji: 'printer', type: 'reprint',
+                 costLabel: '补印库存 需有旧作', requires: { passion: 3 } },
+  buyGoods:    { id: 'buyGoods',    name: '购买同人制品',   emoji: 'shopping-bag', type: 'buyGoods',
+                 costLabel: '¥200 热情上升', requires: {} },
+  sellGoods:   { id: 'sellGoods',   name: '出售闲置',   emoji: 'export', type: 'sellGoods',
+                 costLabel: '卖掉收藏品换钱 需有收藏', requires: { time: 1 } },
+  goCommercial: { id: 'goCommercial', name: '商业出道',  emoji: 'star', type: 'goCommercial',
+                 costLabel: '接受出版社邀约，告别同人时代', requires: {} },
+  hireAssistant: { id: 'hireAssistant', name: '外包助手', emoji: 'user', type: 'hireAssistant',
+                 costLabel: '¥800~1500 加速当前同人本进度', requires: { time: 1 } },
+  upgradeEquipment: { id: 'upgradeEquipment', name: '升级设备', emoji: 'desktop', type: 'upgradeEquipment',
+                 costLabel: '一次性大额投入 永久提升创作质量', requires: {} },
+  sponsorCommunity: { id: 'sponsorCommunity', name: '赞助社区', emoji: 'hand-heart', type: 'sponsorCommunity',
+                 costLabel: '¥1500~3000 声誉↑热情↑ 冷却6月', requires: {} },
+};
+
+// Dynamic action info (for UI)
+export function getActionDisplay(actionId, state) {
+  const base = ACTIONS[actionId];
+  if (!base) return null;
+  if (actionId === 'rest') {
+    const yearsIn = state.turn / 12;
+    const eff = Math.max(45, Math.round((1 - yearsIn * 0.03) * 100));
+    const remaining = Math.max(0, state.time - (state.monthTimeSpent || 0));
+    const idle = state.turn - state.lastCreativeTurn;
+    let extra = '';
+    if (idle >= 3) extra = ` ${ic('warning')}已${idle}月未活动`;
+    return { ...base, costLabel: `自选时长(1-${remaining}天) 效率${eff}%${extra}` };
+  }
+  if (actionId === 'jobSearch') {
+    const switchMalus = Math.min(30, ((state.doujinQuitCount || 0) - 1) * 10);
+    const base30 = Math.max(5, 30 - switchMalus);
+    const prob = Math.round(Math.min(85, (base30 + state.jobSearchTurns * 10) * (state.recessionTurnsLeft > 0 ? 0.5 : 1)));
+    const tag = switchMalus > 0 ? ` 跳槽记录-${switchMalus}%` : '';
+    return { ...base, costLabel: `已找${state.jobSearchTurns}月 成功率${prob}%${tag}` };
+  }
+  if (actionId === 'freelance') {
+    const tc = getFreelanceTimeCost(state);
+    const label = state.unemployed ? '失业接稿' : getLifeStage(state.turn) === 'university' ? '课余接稿' : '下班接稿';
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}-50%` : '';
+    const premiumTag = state.reputation >= 4 ? ' 含高端约稿' : '';
+    return { ...base, costLabel: `需≥${tc}天 ${label}${recTag}${premiumTag}` };
+  }
+  if (actionId === 'partTimeJob') {
+    const stage = getLifeStage(state.turn);
+    if (stage === 'work' && !state.unemployed && !state.fullTimeDoujin) return { ...base, costLabel: '仅学生/失业/全职同人可用' };
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
+    return { ...base, costLabel: `赚¥300~500 下月闲暇-1天${recTag}` };
+  }
+  if (actionId === 'attendEvent') {
+    if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) {
+      return { ...base, costLabel: '没有库存可卖！先创作或追印' };
+    }
+    if (!state.availableEvents || state.availableEvents.length === 0) {
+      return { ...base, costLabel: '本月无同人展' };
+    }
+    const evts = state.availableEvents;
+    const best = evts[0];
+    const stockInfo = `${ic('package')}本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}`;
+    return { ...base, costLabel: `${best.name}@${best.city} 路费¥${best.travelCost} ${stockInfo}` };
+  }
+  if (actionId === 'promote_light' || actionId === 'promote_heavy') {
+    const sigCost = state.advanced ? getSignalCost(state.advanced) : 1.0;
+    const sigLabel = sigCost > 1.2 ? ` 通胀×${sigCost.toFixed(1)}` : '';
+    return { ...base, costLabel: base.costLabel + sigLabel };
+  }
+  if (actionId === 'hvp') {
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
+    const staCost = Math.max(8, 15 - (state.endowments?.stamina || 0));
+    if (state.hvpProject) {
+      const p = state.hvpProject;
+      const sub = HVP_SUBTYPES[p.subtype] || HVP_SUBTYPES.manga;
+      return { ...base, name: `继续创作${sub.name}${p.name ? '·' + p.name : ''}`, emoji: sub.emoji, costLabel: `进度 ${p.progress}/${p.needed} · 热情-${staCost}${recTag}` };
+    }
+    return { ...base, costLabel: `选择类型后开始创作${recTag}` };
+  }
+  if (actionId === 'lvp') {
+    const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}` : '';
+    return { ...base, costLabel: `选择类型和工艺${recTag}` };
+  }
+  if (actionId === 'reprint') {
+    if (state.totalHVP === 0 && state.totalLVP === 0) {
+      return { ...base, costLabel: '还没有作品可以追印！' };
+    }
+    const parts = [];
+    if (state.totalHVP > 0) parts.push(`本60本¥1200`);
+    if (state.totalLVP > 0) parts.push(`谷20个¥120`);
+    return { ...base, costLabel: `${parts.join(' / ')} 库存:本${state.inventory.hvpStock}·谷${state.inventory.lvpStock}` };
+  }
+  if (actionId === 'buyGoods') {
+    const m = Math.max(0, state.money);
+    const cost = m < 3000 ? 200 : m < 6000 ? 600 : m < 9000 ? 1500 : m < 15000 ? 3000 : 5000;
+    const yearsIn = state.turn / 12;
+    const eff = Math.max(30, Math.round((1 - yearsIn * 0.08) * 100));
+    const passionGain = Math.round(12 * eff / 100);
+    return { ...base, costLabel: `¥${cost} 热情+${passionGain}${eff < 100 ? ` 效率${eff}%` : ''}${state.money < cost ? ` ${ic('warning')}资金不足` : ''}` };
+  }
+  if (actionId === 'sellGoods') {
+    if (state.goodsCollection <= 0) return { ...base, costLabel: '没有收藏品可出' };
+    const shPressure = state.official?.secondHandPressure?.lvp || 0;
+    const unitPrice = Math.max(50, Math.round(120 * (1 - shPressure * 0.5)));
+    return { ...base, costLabel: `收藏${state.goodsCollection}件 预估¥${unitPrice}/件` };
+  }
+  if (actionId === 'quitForDoujin') {
+    if (state.unemployed) {
+      const qc = state.doujinQuitCount || 0;
+      const warn = qc >= 1 ? ` (第${qc + 1}次·惩罚↑)` : '';
+      return { ...base, name: '全职搞同人', costLabel: `不找工作了，把失业变成机遇！${warn}` };
+    }
+    // Cooldown check display
+    if (state.lastReturnToWorkTurn > 0 && state.turn - state.lastReturnToWorkTurn < 12) {
+      const left = 12 - (state.turn - state.lastReturnToWorkTurn);
+      return { ...base, costLabel: `需要先稳定工作${left}个月才能再辞职` };
+    }
+    const qc = state.doujinQuitCount || 0;
+    if (qc >= 1) {
+      return { ...base, costLabel: `辞掉工作，全身心投入同人创作 (第${qc + 1}次·求职更难)` };
+    }
+    return base;
+  }
+  if (actionId === 'hireAssistant') {
+    if (!state.hvpProject) return { ...base, costLabel: '需要正在进行的同人本项目' };
+    const used = state.hvpProject._assistantCount || 0;
+    return { ...base, costLabel: `¥800~1500 进度+0.5 疲劳-1 (已用${used}/2次)` };
+  }
+  if (actionId === 'upgradeEquipment') {
+    const costs = [3000, 5000, 8000];
+    if (state.equipmentLevel >= 3) return { ...base, costLabel: '已满级 Lv3' };
+    return { ...base, costLabel: `¥${costs[state.equipmentLevel]} → Lv${state.equipmentLevel + 1} 质量↑ 消耗↓` };
+  }
+  if (actionId === 'sponsorCommunity') {
+    const cd = 6 - (state.turn - state.lastSponsorTurn);
+    if (cd > 0) return { ...base, costLabel: `冷却中（还剩${cd}月）` };
+    const cs = state.market ? state.market.communitySize : 10000;
+    const cost = Math.round(1500 + cs / 10000 * 1500);
+    return { ...base, costLabel: `¥${cost} 声誉↑ 热情+8 曝光↑` };
+  }
+  return base;
+}
+
+// Freelance time cost depends on life situation
+export function getFreelanceTimeCost(state) {
+  if (state.unemployed || state.fullTimeDoujin) return 2;  // 失业/全职同人：时间多
+  if (getLifeStage(state.turn) === 'university') return 3; // 学生：中等
+  return 5;                                               // 在职：下班后还要接稿，消耗大
+}
+
+export function getTimeCost(state, actionId) {
+  if (actionId === 'hvp') return state.hasPartner ? 2 : 4;
+  if (actionId === 'lvp') return 4;
+  if (actionId === 'rest') return state._restHours || 2; // player-selected, default 2
+  if (actionId === 'promote_light') return 1;
+  if (actionId === 'promote_heavy') return 3;
+  if (actionId === 'findPartner') return 2;
+  if (actionId === 'partTimeJob') return 3;
+  if (actionId === 'freelance') {
+    const baseTC = getFreelanceTimeCost(state);
+    const ft = state._freelanceType || 'standard';
+    return ft === 'quick' ? Math.max(1, baseTC - 1) : ft === 'premium' ? baseTC + 1 : baseTC;
+  }
+  if (actionId === 'attendEvent') return state._eventMode === 'consign' ? 0 : 3; // 亲参3天，寄售0天
+  if (actionId === 'jobSearch') return Infinity;
+  if (actionId === 'reprint') return 1;
+  if (actionId === 'buyGoods') return 1;
+  if (actionId === 'sellGoods') return 1;
+  if (actionId === 'hireAssistant') return 1;
+  // 0-cost decisions: upgradeEquipment, sponsorCommunity, quitForDoujin, goCommercial
+  return 0;
+}
+
+export function canPerformAction(state, actionId) {
+  const r = ACTIONS[actionId]?.requires;
+  if (!r) return false;
+  const remaining = state.time - (state.monthTimeSpent || 0);
+  // No leisure left → all actions blocked (player must end month)
+  if (remaining <= 0) return false;
+  // Unemployed: time is plentiful but anxiety drains passion fast — all actions allowed
+  // (the real constraint is passion budget, not action locks)
+  // jobSearch: when unemployed OR full-time doujin (wanting to go back)
+  if (actionId === 'jobSearch' && !state.unemployed && !state.fullTimeDoujin) return false;
+  // quitForDoujin: work stage, not already full-time doujin, some experience
+  // No rep/money gates — player bears the risk themselves
+  if (actionId === 'quitForDoujin') {
+    if (getLifeStage(state.turn) !== 'work' || state.fullTimeDoujin) return false;
+    if (state.unemployed) {
+      if ((state.eventLog?.length || 0) < 3) return false;
+    } else {
+      if ((state.eventLog?.length || 0) < 5) return false;
+      // Cooldown: must work at least 6 months before quitting again (prevents frequent switching)
+      if (state.lastReturnToWorkTurn > 0 && state.turn - state.lastReturnToWorkTurn < 12) return false;
+    }
+  }
+  // partTimeJob: only students, unemployed, or full-time doujin
+  if (actionId === 'partTimeJob') {
+    const stage = getLifeStage(state.turn);
+    if (stage === 'work' && !state.unemployed && !state.fullTimeDoujin) return false;
+  }
+  // attendEvent: need events available AND have inventory AND not all events attended this month
+  if (actionId === 'attendEvent') {
+    if (!state.availableEvents || state.availableEvents.length === 0) return false;
+    if (state.inventory.hvpStock === 0 && state.inventory.lvpStock === 0) return false;
+    const attended = state.eventsAttendedThisMonth || [];
+    if (state.availableEvents.every(e => attended.includes(e.name))) return false;
+  }
+  // reprint: need at least one work in inventory (including sold-out qty=0)
+  if (actionId === 'reprint') {
+    if (!state.inventory.works || state.inventory.works.length === 0) return false;
+  }
+  // buyGoods: need money (minimum cost is ¥200)
+  if (actionId === 'buyGoods') {
+    if (state.money < 200) return false;
+  }
+  // sellGoods: need collection
+  if (actionId === 'sellGoods') {
+    if (state.goodsCollection <= 0) return false;
+  }
+  // goCommercial: only after receiving the offer
+  if (actionId === 'goCommercial') {
+    if (!state.commercialOfferReceived) return false;
+  }
+  // findPartner: can't find a new partner if you already have one, or already tried this month
+  if (actionId === 'findPartner' && (state.hasPartner || state.findPartnerTriedThisMonth)) return false;
+  if (actionId === 'hvp' && state.hvpWorkedThisMonth) return false;
+  if (actionId === 'lvp' && state.lvpWorkedThisMonth) return false;
+  // Promote: only one promotion action per month (light OR heavy, not both)
+  if ((actionId === 'promote_light' || actionId === 'promote_heavy') &&
+      (state.monthActions || []).some(a => a.actionId === 'promote_light' || a.actionId === 'promote_heavy')) return false;
+  // hireAssistant: need active HVP project, money, max 2 per project
+  if (actionId === 'hireAssistant') {
+    if (!state.hvpProject) return false;
+    if (state.money < 800) return false;
+    if ((state.hvpProject._assistantCount || 0) >= 2) return false;
+  }
+  // upgradeEquipment: not maxed (player bears financial risk)
+  if (actionId === 'upgradeEquipment') {
+    if (state.equipmentLevel >= 3) return false;
+  }
+  // sponsorCommunity: need money and cooldown
+  if (actionId === 'sponsorCommunity') {
+    if (state.money < 1500) return false;
+    if (state.turn - state.lastSponsorTurn < 6) return false;
+  }
+  if (r.passion && state.passion < r.passion) return false;
+  // HVP: with partner, time requirement relaxed to 2h (partner shares workload)
+  if (actionId === 'hvp' && state.hasPartner) {
+    if (remaining < 2) return false;
+    return true;
+  }
+  // Freelance: dynamic time requirement
+  if (actionId === 'freelance') {
+    if (remaining < getFreelanceTimeCost(state)) return false;
+  } else if (actionId === 'attendEvent') {
+    // Mode not yet chosen: allow if consign (0 days) is possible, i.e. remaining >= 1
+    if (remaining < 1) return false;
+  } else {
+    if (r.time) {
+      const tc = getTimeCost(state, actionId);
+      if (!isFinite(tc)) {
+        if (remaining < 1) return false;
+      } else if (remaining < tc) return false;
+    }
+  }
+  return true;
+}

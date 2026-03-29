@@ -11,7 +11,7 @@
  */
 
 import { ic } from './icons.js';
-import { addMoney } from './engine.js';
+import { addMoney } from './engine/core.js';
 import { generatePredictions } from './prediction-contracts.js';
 
 // === Price tick: generate new month's price + daily candles, persisted on contract ===

@@ -206,5 +206,140 @@
         { "text": "辛苦你了...路上还顺利吗？", "positive": true, "reply": "值得的！见到本人了好激动！东西全包了！" }
       ]
     }
+  ],
+
+  "contextGreet": [
+    {
+      "customer": "你好！这个「{wName}」看起来好棒！",
+      "requires": ["wName"],
+      "choices": [
+        { "text": "谢谢！这是我最近的新作，来仔细看看吧～", "positive": true, "reply": "好的！让我翻翻看！" },
+        { "text": "啊...就随便做的...", "positive": false, "reply": "哦...那我看看别家的吧。" }
+      ]
+    },
+    {
+      "customer": "请问「{wName}」还有货吗？朋友推荐我来的！",
+      "requires": ["wName"],
+      "choices": [
+        { "text": "有的有的！你朋友眼光真好，来这边看～", "positive": true, "reply": "太好了！让我看看！" },
+        { "text": "应该还有吧...你自己找找。", "positive": false, "reply": "嗯...那我自己看看。" }
+      ]
+    },
+    {
+      "customer": "哇，你们有{wType}！我正好在找这类的～",
+      "requires": ["wType"],
+      "choices": [
+        { "text": "对！这款{wType}是我特别用心做的，摸摸看质感～", "positive": true, "reply": "手感真好！我喜欢！" },
+        { "text": "嗯，就摆在那边。", "positive": false, "reply": "好吧...（自己拿起来看）" }
+      ]
+    }
+  ],
+  "contextExplain": [
+    {
+      "customer": "「{wName}」讲的是什么故事呀？",
+      "requires": ["wName"],
+      "choices": [
+        { "text": "这是一个很用心的作品！让我给你介绍一下～", "positive": true, "reply": "听起来好有趣！我要买！" },
+        { "text": "就...你自己翻翻看吧。", "positive": false, "reply": "这样啊...我再看看别家的。" }
+      ]
+    },
+    {
+      "customer": "这个{wType}做了多久？看起来好精致！",
+      "requires": ["wType"],
+      "choices": [
+        { "text": "花了很多心血！每个细节都反复打磨过～", "positive": true, "reply": "能感受到用心！支持你！" },
+        { "text": "记不清了...反正做了挺久的。", "positive": false, "reply": "哦...那挺辛苦的。" }
+      ]
+    },
+    {
+      "customer": "除了{wType}，你们还有别的作品吗？",
+      "requires": ["wType", "allWorks"],
+      "choices": [
+        { "text": "有的！{allWorks}都可以看看～", "positive": true, "reply": "种类好丰富！让我都看看！" },
+        { "text": "就这些了。", "positive": false, "reply": "好吧...那我先看看这个。" }
+      ]
+    }
+  ],
+  "contextFan": [
+    {
+      "customer": "啊啊啊终于找到你了！我是看了「{refName}」入坑的！",
+      "requires": ["refName"],
+      "choices": [
+        { "text": "谢谢一直支持！今天有新作哦～", "positive": true, "reply": "新作！给我来一份！不，两份！" },
+        { "text": "真的吗？太开心了...", "positive": true, "reply": "真的！你每次的作品我都买了！" }
+      ]
+    },
+    {
+      "customer": "「{refName}」太棒了！我安利给了好多朋友！",
+      "requires": ["refName"],
+      "choices": [
+        { "text": "感动！这次的新作也请多多支持～", "positive": true, "reply": "必须买！朋友们也让我帮她们带！" },
+        { "text": "谢谢你帮我宣传...", "positive": true, "reply": "应该的！好作品值得被更多人看到！" }
+      ]
+    },
+    {
+      "customer": "大大！你的{anyHVPType}和{anyLVPType}我全都要！",
+      "requires": ["anyHVPType", "anyLVPType"],
+      "choices": [
+        { "text": "全都要？太豪气了！给你包好～", "positive": true, "reply": "嘿嘿，钱包准备好了！全部打包！" },
+        { "text": "真的全要吗？会不会太多了...", "positive": true, "reply": "不多不多！买了就是赚到！" }
+      ]
+    }
+  ],
+
+  "priceExpensive": [
+    {
+      "customer": "{workName}卖¥{workPrice}…是认真的吗？",
+      "choices": [
+        { "text": "品质值这个价", "reply": "呵，那我看看再说吧", "positive": false },
+        { "text": "确实有点贵…", "reply": "有自知之明就好", "positive": false }
+      ]
+    },
+    {
+      "customer": "隔壁同类的比{workName}便宜一半诶",
+      "choices": [
+        { "text": "我的质量不一样", "reply": "…随你怎么说吧", "positive": false },
+        { "text": "你说得对…", "reply": "建议你认真考虑一下定价", "positive": false }
+      ]
+    },
+    {
+      "customer": "{workName}这价格劝退了好多人你知道吗",
+      "choices": [
+        { "text": "我相信识货的人会买", "reply": "（默默走开了）", "positive": false },
+        { "text": "我会考虑调整的", "reply": "嗯…下次见吧", "positive": false }
+      ]
+    }
+  ],
+  "priceAbsurd": [
+    {
+      "customer": "你们快来看{workName}的价格哈哈哈",
+      "choices": [
+        { "text": "…", "reply": "（带着朋友笑着走了）", "positive": false },
+        { "text": "这是限量版…", "reply": "限量版也不是这么定的吧", "positive": false }
+      ]
+    },
+    {
+      "customer": "{workName}¥{workPrice}？请问这是行为艺术吗？",
+      "choices": [
+        { "text": "不是，这是正常定价", "reply": "（震惊.jpg）", "positive": false },
+        { "text": "可以这么理解…", "reply": "那确实很有创意（笑）", "positive": false }
+      ]
+    }
+  ],
+  "priceCheap": [
+    {
+      "customer": "{workName}才¥{workPrice}？你不亏吗？",
+      "choices": [
+        { "text": "交个朋友嘛", "reply": "虽然感动但总觉得哪里不对", "positive": true },
+        { "text": "薄利多销", "reply": "希望你算过成本…", "positive": true }
+      ]
+    },
+    {
+      "customer": "{workName}这个价格…你干脆送我好了",
+      "choices": [
+        { "text": "那不至于哈哈", "reply": "好吧那我就买了…", "positive": true },
+        { "text": "下次涨价哦", "reply": "那我趁现在多买几本", "positive": true }
+      ]
+    }
   ]
 }

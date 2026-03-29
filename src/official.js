@@ -5,7 +5,7 @@
  */
 
 import { ic } from './icons.js';
-import { addMoney, addReputation } from './engine.js';
+import { addMoney, addReputation } from './engine/core.js';
 
 // === IP Heat System (hsls.md: dK/dt = I_official + θ·N_D - λ·K) ===
 export function createOfficialState(ipType = 'normal') {

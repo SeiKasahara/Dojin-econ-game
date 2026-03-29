@@ -4,7 +4,7 @@
  * Translated CES demand model from consumer.md
  */
 
-import { getLifeStage } from './engine.js';
+import { getLifeStage } from './engine/core.js';
 import { ic } from './icons.js';
 import { generateSocialFeed } from './social-feed.js';
 

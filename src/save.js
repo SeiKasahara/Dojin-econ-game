@@ -7,7 +7,7 @@
  * 3. Tampered saves are flagged but not deleted (player keeps progress with a mark)
  */
 
-import { getAge, getLifeStageLabel } from './engine.js';
+import { getAge, getLifeStageLabel } from './engine/core.js';
 import { rebuildResolveCheck } from './prediction-contracts.js';
 
 const SAVE_KEY = 'dojin_save';
