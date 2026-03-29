@@ -53,6 +53,7 @@ export function renderTitle(onStart, onContinue) {
         <button id="btn-mute" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button>
         ${save ? `<button id="btn-export" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${ic('export')} 导出存档</button>` : ''}
         <button id="btn-import" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${ic('download-simple')} 导入存档</button>
+        <a href="https://ifdian.net/a/KirisameCalhoun" target="_blank" rel="noopener" style="background:none;border:1px solid #946ce6;border-radius:20px;padding:4px 14px;font-size:0.75rem;color:#946ce6;cursor:pointer;text-decoration:none;font-weight:600">${ic('heart')} 赞助作者</a>
       </div>
       <p class="tagline title-reveal-6" style="font-size:0.65rem;margin-top:8px">
         作者博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a><br/>
@@ -1233,7 +1234,10 @@ export function renderGameOver(state, onRestart) {
 
       ${state.turn >= 6 && !state.tampered ? `<button class="btn btn-secondary btn-block" id="btn-leaderboard-submit" style="margin-bottom:10px;font-size:0.85rem">${ic('trophy')} 提交到排行榜</button>` : ''}
       <button class="btn btn-primary" id="btn-restart">再来一局</button>
-      <button id="btn-go-export" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer;margin-top:10px">${ic('export')} 导出存档</button>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+        <button id="btn-go-export" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${ic('export')} 导出存档</button>
+        <a href="https://ifdian.net/a/KirisameCalhoun" target="_blank" rel="noopener" style="background:none;border:1px solid #946ce6;border-radius:20px;padding:4px 14px;font-size:0.75rem;color:#946ce6;cursor:pointer;text-decoration:none;font-weight:600">${ic('heart')} 赞助作者</a>
+      </div>
 
       <p class="tagline mt-16" style="font-size:0.7rem">
         理论基石请访问个人博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a><br/>
