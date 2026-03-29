@@ -6,6 +6,7 @@
 
 import { ic } from './icons.js';
 import { NOISE_POSTS, NOISE_AUTHORS, NOISE_COLORS, PLAYER_WORK_TEXTS, PLAYER_CASUAL_TEXTS } from './promote-texts.js';
+import { getPlayerAvatar } from './save.js';
 
 // === Constants ===
 const GAME_DURATION = 60000; // 60 seconds
@@ -237,7 +238,7 @@ function addPlayerPost(state, type, text, reach, maxLife) {
     type,
     text,
     author: '我',
-    avatarImg: 'prop-npc/player.webp',
+    avatarImg: getPlayerAvatar(),
     avatarColor: '#C73E3A',
     reach,
     life: maxLife,

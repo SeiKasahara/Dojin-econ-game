@@ -3,7 +3,7 @@ import { createChartCanvas, drawSupplyDemand } from '../chart.js';
 import { IP_TYPES } from '../market.js';
 import { ic, escapeHtml } from '../icons.js';
 import { toggleMute, isMuted } from '../bgm.js';
-import { hasSave, getSaveSummary, exportSave, importSave } from '../save.js';
+import { hasSave, getSaveSummary, exportSave, importSave, saveAvatar, loadAvatar, deleteAvatar, getPlayerAvatar } from '../save.js';
 import { fogRecession } from '../market-fog.js';
 import { $, app, renderPhoneNarrative, renderStatsBar, renderStats, getNarrativeTitle, buildNarrativeSections, renderAlertBanner, renderSpotlightCard, renderPersonalNarrative } from './shared.js';
 import { renderAppDesktop } from './app-page.js';
@@ -401,6 +401,7 @@ export function renderGame(state, onAction, onRetire) {
       <div class="game-header">
         <span class="turn-badge">第 ${state.turn + 1} 回合</span>
         <span style="display:flex;align-items:center;gap:6px">
+          <button class="btn btn-secondary" id="btn-settings" style="padding:2px 8px;font-size:0.75rem;min-height:28px">${ic('gear')}</button>
           <button class="btn btn-secondary" id="btn-mute-game" style="padding:2px 8px;font-size:0.75rem;min-height:28px">${isMuted() ? ic('speaker-slash') : ic('speaker-high')}</button>
           <button class="btn btn-secondary" id="btn-retire" style="padding:2px 10px;font-size:0.75rem;min-height:28px;color:var(--text-muted)">${ic('smiley-sad')}</button>
           <span class="money-badge" ${state.money < 0 ? 'style="color:var(--danger)"' : ''}>¥${state.money.toLocaleString()}</span>
@@ -442,6 +443,10 @@ export function renderGame(state, onAction, onRetire) {
   document.getElementById('btn-mute-game')?.addEventListener('click', () => {
     const m = toggleMute();
     document.getElementById('btn-mute-game').innerHTML = m ? ic('speaker-slash') : ic('speaker-high');
+  });
+  // Settings button
+  document.getElementById('btn-settings')?.addEventListener('click', () => {
+    openSettings(state, () => renderGame(state, onAction, onRetire));
   });
   // Stats panel toggle
   document.getElementById('phone-stats-toggle')?.addEventListener('click', () => {
@@ -904,6 +909,165 @@ export function renderEvent(event, onDismiss) {
   overlay.querySelector('#btn-dismiss-event').addEventListener('click', () => {
     overlay.remove();
     onDismiss();
+  });
+}
+
+// === Settings Overlay ===
+function openSettings(state, onClose) {
+  const currentAvatar = getPlayerAvatar();
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="app-page" style="max-height:70vh;max-width:380px">
+      <div class="app-titlebar" style="border-bottom-color:var(--primary)">
+        <button class="app-back" id="settings-back">${ic('arrow-left')} 返回</button>
+        <span class="app-title">${ic('gear')} 设置</span>
+        <span style="width:60px"></span>
+      </div>
+      <div class="app-page-body" style="padding:20px 16px">
+
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="position:relative;display:inline-block">
+            <img id="settings-avatar-preview" src="${escapeHtml(currentAvatar)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary)">
+            <div id="settings-avatar-edit" style="position:absolute;bottom:0;right:0;width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.7rem">${ic('pencil-simple', '0.7rem')}</div>
+          </div>
+          <div style="margin-top:4px;font-size:0.65rem;color:var(--text-muted)">点击头像更换</div>
+          ${loadAvatar() ? `<button id="settings-avatar-reset" style="margin-top:4px;background:none;border:none;color:var(--danger);font-size:0.65rem;cursor:pointer;text-decoration:underline">恢复默认头像</button>` : ''}
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label style="font-size:0.8rem;font-weight:600;display:block;margin-bottom:6px">${ic('flag-pennant')} 社团名称</label>
+          <div style="display:flex;gap:8px">
+            <input id="settings-club-name" type="text" value="${escapeHtml(state.clubName || '')}" maxlength="20" placeholder="输入社团名称" style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;background:var(--bg)">
+            <button id="settings-club-save" class="btn btn-primary" style="padding:8px 16px;font-size:0.8rem">保存</button>
+          </div>
+          <div id="settings-club-hint" style="font-size:0.65rem;color:var(--text-muted);margin-top:4px"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px">
+          <label style="font-size:0.8rem;font-weight:600;display:block;margin-bottom:8px">${ic('floppy-disk')} 存档管理</label>
+          <div style="display:flex;gap:8px">
+            <button id="settings-export" class="btn btn-secondary" style="flex:1;padding:8px;font-size:0.78rem">${ic('export')} 导出存档</button>
+            <button id="settings-import" class="btn btn-secondary" style="flex:1;padding:8px;font-size:0.78rem">${ic('download-simple')} 导入存档</button>
+          </div>
+        </div>
+
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => { overlay.remove(); onClose(); };
+  overlay.querySelector('#settings-back').addEventListener('click', close);
+  overlay.addEventListener('click', (ev) => { if (ev.target === overlay) close(); });
+
+  // --- Avatar upload ---
+  const avatarEdit = overlay.querySelector('#settings-avatar-edit');
+  const avatarPreview = overlay.querySelector('#settings-avatar-preview');
+  const handleAvatarUpload = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > 512 * 1024) {
+        const hint = overlay.querySelector('#settings-club-hint');
+        if (hint) { hint.textContent = '图片太大（最大512KB）'; hint.style.color = 'var(--danger)'; }
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Resize to 128x128 to save localStorage space
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 128; canvas.height = 128;
+          const ctx = canvas.getContext('2d');
+          const size = Math.min(img.width, img.height);
+          const sx = (img.width - size) / 2, sy = (img.height - size) / 2;
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          saveAvatar(dataUrl);
+          avatarPreview.src = dataUrl;
+          // Add reset button if not present
+          if (!overlay.querySelector('#settings-avatar-reset')) {
+            const resetBtn = document.createElement('button');
+            resetBtn.id = 'settings-avatar-reset';
+            resetBtn.style.cssText = 'margin-top:4px;background:none;border:none;color:var(--danger);font-size:0.65rem;cursor:pointer;text-decoration:underline';
+            resetBtn.textContent = '恢复默认头像';
+            resetBtn.addEventListener('click', () => {
+              deleteAvatar();
+              avatarPreview.src = 'prop-npc/player.webp';
+              resetBtn.remove();
+            });
+            avatarPreview.parentElement.parentElement.querySelector('div:last-of-type')?.after(resetBtn);
+          }
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+    input.click();
+  };
+  avatarEdit.addEventListener('click', handleAvatarUpload);
+  avatarPreview.addEventListener('click', handleAvatarUpload);
+
+  // Avatar reset
+  overlay.querySelector('#settings-avatar-reset')?.addEventListener('click', () => {
+    deleteAvatar();
+    avatarPreview.src = 'prop-npc/player.webp';
+    overlay.querySelector('#settings-avatar-reset')?.remove();
+  });
+
+  // --- Club name save ---
+  overlay.querySelector('#settings-club-save').addEventListener('click', () => {
+    const input = overlay.querySelector('#settings-club-name');
+    const name = input.value.trim();
+    const hint = overlay.querySelector('#settings-club-hint');
+    if (!name) {
+      hint.textContent = '名称不能为空'; hint.style.color = 'var(--danger)';
+      return;
+    }
+    state.clubName = name;
+    hint.textContent = '已保存'; hint.style.color = 'var(--success)';
+    setTimeout(() => { hint.textContent = ''; }, 1500);
+  });
+
+  // --- Export/Import ---
+  overlay.querySelector('#settings-export').addEventListener('click', () => {
+    if (exportSave()) {
+      const btn = overlay.querySelector('#settings-export');
+      btn.innerHTML = `${ic('check')} 已导出`;
+      setTimeout(() => { btn.innerHTML = `${ic('export')} 导出存档`; }, 1500);
+    }
+  });
+  overlay.querySelector('#settings-import').addEventListener('click', () => {
+    const confirmOverlay = document.createElement('div');
+    confirmOverlay.className = 'event-overlay';
+    confirmOverlay.style.zIndex = '110';
+    confirmOverlay.innerHTML = `
+      <div class="event-card" style="max-width:300px;text-align:center">
+        <div style="font-size:1.3rem;margin-bottom:6px">${ic('warning', '1.3rem')}</div>
+        <div style="font-weight:700;margin-bottom:6px">覆盖当前存档？</div>
+        <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px;line-height:1.5">导入会覆盖当前的自动存档。<br/>建议先导出当前存档作为备份。</div>
+        <button class="btn btn-primary btn-block" id="import-confirm-yes" style="margin-bottom:6px">确认导入</button>
+        <button class="btn btn-block" id="import-confirm-no" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">取消</button>
+      </div>`;
+    document.body.appendChild(confirmOverlay);
+    confirmOverlay.querySelector('#import-confirm-no').addEventListener('click', () => confirmOverlay.remove());
+    confirmOverlay.querySelector('#import-confirm-yes').addEventListener('click', async () => {
+      confirmOverlay.remove();
+      const { success, error } = await importSave();
+      if (success) {
+        overlay.remove();
+        // Reload — imported save replaces current state
+        window.location.reload();
+      } else if (error && error !== '已取消') {
+        const btn = overlay.querySelector('#settings-import');
+        btn.innerHTML = `${ic('warning')} ${error}`;
+        setTimeout(() => { btn.innerHTML = `${ic('download-simple')} 导入存档`; }, 2000);
+      }
+    });
   });
 }
 

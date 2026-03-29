@@ -11,6 +11,27 @@ import { getAge, getLifeStageLabel } from './engine/core.js';
 import { rebuildResolveCheck } from './prediction-contracts.js';
 
 const SAVE_KEY = 'dojin_save';
+const AVATAR_KEY = 'dojin_avatar';
+
+/** Save custom avatar (base64 data URL) */
+export function saveAvatar(dataUrl) {
+  try { localStorage.setItem(AVATAR_KEY, dataUrl); } catch (e) { /* full */ }
+}
+
+/** Load custom avatar. Returns data URL string or null. */
+export function loadAvatar() {
+  try { return localStorage.getItem(AVATAR_KEY); } catch (e) { return null; }
+}
+
+/** Delete custom avatar */
+export function deleteAvatar() {
+  try { localStorage.removeItem(AVATAR_KEY); } catch (e) { /* ignore */ }
+}
+
+/** Get player avatar src — custom if uploaded, else default */
+export function getPlayerAvatar() {
+  return loadAvatar() || 'prop-npc/player.webp';
+}
 const SAVE_VERSION = 2; // v2 = signed saves
 
 // --- Keyed hash (cyrb53 variant) ---
