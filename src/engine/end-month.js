@@ -8,6 +8,7 @@ import { tickOfficial, getSecondHandModifier, recordPlayerWork } from '../offici
 import { tickAdvanced } from '../advanced.js';
 import { rollPartnerDrama } from '../partner-drama.js';
 import { tickContacts } from '../partner.js';
+import { chainDigest } from '../hash.js';
 import { resolveContract } from '../prediction-contracts.js';
 import { checkAchievements } from '../achievements.js';
 import { generateEnding, generateCommercialEnding, generateCheatEnding, generateOpenEnding } from '../endings.js';
@@ -28,13 +29,17 @@ export function endMonth(state) {
   if (remainingDays > 0) {
     // Player ended month early with leisure left → convert remaining days to rest
     const hourScale = remainingDays / 5;
-    const basRestore = (15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3) * hourScale;
+    let basRestore = (15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3) * hourScale;
+    if (state.obsessiveTrait === 'stamina') basRestore += 5 * hourScale;
+    if (state.obsessiveTrait === 'social') basRestore *= 0.7;
     const restore = Math.max(2, Math.round(basRestore * fatigueMult));
     state.passion = Math.min(100, state.passion + restore);
     result.deltas.push({ icon: 'coffee', label: `剩余${remainingDays}天自动休息`, value: `热情+${restore}`, positive: true });
   } else if (state.time <= 0 || (state.monthActions || []).length === 0) {
     // 0 leisure month or no actions → full passive rest (equivalent to old per-turn rest)
-    const basRestore = 15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3;
+    let basRestore = 15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3;
+    if (state.obsessiveTrait === 'stamina') basRestore += 5;
+    if (state.obsessiveTrait === 'social') basRestore *= 0.7;
     const restore = Math.max(3, Math.round(basRestore * fatigueMult));
     state.passion = Math.min(100, state.passion + restore);
     result.deltas.push({ icon: 'coffee', label: state.time <= 0 ? '忙碌中偷闲' : '悠闲的一个月', value: `热情+${restore}`, positive: true });
@@ -135,6 +140,8 @@ export function endMonth(state) {
   // --- Reality drain (with income/savings buffer during work stage) ---
   const rawDrain = getRealityDrain(state.turn);
   let drain = Math.max(0, rawDrain - (state.endowments.resilience || 0) * 0.5); // resilience reduces drain
+  if (state.obsessiveTrait === 'resilience') drain = Math.max(0, drain - 1); // resilience-obsessive: extra -1
+  if (state.obsessiveTrait === 'social') drain += 3; // social-obsessive: too much socializing drains creative energy
   if (drain > 0 && getLifeStage(state.turn) === 'work') {
     const incomeBuffer = state.monthlyIncome > 0 ? Math.min(0.4, state.monthlyIncome / 5000) : 0;
     const savingsBuffer = state.money > 3000 ? Math.min(0.2, (state.money - 3000) / 30000) : 0;
@@ -168,7 +175,8 @@ export function endMonth(state) {
   }
 
   // --- Debt anxiety: negative money → passion drain (worry, not fun anymore) ---
-  const debtThreshold = (state.endowments.resilience || 0) * 200; // resilience delays anxiety
+  let debtThreshold = (state.endowments.resilience || 0) * 200; // resilience delays anxiety
+  if (state.obsessiveTrait === 'resilience') debtThreshold += 400;
   if (state.money < -debtThreshold) {
     const debtLevel = Math.abs(state.money) - debtThreshold;
     // Every ¥500 in debt → 2 extra passion drain
@@ -392,7 +400,9 @@ export function endMonth(state) {
   }
 
   // --- Info disclosure: rapid decay (information flood drowns everything fast) ---
-  const infoDecay = 0.12 - (state.endowments.marketing || 0) * 0.015; // base 12%/month, marketing slows
+  let infoDecay = 0.12 - (state.endowments.marketing || 0) * 0.015; // base 12%/month, marketing slows
+  if (state.obsessiveTrait === 'marketing') infoDecay -= 0.02;    // marketing-obsessive: slower decay
+  if (state.obsessiveTrait === 'resilience') infoDecay += 0.03;   // resilience-obsessive: tone-deaf to market
   state.infoDisclosure = Math.max(0.05, state.infoDisclosure - infoDecay);
 
   // --- Passive online sales (trickle from inventory each turn, affected by secondhand) ---
@@ -538,7 +548,7 @@ export function endMonth(state) {
           if (payout > 0) addMoney(state, payout);
           // Detect market manipulation: player won a club contract they could influence
           if (won && c._isClubContract) state._marketManipulated = true;
-          pm.resolved.push({ question: c.question, side: h.side, won, payout, profit, resolvedAt: state.turn });
+          pm.resolved.push({ question: c.question, side: h.side, won, payout, profit, cost: h.cost, resolvedAt: state.turn });
           predSettlements.push({ question: c.question, side: h.side, shares: h.shares, cost: h.cost, won, payout, profit, outcome: outcome ? 'YES' : 'NO' });
         }
         pm.holdings = pm.holdings.filter(h => h.contractId !== c.id);
@@ -549,12 +559,21 @@ export function endMonth(state) {
     });
     if (predSettlements.length > 0) {
       result.predictionSettlements = predSettlements;
-      const totalPL = predSettlements.reduce((s, p) => s + p.profit, 0);
+      // Display actual cash flow at settlement: winners receive payout, losers get nothing
+      // (cost was already deducted at purchase time)
+      const totalPayout = predSettlements.reduce((s, p) => s + p.payout, 0);
+      const wonCount = predSettlements.filter(p => p.won).length;
+      const lostCount = predSettlements.filter(p => !p.won).length;
+      const label = wonCount > 0 && lostCount > 0
+        ? `织梦交易结算 (${wonCount}赢${lostCount}输)`
+        : wonCount > 0
+          ? `织梦交易结算 (${wonCount}笔赢)`
+          : `织梦交易结算 (${lostCount}笔归零)`;
       result.deltas.push({
-        icon: totalPL >= 0 ? 'chart-line-up' : 'chart-line-down',
-        label: `织梦交易结算 (${predSettlements.length}笔)`,
-        value: `${totalPL >= 0 ? '+' : ''}¥${totalPL}`,
-        positive: totalPL >= 0,
+        icon: totalPayout > 0 ? 'chart-line-up' : 'chart-line-down',
+        label,
+        value: totalPayout > 0 ? `+¥${totalPayout}` : '血本无归',
+        positive: totalPayout > 0,
       });
     }
   }
@@ -636,6 +655,45 @@ export function endMonth(state) {
 
   // Capture month financial summary BEFORE reset
   result.monthFinancial = { income: state._monthIncome || 0, expense: state._monthExpense || 0 };
+
+  // --- Anti-cheat: record chained digest + action log ---
+  {
+    const acts = (state.monthActions || []).map(a => a.actionId);
+    const prevDigest = state._digestChain.length > 0
+      ? state._digestChain[state._digestChain.length - 1]
+      : '';
+    // Snapshot of key state values that the digest covers
+    const snapshot = {
+      t: state.turn,
+      m: Math.round(state.money),
+      r: Math.round(state.reputation * 100),  // ×100 for integer precision
+      p: Math.round(state.passion),
+      rv: state.totalRevenue,
+      ts: state.totalSales,
+      hv: state.totalHVP,
+      lv: state.totalLVP,
+      hs: state.inventory.hvpStock,
+      ls: state.inventory.lvpStock,
+      a: acts.join(','),
+    };
+    const digest = chainDigest(prevDigest, snapshot);
+    state._digestChain.push(digest);
+    // Compact action log entry — must contain ALL fields used in snapshot
+    // so the server can recompute the digest chain independently
+    state._actionLog.push({
+      t: snapshot.t,
+      a: acts,
+      m: snapshot.m,
+      r: snapshot.r,
+      p: snapshot.p,
+      rv: snapshot.rv,
+      s: snapshot.ts,
+      hv: snapshot.hv,
+      lv: snapshot.lv,
+      hs: snapshot.hs,
+      ls: snapshot.ls,
+    });
+  }
 
   // --- Reset month state ---
   state.monthTimeSpent = 0;

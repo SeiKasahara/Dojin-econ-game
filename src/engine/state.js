@@ -14,6 +14,45 @@ export const ENDOWMENTS = {
 export const ENDOWMENT_TOTAL_POINTS = 7;
 export const ENDOWMENT_MAX_PER_TRAIT = 3;
 
+// === Obsessive specialization: push one trait to 4 (free) with a thematic debuff ===
+export const OBSESSIVE_TRAITS = {
+  talent: {
+    name: '偏执·天才', emoji: 'fire',
+    desc: '对创作品质近乎疯狂的执着',
+    buff: '声誉积累额外+25%，经验获取+50%',
+    debuff: '社交能力归零——找搭档成功率-20%，毒搭档概率翻倍',
+    // Applied in code: social endowment treated as 0 for partner search; toxic chance ×2
+  },
+  stamina: {
+    name: '偏执·铁人', emoji: 'lightning',
+    desc: '无穷的体力，停不下来的创作机器',
+    buff: '休息恢复额外+5，创作月耗再-1',
+    debuff: '只会埋头苦干——创作经验获取-40%，作品缺乏灵气质量上限-0.15',
+    // Applied in code: skillExp gain ×0.6; workQuality capped at -0.15
+  },
+  social: {
+    name: '偏执·社牛', emoji: 'chat-circle',
+    desc: '天生的社交达人，人脉就是一切',
+    buff: '找搭档+20%，毒搭档率-5%，联系人上限+4',
+    debuff: '沉迷社交荒废创作——每月额外热情消耗+3，休息恢复效率-30%',
+    // Applied in code: monthly passion drain +3; rest restore ×0.7
+  },
+  marketing: {
+    name: '偏执·话题王', emoji: 'trend-up',
+    desc: '营销鬼才，任何东西都能炒热',
+    buff: '宣发效果额外+25%，信息衰减再-2%',
+    debuff: '重营销轻内容——作品质量-0.1，声誉积累-20%',
+    // Applied in code: workQuality -0.1 at creation; reputation gain ×0.8
+  },
+  resilience: {
+    name: '偏执·钝感', emoji: 'wall',
+    desc: '刀枪不入的心理防线，什么都伤不到你',
+    buff: '现实消耗再-1，负债焦虑阈再+400',
+    debuff: '对市场反馈迟钝——宣发效果-30%，信息衰减+3%',
+    // Applied in code: promote gain ×0.7; info decay +0.03
+  },
+};
+
 // === Background (家庭背景) ===
 export const BACKGROUNDS = {
   poor:     { name: '困难家庭', emoji: 'house-simple', weight: 5,  money: 800,  allowanceMult: 0.6, salaryMult: 0.85, fireResist: 0, desc: '拮据但坚韧，逆境出发' },
@@ -42,6 +81,7 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     turn: 0, phase: 'action',
     clubName: null,         // player's doujin circle name (set at game start)
     endowments: e,
+    obsessiveTrait: null,   // null or trait key ('talent','stamina',...) — free +1 to 4 with debuff
     background: bgId,
     passion: 90, reputation: 0.3, time: 9, money: bg.money,
     infoDisclosure: 0.2,
@@ -113,5 +153,8 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     doujinWorkYearReset: 0,         // turn at which work years reset (for salary calc after returning)
     doujinQuitCount: 0,             // times player has quit for full-time doujin (penalizes frequent switching)
     lastReturnToWorkTurn: 0,        // turn when player last returned to employment (cooldown gate)
+    // Anti-cheat: chained digest + action log for leaderboard verification
+    _digestChain: [],   // [digestHash, ...] — one per month, each links to previous
+    _actionLog: [],     // [{ t, acts, m, r, p, rev, s }] — compact per-month action summary
   };
 }

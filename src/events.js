@@ -78,9 +78,10 @@ export const RANDOM_EVENTS = [
   },
   {
     id: 'collapse', emoji: 'warning-circle', title: '塌方事件！',
-    desc: '圈内爆发争吵，有创作者被挂，社群气氛紧张...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(15 * m)}`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(15 * m); },
+    desc: (s) => s.obsessiveTrait === 'resilience' ? '圈内爆发争吵，有创作者被挂，社群气氛紧张...不过这种事你完全不在意。' : '圈内爆发争吵，有创作者被挂，社群气氛紧张...',
+    effect: (s) => { if (s.obsessiveTrait === 'resilience') return '完全不受影响'; const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(15 * m)}`; },
+    effectClass: (s) => s.obsessiveTrait === 'resilience' ? 'positive' : 'negative',
+    apply: (s) => { if (s.obsessiveTrait === 'resilience') return; const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(15 * m); },
     tip: '塌方影响的是社群氛围和你的心态，但你的作品和口碑还在。保持冷静，风波总会过去。',
     weight: 8, when: (s) => s.reputation > 0.3, maxTotal: Infinity,
   },
@@ -170,9 +171,10 @@ export const RANDOM_EVENTS = [
   },
   {
     id: 'uni_breakup', emoji: 'heart-break', title: '感情变动',
-    desc: '一段感情的开始或结束占据了你大量的心理能量...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(12 * m)}`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(12 * m); },
+    desc: (s) => s.obsessiveTrait === 'resilience' ? '周围有人在谈恋爱分手什么的……跟你有什么关系？' : '一段感情的开始或结束占据了你大量的心理能量...',
+    effect: (s) => { if (s.obsessiveTrait === 'resilience') return '完全不受影响'; const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; return `热情-${Math.round(12 * m)}`; },
+    effectClass: (s) => s.obsessiveTrait === 'resilience' ? 'positive' : 'negative',
+    apply: (s) => { if (s.obsessiveTrait === 'resilience') return; const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : 1; s.passion -= Math.round(12 * m); },
     tip: '热情预算不仅被创作消耗，还被生活中的情绪事件消耗。',
     weight: 4, when: (s) => getLifeStage(s.turn) === 'university', maxTotal: 2,
   },
@@ -202,7 +204,7 @@ export const RANDOM_EVENTS = [
     effect: '热情+8 声誉+0.2', effectClass: 'positive',
     apply: (s) => { s.passion = Math.min(100, s.passion + 8); addReputation(s, 0.2); },
     tip: '创作天赋高的创作者更容易进入"心流"状态。这种突发灵感是内在动机的体现',
-    weight: 4, when: (s) => (s.endowments.talent || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
+    weight: 4, when: (s) => ((s.endowments.talent || 0) >= 2 || s.obsessiveTrait === 'talent') && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
     id: 'creative_block', emoji: 'wall', title: '创作瓶颈',
@@ -210,7 +212,7 @@ export const RANDOM_EVENTS = [
     effect: '热情-6', effectClass: 'negative',
     apply: (s) => { s.passion = Math.max(0, s.passion - 6); },
     tip: '创作天赋低的创作者更容易遭遇瓶颈。',
-    weight: 5, when: (s) => (s.endowments.talent || 0) <= 1 && s.totalHVP > 0, maxTotal: Infinity,
+    weight: 5, when: (s) => (s.endowments.talent || 0) <= 1 && s.obsessiveTrait !== 'talent' && s.totalHVP > 0, maxTotal: Infinity,
   },
   {
     id: 'health_issue', emoji: 'thermometer', title: '身体不适',
@@ -218,7 +220,7 @@ export const RANDOM_EVENTS = [
     effect: '热情-5 时间-2天(2回合) 资金-¥500~800', effectClass: 'negative',
     apply: (s) => { s.passion = Math.max(0, s.passion - 5); s.timeDebuffs.push({ id: 'sick', reason: '身体不适', turnsLeft: 2, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); addMoney(s, -(500 + Math.floor(Math.random() * 300))); },
     tip: '体力精力低的创作者更容易生病。身体是革命的本钱。',
-    weight: 4, when: (s) => (s.endowments.stamina || 0) <= 1, maxTotal: 3,
+    weight: 4, when: (s) => (s.endowments.stamina || 0) <= 1 && s.obsessiveTrait !== 'stamina', maxTotal: 3,
   },
   {
     id: 'energy_surge', emoji: 'fire', title: '精力充沛！',
@@ -226,7 +228,7 @@ export const RANDOM_EVENTS = [
     effect: '热情+6', effectClass: 'positive',
     apply: (s) => { s.passion = Math.min(100, s.passion + 6); },
     tip: '体力禀赋高的人恢复速度快、消耗低。同样的创作行为，不同人的精力消耗截然不同。',
-    weight: 3, when: (s) => (s.endowments.stamina || 0) >= 2, maxTotal: Infinity,
+    weight: 3, when: (s) => (s.endowments.stamina || 0) >= 2 || s.obsessiveTrait === 'stamina', maxTotal: Infinity,
   },
   {
     id: 'friend_intro', emoji: 'chat-circle', title: '朋友介绍了靠谱搭档',
@@ -234,7 +236,7 @@ export const RANDOM_EVENTS = [
     effect: '人脉+1（高亲密度·默契搭档）', effectClass: 'positive',
     apply: (s) => { s._pendingFriendIntro = true; },
     tip: '社交魅力高→搜寻成本低。通过朋友介绍认识的人通常更可靠，初始亲密度也更高。',
-    weight: 3, when: (s) => (s.endowments.social || 0) >= 2, maxTotal: 2,
+    weight: 3, when: (s) => (s.endowments.social || 0) >= 2 || s.obsessiveTrait === 'social', maxTotal: 2,
   },
   {
     id: 'viral_post', emoji: 'phone', title: '帖子意外火了！',
@@ -242,7 +244,7 @@ export const RANDOM_EVENTS = [
     effect: '信息+30% 声誉+0.15', effectClass: 'positive',
     apply: (s) => { s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.3); addReputation(s, 0.15); },
     tip: '营销直觉高的创作者更善于制造传播点。信息披露是比声誉更直接的转化驱动力。',
-    weight: 3, when: (s) => (s.endowments.marketing || 0) >= 2 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
+    weight: 3, when: (s) => ((s.endowments.marketing || 0) >= 2 || s.obsessiveTrait === 'marketing') && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
     id: 'promo_fail', emoji: 'eye-closed', title: '宣传翻车...',
@@ -250,13 +252,14 @@ export const RANDOM_EVENTS = [
     effect: '声誉-0.1 信息+10%(黑红也是红)', effectClass: 'negative',
     apply: (s) => { s.reputation = Math.max(0, s.reputation - 0.1); s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1); },
     tip: '营销直觉低的人更容易踩雷。信息披露是双刃剑——不当宣传会带来负面注意力，但"黑红也是红"确实会提升曝光度。',
-    weight: 4, when: (s) => (s.endowments.marketing || 0) <= 1 && s.infoDisclosure > 0.3 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
+    weight: 4, when: (s) => (s.endowments.marketing || 0) <= 1 && s.obsessiveTrait !== 'marketing' && s.infoDisclosure > 0.3 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
   {
     id: 'harsh_review', emoji: 'smiley-angry', title: '遭遇恶评',
-    desc: '你通过一些渠道知道了针对你的黑屁，言辞很伤人...',
-    effect: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)} 声誉-${Math.round(15 * m)}%`; }, effectClass: 'negative',
-    apply: (s) => { const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); addReputation(s, -(s.reputation * 0.15 * m)); },
+    desc: (s) => s.obsessiveTrait === 'resilience' ? '有人在网上黑你……你看都没看就关掉了。' : '你通过一些渠道知道了针对你的黑屁，言辞很伤人...',
+    effect: (s) => { if (s.obsessiveTrait === 'resilience') return '完全不受影响'; const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); return `热情-${Math.round(10 * m)} 声誉-${Math.round(15 * m)}%`; },
+    effectClass: (s) => s.obsessiveTrait === 'resilience' ? 'positive' : 'negative',
+    apply: (s) => { if (s.obsessiveTrait === 'resilience') return; const r = s.endowments.resilience || 0; const m = r <= 1 ? 2.3 - r * 0.5 : Math.max(0.7, 1.0 - (r - 2) * 0.15); s.passion = Math.max(0, s.passion - Math.round(10 * m)); addReputation(s, -(s.reputation * 0.15 * m)); },
     tip: '恶评针对的是你个人，会直接损害声誉。心理韧性低的人受影响更大。和圈内塌方不同——塌方只伤心态，恶评伤口碑。',
     weight: 5, when: (s) => s.reputation > 0.5 && (s.totalHVP > 0 || s.totalLVP > 0), maxTotal: Infinity,
   },
@@ -337,11 +340,23 @@ export const RANDOM_EVENTS = [
     }, maxTotal: Infinity,
   },
   {
-    id: 'social_obligation', emoji: 'beer-stein', title: '社交应酬',
-    desc: '公司团建、同事聚餐、客户应酬……这些"不得不去"的社交活动占据了你的创作时间。',
-    effect: '时间-2天(2回合) 资金-200 热情-2', effectClass: 'negative',
-    apply: (s) => { s.timeDebuffs.push({ id: 'social_' + s.turn, reason: '社交应酬', turnsLeft: 2, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); addMoney(s, -200); s.passion = Math.max(0, s.passion - 2); },
-    tip: '职场社交是一种"强制消费"——你用时间和金钱购买的不是快乐，而是职场关系的维护成本。',
+    id: 'social_obligation', emoji: 'beer-stein',
+    title: (s) => s.obsessiveTrait === 'social' ? '社交达人的快乐时光' : '社交应酬',
+    desc: (s) => s.obsessiveTrait === 'social'
+      ? '公司团建、同事聚餐——别人觉得累，你却如鱼得水！不仅交到了新朋友，还顺便给自己的作品打了广告。'
+      : '公司团建、同事聚餐、客户应酬……这些"不得不去"的社交活动占据了你的创作时间。',
+    effect: (s) => s.obsessiveTrait === 'social' ? '热情+5 信息+10% 资金-200' : '时间-2天(2回合) 资金-200 热情-2',
+    effectClass: (s) => s.obsessiveTrait === 'social' ? 'positive' : 'negative',
+    apply: (s) => {
+      if (s.obsessiveTrait === 'social') {
+        s.passion = Math.min(100, s.passion + 5);
+        s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.1);
+        addMoney(s, -200);
+      } else {
+        s.timeDebuffs.push({ id: 'social_' + s.turn, reason: '社交应酬', turnsLeft: 2, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); addMoney(s, -200); s.passion = Math.max(0, s.passion - 2);
+      }
+    },
+    tip: (s) => s.obsessiveTrait === 'social' ? '社交达人把每次聚会都变成了推广机会——别人在应付，你在享受。' : '职场社交是一种"强制消费"——你用时间和金钱购买的不是快乐，而是职场关系的维护成本。',
     weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed && !s.fullTimeDoujin, maxTotal: Infinity,
   },
   {
@@ -595,7 +610,7 @@ export const RANDOM_EVENTS = [
       s.time = computeTime(s.turn, s.timeDebuffs);
     },
     tip: '长期熬夜创作的代价是延后的——年轻时透支的体力会在中年以健康问题的形式集中爆发。体力禀赋低的创作者尤其要注意：身体是不可再生的资源。',
-    weight: 3, when: (s) => s.turn > 158 && (s.endowments.stamina || 0) <= 1, maxTotal: 1,
+    weight: 3, when: (s) => s.turn > 158 && (s.endowments.stamina || 0) <= 1 && s.obsessiveTrait !== 'stamina', maxTotal: 1,
   },
   {
     id: 'underground_anthology', emoji: 'book-open', title: '受邀参与高质量合志',

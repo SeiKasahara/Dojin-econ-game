@@ -9,6 +9,7 @@
 
 import { getAge, getLifeStageLabel } from './engine/core.js';
 import { rebuildResolveCheck } from './prediction-contracts.js';
+import { cyrb53, computeChecksum } from './hash.js';
 
 const SAVE_KEY = 'dojin_save';
 const AVATAR_KEY = 'dojin_avatar';
@@ -33,30 +34,6 @@ export function getPlayerAvatar() {
   return loadAvatar() || 'prop-npc/player.webp';
 }
 const SAVE_VERSION = 2; // v2 = signed saves
-
-// --- Keyed hash (cyrb53 variant) ---
-function cyrb53(str, seed = 0) {
-  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
-  for (let i = 0; i < str.length; i++) {
-    const ch = str.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
-  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
-  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-}
-
-// Salt mixed into hash — makes rainbow tables useless
-const HMAC_KEY = 'dj_ec0n_s4lt_!@#_2024';
-
-function computeChecksum(payload) {
-  // Double hash with key sandwiching (poor-man's HMAC)
-  const inner = cyrb53(HMAC_KEY + payload, 0x9e3779b9);
-  return cyrb53(inner + HMAC_KEY + payload.length, 0x517cc1b7);
-}
 
 // --- Base64 helpers (handle Unicode via UTF-8 encoding) ---
 function toBase64(str) {

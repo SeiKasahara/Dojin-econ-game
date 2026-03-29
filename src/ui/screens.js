@@ -1,4 +1,4 @@
-import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getLifeStageLabel, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground, HVP_SUBTYPES, LVP_SUBTYPES } from '../engine.js';
+import { ACTIONS, canPerformAction, getActionDisplay, getAchievementInfo, getTimeLabel, getLifeStage, getLifeStageLabel, getAge, PARTNER_TYPES, ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, OBSESSIVE_TRAITS, getCreativeSkill, getSkillLabel, getSkillEffects, BACKGROUNDS, rollBackground, HVP_SUBTYPES, LVP_SUBTYPES } from '../engine.js';
 import { createChartCanvas, drawSupplyDemand } from '../chart.js';
 import { IP_TYPES } from '../market.js';
 import { ic, escapeHtml } from '../icons.js';
@@ -46,7 +46,10 @@ export function renderTitle(onStart, onContinue) {
         玩法：每回合选择行动，管理热情·声誉·资金<br/>
         热情归零 = 游戏结束
       </p>
-      <div class="title-reveal-6" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+      <div class="title-reveal-6" style="text-align:center;margin-top:12px">
+        <button id="btn-leaderboard" style="background:none;border:1.5px solid #F39C12;border-radius:20px;padding:5px 20px;font-size:0.8rem;color:#E67E22;cursor:pointer;font-weight:600">${ic('trophy')} 排行榜</button>
+      </div>
+      <div class="title-reveal-6" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px">
         <button id="btn-mute" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button>
         ${save ? `<button id="btn-export" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${ic('export')} 导出存档</button>` : ''}
         <button id="btn-import" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${ic('download-simple')} 导入存档</button>
@@ -113,6 +116,9 @@ export function renderTitle(onStart, onContinue) {
     } else {
       doImport();
     }
+  });
+  document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
+    import('../leaderboard.js').then(({ openLeaderboard }) => openLeaderboard(null, () => renderTitle(onStart, onContinue)));
   });
   document.getElementById('btn-continue')?.addEventListener('click', () => {
     if (onContinue) onContinue();
@@ -284,7 +290,7 @@ export function renderEndowments(onConfirm) {
         cfm.textContent = `确认禀赋 (${rem === 0 ? '✓' : `还剩${rem}点`})`;
         // Re-bind click if just became enabled
         if (rem === 0) {
-          cfm.onclick = () => onConfirm({ ...pts }, bgId);
+          cfm.onclick = () => showObsessiveChoice(pts, bgId, onConfirm);
         } else {
           cfm.onclick = null;
         }
@@ -304,7 +310,7 @@ export function renderEndowments(onConfirm) {
     });
     const confirmBtn = document.getElementById('btn-endow-confirm');
     if (confirmBtn && remaining() === 0) {
-      confirmBtn.addEventListener('click', () => onConfirm({ ...pts }, bgId));
+      confirmBtn.addEventListener('click', () => showObsessiveChoice(pts, bgId, onConfirm));
     }
     document.getElementById('btn-reroll')?.addEventListener('click', () => {
       if (rolled) return;
@@ -318,6 +324,91 @@ export function renderEndowments(onConfirm) {
     });
   }
   render();
+}
+
+// === Obsessive Specialization Choice (after endowment allocation) ===
+function showObsessiveChoice(pts, bgId, onConfirm) {
+  // Only traits at max (3) can be pushed to 4
+  const eligibleKeys = Object.keys(OBSESSIVE_TRAITS).filter(k => pts[k] === ENDOWMENT_MAX_PER_TRAIT);
+  if (eligibleKeys.length === 0) {
+    // No trait at 3 — skip obsessive choice entirely
+    onConfirm({ ...pts }, bgId, null);
+    return;
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  const cardsHtml = eligibleKeys.map(k => {
+    const t = OBSESSIVE_TRAITS[k];
+    const e = ENDOWMENTS[k];
+    return `<div class="obsessive-card" data-key="${k}" style="padding:12px;margin-bottom:8px;border:2px solid var(--border);border-radius:12px;cursor:pointer;transition:all 0.15s">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:1.2rem">${ic(t.emoji)}</span>
+        <div>
+          <div style="font-weight:700;font-size:0.85rem">${t.name}</div>
+          <div style="font-size:0.68rem;color:var(--text-muted)">${e.name} 3 → <span style="color:var(--primary);font-weight:700">4</span></div>
+        </div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-light);margin-bottom:4px;line-height:1.5">${t.desc}</div>
+      <div style="font-size:0.7rem;color:var(--success);margin-bottom:2px">${ic('arrow-fat-up','0.65rem')} ${t.buff}</div>
+      <div style="font-size:0.7rem;color:var(--danger)">${ic('arrow-fat-down','0.65rem')} ${t.debuff}</div>
+    </div>`;
+  }).join('');
+  overlay.innerHTML = `<div class="app-page" style="max-height:85vh;max-width:380px">
+    <div style="padding:16px 16px 8px;text-align:center">
+      <div style="font-size:1.3rem;margin-bottom:6px">${ic('fire')}</div>
+      <h2 style="margin-bottom:4px;font-size:1rem">偏执强化</h2>
+      <p style="font-size:0.75rem;color:var(--text-light);margin-bottom:4px;line-height:1.5">
+        选择一项禀赋免费强化到 <b>4级</b>——代价是对应的性格缺陷。<br/>偏执的人在擅长的领域极致，但在其他方面会很差。
+      </p>
+      <p style="font-size:0.68rem;color:var(--text-muted);margin-bottom:12px">这是不可逆的选择，也可以跳过。</p>
+    </div>
+    <div class="app-page-body" style="padding:8px 12px">${cardsHtml}</div>
+    <div style="padding:10px 12px">
+      <button class="btn btn-block" id="obs-skip" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.8rem;padding:10px">不强化，保持均衡</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  // Skip — no obsessive trait
+  overlay.querySelector('#obs-skip').addEventListener('click', () => {
+    overlay.remove();
+    onConfirm({ ...pts }, bgId, null);
+  });
+
+  // Select obsessive trait — show confirmation
+  overlay.querySelectorAll('.obsessive-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const key = card.dataset.key;
+      const t = OBSESSIVE_TRAITS[key];
+      // Highlight selected
+      overlay.querySelectorAll('.obsessive-card').forEach(c => {
+        c.style.borderColor = c.dataset.key === key ? 'var(--primary)' : 'var(--border)';
+        c.style.background = c.dataset.key === key ? 'var(--bg-hover, #FFF8F0)' : '';
+      });
+      // Replace skip button with confirm
+      const btnArea = overlay.querySelector('#obs-skip').parentElement;
+      btnArea.innerHTML = `
+        <button class="btn btn-primary btn-block" id="obs-confirm" style="font-size:0.85rem;padding:10px;margin-bottom:6px">${ic(t.emoji)} 确认「${t.name}」</button>
+        <button class="btn btn-block" id="obs-back" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.78rem;padding:8px">重新选择</button>
+      `;
+      btnArea.querySelector('#obs-confirm').addEventListener('click', () => {
+        const finalPts = { ...pts, [key]: 4 };
+        overlay.remove();
+        onConfirm(finalPts, bgId, key);
+      });
+      btnArea.querySelector('#obs-back').addEventListener('click', () => {
+        overlay.querySelectorAll('.obsessive-card').forEach(c => {
+          c.style.borderColor = 'var(--border)';
+          c.style.background = '';
+        });
+        btnArea.innerHTML = `<button class="btn btn-block" id="obs-skip" style="background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.8rem;padding:10px">不强化，保持均衡</button>`;
+        btnArea.querySelector('#obs-skip').addEventListener('click', () => {
+          overlay.remove();
+          onConfirm({ ...pts }, bgId, null);
+        });
+      });
+    });
+  });
 }
 
 // === Game Screen ===
@@ -691,22 +782,27 @@ export function renderResult(state, result, onContinue) {
 
         ${result.predictionSettlements ? (() => {
           const ps = result.predictionSettlements;
-          const totalPL = ps.reduce((s, p) => s + p.profit, 0);
+          const totalPayout = ps.reduce((s, p) => s + p.payout, 0);
+          const wonCount = ps.filter(p => p.won).length;
+          const lostCount = ps.filter(p => !p.won).length;
           const collapsed = ps.length > 3;
           const rows = ps.map(p => {
             const sideLabel = p.side === 'yes' ? 'YES' : 'NO';
             const sideColor = p.won ? 'var(--success)' : 'var(--danger)';
-            const resultIcon = p.won ? '${ic("check-circle","0.65rem")}' : '${ic("x-circle","0.65rem")}';
             return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:0.7rem;border-bottom:1px dashed var(--border)">
               <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.question)}</span>
               <span style="flex-shrink:0;margin:0 4px;font-size:0.62rem;color:var(--text-muted)">结果${p.outcome} · 持${sideLabel}×${p.shares}</span>
-              <span style="flex-shrink:0;font-weight:600;color:${sideColor}">${p.won ? '+¥' + p.payout : '-¥' + p.cost}</span>
+              <span style="flex-shrink:0;font-weight:600;color:${sideColor}">${p.won ? '+¥' + p.payout : '归零'}</span>
             </div>`;
           }).join('');
-          const plColor = totalPL >= 0 ? 'var(--success)' : 'var(--danger)';
+          const headerColor = totalPayout > 0 ? 'var(--success)' : 'var(--danger)';
+          const headerSummary = wonCount > 0 && lostCount > 0
+            ? `${wonCount}赢${lostCount}输 · 收回¥${totalPayout}`
+            : wonCount > 0 ? `${wonCount}笔赢 · +¥${totalPayout}`
+            : `${lostCount}笔归零`;
           return `<div class="market-panel${collapsed ? ' collapsed' : ''}" style="margin-bottom:10px">
             <div class="market-header" style="cursor:${collapsed ? 'pointer' : 'default'}">
-              <span>${ic('chart-line-up')} 织梦交易结算 <span style="font-weight:700;color:${plColor}">${totalPL >= 0 ? '+' : ''}¥${totalPL}</span> <span style="color:var(--text-muted);font-size:0.7rem">(${ps.length}笔)</span></span>
+              <span>${ic('chart-line-up')} 织梦交易结算 <span style="font-weight:700;color:${headerColor}">${headerSummary}</span></span>
               ${collapsed ? '<span class="market-arrow">▼</span>' : ''}
             </div>
             <div class="market-body" style="padding:4px 0">${rows}</div>
@@ -1118,7 +1214,7 @@ export function renderGameOver(state, onRestart) {
         <div class="go-stat-item"><span>起点</span><span class="go-stat-val">18岁 高考后暑假</span></div>
         <div class="go-stat-item"><span>背景</span><span class="go-stat-val">${ic(BACKGROUNDS[state.background]?.emoji || 'house')} ${BACKGROUNDS[state.background]?.name || '普通家庭'}</span></div>
         <div class="go-stat-item"><span>IP</span><span class="go-stat-val">${ic(IP_TYPES[state.market?.ipType]?.emoji || 'star-four')} ${IP_TYPES[state.market?.ipType]?.name || '潜力IP'}</span></div>
-        <div class="go-stat-item"><span>禀赋</span><span class="go-stat-val">${Object.entries(state.endowments || {}).map(([k, v]) => `${ENDOWMENTS[k]?.emoji ? ic(ENDOWMENTS[k].emoji) : ''}${v}`).join(' ')}</span></div>
+        <div class="go-stat-item"><span>禀赋</span><span class="go-stat-val">${Object.entries(state.endowments || {}).map(([k, v]) => `${ENDOWMENTS[k]?.emoji ? ic(ENDOWMENTS[k].emoji) : ''}${v}`).join(' ')}${state.obsessiveTrait ? ` · ${ic(OBSESSIVE_TRAITS[state.obsessiveTrait]?.emoji || 'fire')} ${OBSESSIVE_TRAITS[state.obsessiveTrait]?.name || ''}` : ''}</span></div>
         <div class="go-stat-item"><span>终点</span><span class="go-stat-val">${age}岁 · ${stageText}</span></div>
         <div class="go-stat-item"><span>坚持月数</span><span class="go-stat-val">${survived} 个月</span></div>
         <div class="go-stat-item"><span>最高声誉</span><span class="go-stat-val">${state.maxReputation.toFixed(1)}</span></div>
@@ -1135,6 +1231,7 @@ export function renderGameOver(state, onRestart) {
         <button class="btn btn-secondary btn-block mt-8" id="btn-copy" style="font-size:0.85rem">复制分享文案</button>
       </div>
 
+      ${state.turn >= 6 ? `<button class="btn btn-secondary btn-block" id="btn-leaderboard-submit" style="margin-bottom:10px;font-size:0.85rem">${ic('trophy')} 提交到排行榜</button>` : ''}
       <button class="btn btn-primary" id="btn-restart">再来一局</button>
 
       <p class="tagline mt-16" style="font-size:0.7rem">
@@ -1144,6 +1241,38 @@ export function renderGameOver(state, onRestart) {
   `;
 
   $('#btn-restart').addEventListener('click', onRestart);
+  $('#btn-leaderboard-submit')?.addEventListener('click', () => {
+    const btn = $('#btn-leaderboard-submit');
+    btn.disabled = true;
+    btn.innerHTML = '提交中…';
+    import('../leaderboard.js').then(({ submitToLeaderboard }) => {
+      submitToLeaderboard(state).then(res => {
+        if (res.ok) {
+          btn.style.background = '#E8F8F0';
+          btn.style.color = 'var(--success)';
+          btn.style.border = '1px solid var(--success)';
+          btn.innerHTML = res.rank ? `${ic('trophy')} 已提交！排名 #${res.rank}` : `${ic('trophy')} 已提交！`;
+          // After a brief pause, turn into "view leaderboard" button
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.style.background = '';
+            btn.style.color = '#E67E22';
+            btn.style.border = '1.5px solid #F39C12';
+            btn.innerHTML = `${ic('trophy')} 查看排行榜`;
+            btn.onclick = () => {
+              import('../leaderboard.js').then(({ openLeaderboard }) => {
+                openLeaderboard(state, () => renderGameOver(state, onRestart));
+              });
+            };
+          }, 1500);
+        } else {
+          btn.style.color = 'var(--danger)';
+          btn.innerHTML = res.error || '提交失败';
+          setTimeout(() => { btn.disabled = false; btn.innerHTML = `${ic('trophy')} 重新提交`; btn.style.color = ''; }, 3000);
+        }
+      });
+    });
+  });
   $('#btn-copy').addEventListener('click', () => {
     navigator.clipboard.writeText(shareText).then(() => {
       $('#btn-copy').textContent = '已复制！';

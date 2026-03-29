@@ -13,6 +13,9 @@ export function addMoney(state, amount) {
   else if (amount < 0) state._monthExpense = (state._monthExpense || 0) + Math.abs(amount);
 }
 
+// === Obsessive trait helpers ===
+export function hasObsessive(state, trait) { return state.obsessiveTrait === trait; }
+
 // === Crisis counter: max 2 simultaneous economic crises ===
 export function activeCrisisCount(s) {
   let count = 0;

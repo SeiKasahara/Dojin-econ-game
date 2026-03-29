@@ -609,7 +609,7 @@ export function generateSocialFeed(market, official, playerState) {
   feed.push(...generalChatter());
 
   // Assign authors and metadata
-  const ANON_AUTHORS = ['路人甲', '吃瓜群众', '匿名用户', '时间线观察者', '某围观网友'];
+  const ANON_AUTHORS = ['路人甲', '吃瓜群众', '匿名用户', '时间线观察者', '某围观网友','疑似OpenClaw','不愿透露姓名的粉丝'];
   const authorPool = [...names, ...ANON_AUTHORS];
   const usedAuthors = new Set();
   for (const item of feed) {

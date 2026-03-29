@@ -485,8 +485,8 @@ export function renderReprintSelector(state, onSelect, onCancel) {
     const satCap = Math.max(30, cs * satCoeff);
     const satRatio = effectiveSold / satCap;
     const satLabel = satRatio <= 0.3 ? '<span style="color:var(--success);font-size:0.62rem">市场空间充足</span>'
-      : satRatio <= 0.7 ? '<span style="color:#E67E22;font-size:0.62rem">想买的人不多了</span>'
-      : '<span style="color:var(--danger);font-size:0.62rem">几乎人手一份了</span>';
+      : satRatio <= 0.7 ? '<span style="color:#E67E22;font-size:0.62rem">感觉想买的人不多了</span>'
+      : '<span style="color:var(--danger);font-size:0.62rem">感觉几乎人手一份了？</span>';
     return `<div class="app-action-card reprint-work" data-work-id="${w.id}" data-unit-cost="${unitCost}" data-is-hvp="${isHVP ? 1 : 0}" style="cursor:pointer">
       <div class="app-action-icon" style="color:${isHVP ? 'var(--primary)' : 'var(--secondary)'}">${ic(sub.emoji, '1.1rem')}</div>
       <div class="app-action-body">

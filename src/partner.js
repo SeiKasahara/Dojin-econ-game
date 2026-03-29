@@ -135,7 +135,9 @@ export function getVisibleType(contact) {
 }
 
 export function getMaxContacts(state) {
-  return 8 + (state.endowments?.social || 0) * 2;
+  let max = 8 + (state.endowments?.social || 0) * 2;
+  if (state.obsessiveTrait === 'social') max += 4;
+  return max;
 }
 
 export function addContact(state, { source, affinity = 1.0, forceType = null }) {
@@ -199,8 +201,12 @@ export function generatePartnerCandidates(state) {
   }
 
   // Fallback: random stranger generation
-  const social = state.endowments.social || 0;
+  const rawSocial = state.endowments.social || 0;
+  // Talent-obsessive: social skills gutted — too absorbed in craft to connect
+  const social = state.obsessiveTrait === 'talent' ? 0 : rawSocial;
   let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + social * 0.08);
+  // Talent-obsessive: harder to find partners (reputation helps less)
+  if (state.obsessiveTrait === 'talent') prob *= 0.7;
   if (getLifeStage(state.turn) === 'work') prob *= 0.6;
   const workYears = (state.turn - 50) / 12;
   if (getLifeStage(state.turn) === 'work' && workYears > 3 && (state.turn - state.lastCreativeTurn) <= 6) prob += 0.1;
@@ -210,7 +216,9 @@ export function generatePartnerCandidates(state) {
   const usedNames = new Set();
   const candidates = [];
   for (let i = 0; i < count; i++) {
-    const type = rollPartnerType(social);
+    let type = rollPartnerType(social);
+    // Talent-obsessive: toxic chance doubles (genius is hard to work with)
+    if (state.obsessiveTrait === 'talent' && type !== 'toxic' && Math.random() < 0.15) type = 'toxic';
     let name;
     do { name = PARTNER_NAMES[Math.floor(Math.random() * PARTNER_NAMES.length)]; } while (usedNames.has(name));
     usedNames.add(name);

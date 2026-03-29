@@ -1,4 +1,4 @@
-import { ENDOWMENTS, HVP_SUBTYPES, LVP_SUBTYPES } from '../engine.js';
+import { ENDOWMENTS, OBSESSIVE_TRAITS, HVP_SUBTYPES, LVP_SUBTYPES } from '../engine.js';
 import { ic, escapeHtml } from '../icons.js';
 import { fogConfidence, fogTrend, fogConsumerAlpha, fogSecondHand, fogCreatorRange, fogCreatorCount } from '../market-fog.js';
 import { buildNarrativeSections } from './shared.js';
@@ -115,10 +115,14 @@ export function openMarketApp(state) {
   const invMax = Math.max(1, state.inventory.hvpStock, state.inventory.lvpStock, 50);
   const hvpPct = Math.round(state.inventory.hvpStock / invMax * 100);
   const lvpPct = Math.round(state.inventory.lvpStock / invMax * 100);
+  const obsKey = state.obsessiveTrait;
   const endowHtml = Object.entries(ENDOWMENTS).map(([k, def]) => {
     const v = e[k] || 0;
-    const dots = Array.from({length: 3}, (_, i) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${i < v ? 'var(--primary)' : '#E0E0E0'};margin:0 1px"></span>`).join('');
-    return `<div style="display:flex;align-items:center;gap:6px;font-size:0.75rem"><span>${ic(def.emoji)}</span><span style="width:48px">${def.name}</span>${dots}</div>`;
+    const maxPips = obsKey === k ? 4 : 3;
+    const isObs = obsKey === k;
+    const dots = Array.from({length: maxPips}, (_, i) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${i < v ? (isObs && i === 3 ? 'var(--danger)' : 'var(--primary)') : '#E0E0E0'};margin:0 1px"></span>`).join('');
+    const obsLabel = isObs ? `<span style="font-size:0.58rem;color:var(--danger);margin-left:2px">${OBSESSIVE_TRAITS[k].name}</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:0.75rem"><span>${ic(def.emoji)}</span><span style="width:48px">${def.name}</span>${dots}${obsLabel}</div>`;
   }).join('');
   const recentEvents = el.slice(-5).reverse();
   const eventRows = recentEvents.length > 0

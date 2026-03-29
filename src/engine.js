@@ -9,7 +9,7 @@ export { addMoney, activeCrisisCount, getAge, getLifeStage, getLifeStageLabel, g
 export { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, CHOICE_EFFECTS, getQualityStars, applyCreativeChoice,
          getWorkQualityEffects, getTrendBonus, syncInventoryAggregates,
          PARTNER_TYPES, addContact, generatePartnerCandidates } from './engine/definitions.js';
-export { ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT,
+export { ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, OBSESSIVE_TRAITS,
          BACKGROUNDS, rollBackground, createInitialState } from './engine/state.js';
 export { ACTIONS, getActionDisplay, getFreelanceTimeCost, getTimeCost,
          canPerformAction, needsPricing, rollEventCondition, rollPartnerBusy, getSponsorTiers } from './engine/actions.js';

@@ -38,7 +38,9 @@ export function executeAction(state, actionId) {
     const hourScale = restHours / 5; // 5h = 100% base, 1h = 20%, 10h = 200%
     // Rest effectiveness decays with years in the hobby
     const yearsIn = state.turn / 12;
-    const basRestore = (15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3) * hourScale;
+    let basRestore = (15 + Math.floor(Math.random() * 10) + (state.endowments.stamina || 0) * 3) * hourScale;
+    if (state.obsessiveTrait === 'stamina') basRestore += 5 * hourScale;
+    if (state.obsessiveTrait === 'social') basRestore *= 0.7;
     const fatigueMult = Math.max(0.45, 1 - yearsIn * 0.03);   // Y0=100%, Y3=91%, Y5=85%, Y10=70%, Y20=45%
     const restore = Math.max(2, Math.round(basRestore * fatigueMult));
     state.passion = Math.min(100, state.passion + restore);
@@ -85,7 +87,9 @@ export function executeAction(state, actionId) {
     // Signal inflation (Spence): diminishes gain but never below a floor
     const sigCost = state.advanced ? getSignalCost(state.advanced) : 1.0;
     // Marketing bonus: skip if minigame played (already factored into cooldown reduction)
-    const mktBonus = mgResult ? 1 : (1 + (state.endowments.marketing || 0) * 0.12);
+    let mktBonus = mgResult ? 1 : (1 + (state.endowments.marketing || 0) * 0.12);
+    if (state.obsessiveTrait === 'marketing') mktBonus *= 1.25;
+    if (state.obsessiveTrait === 'resilience') mktBonus *= 0.7;
     const scaledGain = rawGain * mktBonus / sigCost;
     const minGain = intensity === 'heavy' ? 0.12 : 0.05;
     const gain = Math.max(minGain, scaledGain);
@@ -119,7 +123,8 @@ export function executeAction(state, actionId) {
   } else if (action.type === 'social') {
     state.passion -= 3;
     result.deltas.push({ icon: 'heart', label: '精力消耗', value: '-3', positive: false });
-    let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + (state.endowments.social || 0) * 0.08);
+    const socialEff = state.obsessiveTrait === 'talent' ? 0 : (state.endowments.social || 0);
+    let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + socialEff * 0.08);
     // Work stage: smaller social circle → harder to find partners
     if (getLifeStage(state.turn) === 'work') {
       prob *= 0.6;
@@ -244,7 +249,9 @@ export function executeAction(state, actionId) {
     const repGain = ft.repRaw > 0 ? addReputation(state, ft.repRaw) : 0;
     state.timeDebuffs.push({ id: 'tired_freelance', reason: '接稿疲惫', turnsLeft: 1, delta: ft.timeDelta });
     if (ft.skillExp > 0) {
-      const talentMult = 1 + (state.endowments.talent || 0) * 0.35;
+      let talentMult = 1 + (state.endowments.talent || 0) * 0.35;
+      if (state.obsessiveTrait === 'talent') talentMult *= 1.5;
+      if (state.obsessiveTrait === 'stamina') talentMult *= 0.6;
       state.skillExp = (state.skillExp || 0) + Math.round(ft.skillExp * talentMult);
     }
     if (ft.fatigue > 0) state.creativeFatigue = (state.creativeFatigue || 0) + ft.fatigue;
@@ -632,7 +639,8 @@ export function executeAction(state, actionId) {
 
   } else if (action.type === 'hvp') {
     // === MULTI-TURN HVP PROJECT ===
-    const hvpBaseCost = Math.max(8, 15 - (state.endowments.stamina || 0) - state.equipmentLevel);
+    let hvpBaseCost = Math.max(8, 15 - (state.endowments.stamina || 0) - state.equipmentLevel);
+    if (state.obsessiveTrait === 'stamina') hvpBaseCost = Math.max(6, hvpBaseCost - 1);
     const fatigueCost = state.creativeFatigue >= 2 ? (state.creativeFatigue - 1) * 3 : 0;
     state.passion -= hvpBaseCost + fatigueCost;
     result.deltas.push({ icon: 'heart', label: '本月创作消耗', value: `-${hvpBaseCost + fatigueCost}`, positive: false });
@@ -747,12 +755,17 @@ export function executeAction(state, actionId) {
         state.inventory.hvpPrice = hvpPrice;
         // Add to works array
         const subInfo = HVP_SUBTYPES[savedProject.subtype] || HVP_SUBTYPES.manga;
+        // Obsessive quality modifiers
+        let hvpFinalQ = savedProject.workQuality || 1.0;
+        if (state.obsessiveTrait === 'stamina') hvpFinalQ -= 0.15;
+        if (state.obsessiveTrait === 'marketing') hvpFinalQ -= 0.1;
+        hvpFinalQ = Math.max(0.1, hvpFinalQ);
         state.inventory.works.push({
           id: state.inventory.nextWorkId++,
           type: 'hvp', subtype: savedProject.subtype || 'manga',
           name: savedProject.name || null,
           qty: batchQty, price: hvpPrice,
-          workQuality: savedProject.workQuality || 1.0,
+          workQuality: hvpFinalQ,
           styleTag: savedProject.styleTag || null,
           isCultHit: savedProject.isCultHit || false,
           turn: state.turn,
@@ -824,7 +837,10 @@ export function executeAction(state, actionId) {
           pricingRepMod = 0.5; // reduced rep gain
           result.deltas.push({ icon: 'smiley-meh', label: '定价偏高，口碑打了折扣', value: '', positive: false });
         }
-        const repGain = addReputation(state, (0.04 + 0.08 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus * pricingRepMod);
+        let hvpRepMult = (1 + (state.endowments.talent || 0) * 0.10);
+        if (state.obsessiveTrait === 'talent') hvpRepMult *= 1.25;
+        if (state.obsessiveTrait === 'marketing') hvpRepMult *= 0.8;
+        const repGain = addReputation(state, (0.04 + 0.08 * state.infoDisclosure) * hvpRepMult * fx.repBonus * pricingRepMod);
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         result.deltas.push({ icon: 'star', label: '新作声誉', value: `+${repGain.toFixed(2)}`, positive: repGain > 0 });
 
@@ -852,7 +868,9 @@ export function executeAction(state, actionId) {
 
         // Skill experience: quality-weighted, talent-scaled
         const hvpExpBase = 10 * Math.pow(savedProject.workQuality || 1, 1.5);
-        const hvpExpTalent = 1 + (state.endowments.talent || 0) * 0.35;
+        let hvpExpTalent = 1 + (state.endowments.talent || 0) * 0.35;
+        if (state.obsessiveTrait === 'talent') hvpExpTalent *= 1.5;
+        if (state.obsessiveTrait === 'stamina') hvpExpTalent *= 0.6;
         state.skillExp = (state.skillExp || 0) + (hvpExpBase + (wasBreakthrough ? 15 : 0)) * hvpExpTalent;
         if (state.passion < 30) result.tip = TIPS.burnout;
       } else {
@@ -904,12 +922,17 @@ export function executeAction(state, actionId) {
     // Add to works array
     const lvpWorkName = state._lvpWorkName || null;
     state._lvpWorkName = null;
+    // Obsessive quality modifiers
+    let lvpFinalQ = lvpQuality;
+    if (state.obsessiveTrait === 'stamina') lvpFinalQ -= 0.15;
+    if (state.obsessiveTrait === 'marketing') lvpFinalQ -= 0.1;
+    lvpFinalQ = Math.max(0.1, lvpFinalQ);
     state.inventory.works.push({
       id: state.inventory.nextWorkId++,
       type: 'lvp', subtype: subtypeId,
       name: lvpWorkName,
       qty: batchQty, price: lvpPrice,
-      workQuality: lvpQuality,
+      workQuality: lvpFinalQ,
       styleTag: null, isCultHit: false,
       turn: state.turn,
       totalSold: 0,
@@ -935,7 +958,10 @@ export function executeAction(state, actionId) {
       lvpPricingMod = 0.5;
       result.deltas.push({ icon: 'smiley-meh', label: '定价偏高，口碑打了折扣', value: '', positive: false });
     }
-    const repGain = addReputation(state, (0.01 + 0.02 * state.infoDisclosure) * (1 + (state.endowments.talent || 0) * 0.10) * fx.repBonus * lvpPricingMod);
+    let lvpRepMult = (1 + (state.endowments.talent || 0) * 0.10);
+    if (state.obsessiveTrait === 'talent') lvpRepMult *= 1.25;
+    if (state.obsessiveTrait === 'marketing') lvpRepMult *= 0.8;
+    const repGain = addReputation(state, (0.01 + 0.02 * state.infoDisclosure) * lvpRepMult * fx.repBonus * lvpPricingMod);
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
     result.deltas.push({ icon: 'star', label: '新品声誉', value: `+${repGain.toFixed(2)}`, positive: repGain > 0 });
 
@@ -957,7 +983,9 @@ export function executeAction(state, actionId) {
 
     // Skill experience: quality-weighted, talent-scaled
     const lvpExpBase = 3 * Math.pow(lvpQuality || 1, 1.5);
-    const lvpExpTalent = 1 + (state.endowments.talent || 0) * 0.35;
+    let lvpExpTalent = 1 + (state.endowments.talent || 0) * 0.35;
+    if (state.obsessiveTrait === 'talent') lvpExpTalent *= 1.5;
+    if (state.obsessiveTrait === 'stamina') lvpExpTalent *= 0.6;
     state.skillExp = (state.skillExp || 0) + (lvpExpBase + (lvpBreakthrough ? 5 : 0)) * lvpExpTalent;
 
     result.tip = TIPS.lvp;

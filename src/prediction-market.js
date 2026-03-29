@@ -185,7 +185,7 @@ export function openPredictionMarket(state) {
       ${ic(r.won ? 'check-circle' : 'x-circle', '0.8rem')}
       ${(r.question || '').substring(0, 25)}… [${(r.side || '?').toUpperCase()}]
       <span style="font-weight:700;color:${r.won ? 'var(--success)' : 'var(--danger)'}">
-        ${r.won ? `+¥${r.payout}` : `-¥${Math.abs(r.profit)}`}
+        ${r.won ? `+¥${r.payout}` : `归零 (投入¥${r.cost})`}
       </span>
     </div>`).join('') : '';
 
@@ -248,7 +248,7 @@ export function openPredictionMarket(state) {
       <div class="market-header"><span>${ic('clock')} 历史记录 (${pm.resolved.length})</span><span class="market-arrow">▼</span></div>
       <div class="market-body" style="max-height:120px;overflow-y:auto;font-size:0.65rem">
         ${pm.resolved.slice().reverse().map(r => `
-          <div style="padding:2px 0;color:${r.won ? 'var(--success)' : 'var(--danger)'}">${r.won ? '✓' : '✗'} ${r.question?.substring(0, 22) || '?'}… [${r.side?.toUpperCase() || '?'}] ${r.won ? `+¥${r.payout}` : `-¥${Math.abs(r.profit)}`}</div>
+          <div style="padding:2px 0;color:${r.won ? 'var(--success)' : 'var(--danger)'}">${r.won ? '✓' : '✗'} ${r.question?.substring(0, 22) || '?'}… [${r.side?.toUpperCase() || '?'}] ${r.won ? `+¥${r.payout}` : `归零`}</div>
         `).join('')}
       </div>
     </div>` : '';

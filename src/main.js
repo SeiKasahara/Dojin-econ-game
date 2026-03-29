@@ -41,8 +41,9 @@ function startGame(communityPreset, ipType) {
   selectedIpType = ipType || 'normal';
   // Show endowment allocation screen before game starts
   syncBGM('endowment');
-  renderEndowments((endowments, backgroundId) => {
+  renderEndowments((endowments, backgroundId, obsessiveTrait) => {
     state = createInitialState(selectedPreset, endowments, backgroundId, selectedIpType);
+    state.obsessiveTrait = obsessiveTrait || null;
     state._prevAchievementCount = 0;
 
     // Ask player to name their doujin circle
@@ -52,7 +53,7 @@ function startGame(communityPreset, ipType) {
       <div class="event-card" style="max-width:340px;text-align:center">
         <div style="font-size:1.3rem;margin-bottom:4px">${ic('flag-banner', '1.3rem')}</div>
         <div style="font-weight:700;font-size:1rem;margin-bottom:4px">为你的同人社团起个名字</div>
-        <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">这个名字会出现在市场和社交动态中</div>
+        <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">这个名字会出现在市场和社交动态以及排行榜中</div>
         <input type="text" id="club-name-input" maxlength="15" placeholder="例：星屑工房、月光社…"
           style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:0.9rem;text-align:center;outline:none;margin-bottom:12px">
         <button class="btn btn-primary btn-block" id="btn-club-confirm" style="margin-bottom:6px">确认</button>
@@ -851,6 +852,7 @@ function afterMonthTransition(monthResult) {
     const event = rollEvent(state);
     if (event) {
       let displayEvent = typeof event.effect === 'function' ? { ...event, effect: event.effect(state) } : event;
+      if (typeof displayEvent.title === 'function') displayEvent = { ...displayEvent, title: displayEvent.title(state) };
       if (typeof displayEvent.desc === 'function') displayEvent = { ...displayEvent, desc: displayEvent.desc(state) };
       if (typeof displayEvent.tip === 'function') displayEvent = { ...displayEvent, tip: displayEvent.tip(state) };
       if (typeof displayEvent.effectClass === 'function') displayEvent = { ...displayEvent, effectClass: displayEvent.effectClass(state) };
