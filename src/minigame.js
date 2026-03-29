@@ -13,6 +13,11 @@ const SPRITE_COUNT = 12;
 const DIALOG_CHANCE = 0.3; // 30% chance per action
 const MAX_DIALOGS_PER_GAME = 4; // cap to keep game flowing
 const PREF_MAP = { hvp: '📖', lvp: '🔑', any: '❓' };
+const SOLDOUT_REACTIONS = [
+  '啊，卖完了？', '这个没有了吗…', '来晚了…售罄了',
+  '想买的已经没了', '呜呜下次请多带点', '居然卖完了！',
+  '太抢手了吧…', '早知道早点来了', '完售了啊……好可惜',
+];
 
 // === Actions ===
 const ACTIONS = {
@@ -86,6 +91,8 @@ function createState(mainState, event) {
     }),
     hasHVP: mainState.inventory?.hvpStock > 0,
     hasLVP: mainState.inventory?.lvpStock > 0,
+    // Actual stock remaining (decremented on each sale to cap minigame sales to real inventory)
+    stockRemaining: (mainState.inventory?.hvpStock || 0) + (mainState.inventory?.lvpStock || 0),
     // Per-work price ratios for customer reactions
     workPriceRatios: (() => {
       const mkt = mainState.market;
@@ -484,7 +491,14 @@ function updateCustomers(mg, dt) {
       }
 
       if (c.satisfaction >= 60) {
-        c.state = 'buying'; c.stateTimer = 800;
+        if (mg.stockRemaining <= 0) {
+          // Sold out — customer reacts and leaves
+          const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
+          mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1800, vy: -0.04 });
+          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😢';
+        } else {
+          c.state = 'buying'; c.stateTimer = 800;
+        }
       } else if (c.patience <= 0) {
         c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = null;
       }
@@ -493,7 +507,13 @@ function updateCustomers(mg, dt) {
       c.patience -= dt * 0.7; // interested are more patient, but still leave eventually
       c.x += (boothCX - c.x) * 0.01;
       if (c.satisfaction >= 60) {
-        c.state = 'buying'; c.stateTimer = 800;
+        if (mg.stockRemaining <= 0) {
+          const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
+          mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1800, vy: -0.04 });
+          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😢';
+        } else {
+          c.state = 'buying'; c.stateTimer = 800;
+        }
       } else if (c.patience <= 0) {
         c.state = 'leaving'; c.targetY = 340;
       }
@@ -501,28 +521,37 @@ function updateCustomers(mg, dt) {
     } else if (c.state === 'buying') {
       c.stateTimer -= dt;
       if (c.stateTimer <= 0) {
-        // Base purchase: CES-backed minimum per customer (late game scaling)
-        const baseBuy = 1 + (mg.baseBuyQty || 0);
-        // Diversity bonus: fans/any-preference customers with diverse inventory buy multiple
-        const diversityExtra = (c.preference === 'any' && mg.hasHVP && mg.hasLVP) ? 1 : 0;
-        // Late-game bulk buy: high reputation + info disclosure → customers buy extras (帮朋友带、多买收藏)
-        let bulkExtra = 0;
-        if (mg.playerReputation >= 3 && mg.playerInfoDisclosure >= 0.5) {
-          const isFan = c.target === 'player_fan';
-          const bulkChance = Math.min(0.55,
-            (mg.playerReputation - 2) * 0.04 +
-            (mg.playerInfoDisclosure - 0.4) * 0.25 +
-            (isFan ? 0.15 : 0)
-          );
-          if (Math.random() < bulkChance) {
-            bulkExtra = Math.random() < 0.3 ? 2 : 1;
+        // Double-check stock (may have sold out while this customer was in buying animation)
+        if (mg.stockRemaining <= 0) {
+          const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
+          mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1800, vy: -0.04 });
+          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😢';
+        } else {
+          // Base purchase: CES-backed minimum per customer (late game scaling)
+          const baseBuy = 1 + (mg.baseBuyQty || 0);
+          // Diversity bonus: fans/any-preference customers with diverse inventory buy multiple
+          const diversityExtra = (c.preference === 'any' && mg.hasHVP && mg.hasLVP) ? 1 : 0;
+          // Late-game bulk buy: high reputation + info disclosure → customers buy extras (帮朋友带、多买收藏)
+          let bulkExtra = 0;
+          if (mg.playerReputation >= 3 && mg.playerInfoDisclosure >= 0.5) {
+            const isFan = c.target === 'player_fan';
+            const bulkChance = Math.min(0.55,
+              (mg.playerReputation - 2) * 0.04 +
+              (mg.playerInfoDisclosure - 0.4) * 0.25 +
+              (isFan ? 0.15 : 0)
+            );
+            if (Math.random() < bulkChance) {
+              bulkExtra = Math.random() < 0.3 ? 2 : 1;
+            }
           }
+          // Cap at remaining stock
+          const totalBuy = Math.min(baseBuy + diversityExtra + bulkExtra, mg.stockRemaining);
+          mg.stockRemaining -= totalBuy;
+          mg.score.sold += totalBuy;
+          const coinText = totalBuy >= 3 ? '💰💰💰' : totalBuy >= 2 ? '💰💰' : '💰';
+          mg.particles.push({ x: c.x, y: c.y, text: coinText, life: 1000, vy: -0.08 });
+          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = totalBuy >= 2 ? '🤩' : '😊';
         }
-        const totalBuy = baseBuy + diversityExtra + bulkExtra;
-        mg.score.sold += totalBuy;
-        const coinText = totalBuy >= 3 ? '💰💰💰' : totalBuy >= 2 ? '💰💰' : '💰';
-        mg.particles.push({ x: c.x, y: c.y, text: coinText, life: 1000, vy: -0.08 });
-        c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = totalBuy >= 2 ? '🤩' : '😊';
       }
 
     } else if (c.state === 'leaving') {
@@ -772,8 +801,15 @@ export function resolveDialog(mg, choiceIdx) {
     // Fan: always positive, extra bonus + instant buy
     // If player has diverse inventory, fan buys both types
     if (target) {
-      if (mg.hasHVP && mg.hasLVP) target.preference = 'any';
-      target.satisfaction = 100; target.state = 'buying'; target.stateTimer = 800;
+      if (mg.stockRemaining <= 0) {
+        // Fan arrived but stock is sold out
+        const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
+        mg.particles.push({ x: target.x, y: target.y - 10, text: txt, life: 1800, vy: -0.04 });
+        target.state = 'leaving'; target.targetY = 340; target.thoughtBubble = '😢';
+      } else {
+        if (mg.hasHVP && mg.hasLVP) target.preference = 'any';
+        target.satisfaction = 100; target.state = 'buying'; target.stateTimer = 800;
+      }
     }
     mg.energy = Math.min(100, mg.energy + 8);
     mg.passionBonus += 3;

@@ -1359,7 +1359,7 @@ function renderAppDesktop(state) {
 
     // Badge logic
     let badge = '';
-    if (app.id === 'enzao' && state.hvpProject) badge = `<span class="app-badge">${state.hvpProject.progress}/${state.hvpProject.needed}</span>`;
+    if (app.id === 'enzao' && state.hvpProject) badge = `<span class="app-badge">${Math.round(state.hvpProject.progress * 100) / 100}/${state.hvpProject.needed}</span>`;
     if (app.id === 'manzhan' && state.availableEvents?.length) badge = `<span class="app-badge">${state.availableEvents.length}</span>`;
     if (app.id === 'ciyuanbi' && state.hasPartner) badge = `<span class="app-badge">${ic('check', '0.6rem')}</span>`;
     if (app.id === 'nyaner' && feedCount > 0) badge = `<span class="app-badge">${feedCount}</span>`;

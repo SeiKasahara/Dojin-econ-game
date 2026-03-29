@@ -1904,7 +1904,7 @@ export function executeAction(state, actionId) {
         progressEff *= 0.85;
         result.deltas.push({ icon: 'battery-medium', label: '创作疲劳拖慢进度', value: `效率×0.85`, positive: false });
       }
-      state.hvpProject.progress += progressEff;
+      state.hvpProject.progress = Math.round((state.hvpProject.progress + progressEff) * 100) / 100;
       if (getLifeStage(state.turn) === 'work' && !state.unemployed && !state.fullTimeDoujin) {
         result.deltas.push({ icon: 'smiley-sad', label: '下班后创作效率降低', value: '进度×0.7', positive: false });
       }
@@ -2269,7 +2269,7 @@ export function executeAction(state, actionId) {
   if (action.type === 'hireAssistant' && state.hvpProject) {
     const assistCost = 800 + Math.floor(Math.random() * 700);
     addMoney(state, -assistCost);
-    state.hvpProject.progress += 0.5;
+    state.hvpProject.progress = Math.round((state.hvpProject.progress + 0.5) * 100) / 100;
     state.hvpProject._assistantCount = (state.hvpProject._assistantCount || 0) + 1;
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 1);
     result.deltas.push({ icon: 'user', label: '外包助手加速创作', value: `-¥${assistCost}`, positive: false });
