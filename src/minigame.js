@@ -91,7 +91,11 @@ function createState(mainState, event) {
     }),
     hasHVP: mainState.inventory?.hvpStock > 0,
     hasLVP: mainState.inventory?.lvpStock > 0,
-    // Actual stock remaining (decremented on each sale to cap minigame sales to real inventory)
+    // Per-work stock tracking (decremented on each sale to cap minigame sales to real inventory)
+    worksStock: (mainState.inventory?.works || []).filter(w => w.qty > 0).map(w => {
+      const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
+      return { id: w.id, type: w.type, displayName: sub.name + (w.name ? '·' + w.name : ''), qty: w.qty, initialQty: w.qty, icon: sub.emoji || (w.type === 'hvp' ? 'book-open-text' : 'key') };
+    }),
     stockRemaining: (mainState.inventory?.hvpStock || 0) + (mainState.inventory?.lvpStock || 0),
     // Per-work price ratios for customer reactions
     workPriceRatios: (() => {
@@ -232,6 +236,23 @@ function rollRandomEvent(mg) {
     if (r <= 0) return evt;
   }
   return MINIGAME_EVENTS[0];
+}
+
+// === Deduct Per-Work Stock ===
+// Distributes sold units across worksStock, preferring the customer's type preference
+function deductWorksStock(mg, qty, preference) {
+  let remaining = qty;
+  // Preferred type first, then other type
+  const preferredType = preference === 'hvp' ? 'hvp' : preference === 'lvp' ? 'lvp' : null;
+  const order = preferredType
+    ? [...mg.worksStock.filter(w => w.type === preferredType), ...mg.worksStock.filter(w => w.type !== preferredType)]
+    : mg.worksStock;
+  for (const w of order) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, w.qty);
+    w.qty -= take;
+    remaining -= take;
+  }
 }
 
 // === Spawn Customer ===
@@ -548,6 +569,7 @@ function updateCustomers(mg, dt) {
           const totalBuy = Math.min(baseBuy + diversityExtra + bulkExtra, mg.stockRemaining);
           mg.stockRemaining -= totalBuy;
           mg.score.sold += totalBuy;
+          deductWorksStock(mg, totalBuy, c.preference);
           const coinText = totalBuy >= 3 ? '💰💰💰' : totalBuy >= 2 ? '💰💰' : '💰';
           mg.particles.push({ x: c.x, y: c.y, text: coinText, life: 1000, vy: -0.08 });
           c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = totalBuy >= 2 ? '🤩' : '😊';

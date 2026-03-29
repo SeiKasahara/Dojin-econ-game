@@ -107,6 +107,9 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
       <span id="mg-sold">${ic('coins')} 售出 0</span>
       <span id="mg-time">${ic('timer')} 60s</span>
     </div>
+    <div id="mg-stock" style="padding:2px 16px;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:0.68rem;color:var(--text-light)">
+      ${mg.worksStock.map((w, i) => `<span id="mg-stock-${i}" style="white-space:nowrap">${ic(w.icon, '0.7rem')} ${w.displayName} ×<b>${w.qty}</b></span>`).join('')}
+    </div>
     <div class="mg-actions" id="mg-actions">
       ${Object.values(actions).map(a => `
         <button class="mg-action-btn" data-action="${a.id}">
@@ -211,6 +214,18 @@ export function renderMinigame(mg, actions, onAction, onSkip, onNeighborChat) {
     if (e) e.innerHTML = `${ic('lightning')} 精力 ${Math.floor(mg.energy)}`;
     if (s) s.innerHTML = `${ic('coins')} 售出 ${mg.score.sold}`;
     if (t) t.innerHTML = `${ic('timer')} ${Math.ceil(mg.timeRemaining / 1000)}s`;
+
+    // Update per-work stock display
+    for (let i = 0; i < mg.worksStock.length; i++) {
+      const el = container.querySelector(`#mg-stock-${i}`);
+      if (el) {
+        const w = mg.worksStock[i];
+        const soldOut = w.qty <= 0;
+        el.innerHTML = `${ic(w.icon, '0.7rem')} ${w.displayName} ×<b>${w.qty}</b>`;
+        el.style.color = soldOut ? 'var(--danger)' : 'var(--text-light)';
+        el.style.opacity = soldOut ? '0.7' : '1';
+      }
+    }
 
     // Update cooldown bars
     for (const [id, cd] of Object.entries(mg.cooldowns)) {

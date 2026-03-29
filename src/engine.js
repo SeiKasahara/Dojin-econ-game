@@ -2914,7 +2914,6 @@ export function endMonth(state) {
           const profit = payout - h.cost;
           pm.totalProfit = (pm.totalProfit || 0) + profit;
           if (payout > 0) addMoney(state, payout);
-          if (!won) state._monthExpense = (state._monthExpense || 0) + h.cost;
           // Detect market manipulation: player won a club contract they could influence
           if (won && c._isClubContract) state._marketManipulated = true;
           pm.resolved.push({ question: c.question, side: h.side, won, payout, profit, resolvedAt: state.turn });
