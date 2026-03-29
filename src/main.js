@@ -36,10 +36,38 @@ function syncBGM(screen) {
   updateBGM(screen, state);
 }
 
+function showPrologue(onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.style.cssText = 'z-index:200;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:380px;text-align:left;line-height:1.8">
+      <div style="text-align:center;margin-bottom:12px">
+        <img src="prop-npc/player.webp" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--primary)">
+        <div style="font-weight:700;font-size:1.05rem;margin-top:6px">沈星然（头像并非本人）</div>
+        <div style="font-size:0.7rem;color:var(--text-muted)">18岁 · 高考刚结束</div>
+      </div>
+      <div style="font-size:0.82rem;color:var(--text);padding:0 4px">
+        <p style="margin:0 0 10px">我叫沈星然，刚参加完高考。</p>
+        <p style="margin:0 0 10px">从初中开始就一直在画画，课本的空白处、草稿纸的背面，到处都是涂鸦。高二那年在漫展上买到了一本让我震撼的同人志——原来普通人也可以把自己喜欢的东西做成这么精美的作品。</p>
+        <p style="margin:0 0 10px">从那天起我就下定决心：我也要做自己的同人志。</p>
+        <p style="margin:0 0 14px">现在高考结束了，漫长的暑假刚刚开始。是时候把这个梦想变成现实了。</p>
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-prologue-next" style="font-size:0.9rem">${ic('arrow-right')} 开始我的创作之路</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-prologue-next').addEventListener('click', () => {
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s ease';
+    setTimeout(() => { overlay.remove(); onDone(); }, 300);
+  });
+}
+
 function startGame(communityPreset, ipType) {
   selectedPreset = communityPreset || 'mid';
   selectedIpType = ipType || 'normal';
-  // Show endowment allocation screen before game starts
+  // Show prologue → endowment allocation screen
+  showPrologue(() => {
   syncBGM('endowment');
   renderEndowments((endowments, backgroundId, obsessiveTrait) => {
     state = createInitialState(selectedPreset, endowments, backgroundId, selectedIpType);
@@ -53,7 +81,7 @@ function startGame(communityPreset, ipType) {
       <div class="event-card" style="max-width:340px;text-align:center">
         <div style="font-size:1.3rem;margin-bottom:4px">${ic('flag-banner', '1.3rem')}</div>
         <div style="font-weight:700;font-size:1rem;margin-bottom:4px">为你的同人社团起个名字</div>
-        <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">这个名字会出现在市场和社交动态以及排行榜中</div>
+        <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">这个名字会出现在市场和社交动态中。<br>如果提交排行榜，请谨慎取名。</br></div>
         <input type="text" id="club-name-input" maxlength="15" placeholder="例：星屑工房、月光社…"
           style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid var(--border);border-radius:8px;font-size:0.9rem;text-align:center;outline:none;margin-bottom:12px">
         <button class="btn btn-primary btn-block" id="btn-club-confirm" style="margin-bottom:6px">确认</button>
@@ -79,6 +107,7 @@ function startGame(communityPreset, ipType) {
     nameOverlay.querySelector('#btn-club-confirm').addEventListener('click', () => finishNaming(clubInput.value.trim() || null));
     nameOverlay.querySelector('#btn-club-skip').addEventListener('click', () => finishNaming(null));
   });
+  }); // showPrologue
 }
 
 function continueGame() {

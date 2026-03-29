@@ -60,10 +60,11 @@ export function getActionDisplay(actionId, state) {
   }
   if (actionId === 'jobSearch') {
     const switchMalus = Math.min(30, ((state.doujinQuitCount || 0) - 1) * 10);
-    const base30 = Math.max(5, 30 - switchMalus);
-    const prob = Math.round(Math.min(85, (base30 + state.jobSearchTurns * 10) * (state.recessionTurnsLeft > 0 ? 0.5 : 1)));
-    const tag = switchMalus > 0 ? ` 跳槽记录-${switchMalus}%` : '';
-    return { ...base, costLabel: `已找${state.jobSearchTurns}月 成功率${prob}%${tag}` };
+    const recMod = state.recessionTurnsLeft > 0 ? 0.5 : 1;
+    const normalProb = Math.round(Math.min(85, (Math.max(5, 30 - switchMalus) + state.jobSearchTurns * 10) * recMod));
+    const eliteProb = Math.round(Math.min(12, (Math.max(1, 3 + (state.reputation >= 5 ? 2 : 0) + (state.reputation >= 8 ? 3 : 0))) * recMod * (1 - switchMalus / 100)));
+    const tag = switchMalus > 0 ? ` 跳槽-${switchMalus}%` : '';
+    return { ...base, costLabel: `已找${state.jobSearchTurns}月 普通${normalProb}% 大厂${eliteProb}%${tag}` };
   }
   if (actionId === 'freelance') {
     const tc = getFreelanceTimeCost(state);

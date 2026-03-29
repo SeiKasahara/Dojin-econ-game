@@ -22,6 +22,36 @@ export function renderPhoneNarrative(state, partnerInfo, debuffInfo, recessionIn
   const skillLine = sk !== null ? `${ic('target')} Lv${sk.toFixed(1)} ${getSkillLabel(sk)}` : '';
   const narrative = (() => { const s = buildNarrativeSections(state); return renderAlertBanner(s.alerts) + renderSpotlightCard(s.spotlight) + renderPersonalNarrative(getNarrativeTitle(state), s.personal); })();
 
+  // Circle member card
+  const memberCard = (() => {
+    const members = [];
+    // Player is always the first member
+    members.push(`<div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+      <img src="prop-npc/player.webp" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:2px solid var(--primary)">
+      <span style="font-size:0.75rem;font-weight:600">沈星然</span>
+      <span style="font-size:0.6rem;padding:1px 5px;border-radius:6px;background:var(--primary);color:#fff">社长</span>
+    </div>`);
+    // Current partner
+    if (state.hasPartner && state.partnerType) {
+      const pt = PARTNER_TYPES[state.partnerType];
+      const contact = state.activeContactId ? (state.contacts || []).find(c => c.id === state.activeContactId) : null;
+      const pName = contact ? contact.name : pt.name;
+      const avatarSrc = contact ? `partner/${contact.avatarIdx}.webp` : 'prop-npc/player.webp';
+      const typeColor = state.partnerType === 'toxic' ? 'var(--danger)' : state.partnerType === 'supportive' ? 'var(--success)' : 'var(--warning)';
+      members.push(`<div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+        <img src="${avatarSrc}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:2px solid ${typeColor}">
+        <span style="font-size:0.75rem;font-weight:600">${pName}</span>
+        <span style="font-size:0.6rem;padding:1px 5px;border-radius:6px;background:${typeColor}18;color:${typeColor}">${pt.name}</span>
+        <span style="font-size:0.6rem;color:var(--text-muted);margin-left:auto">剩${state.partnerTurns}月</span>
+      </div>`);
+    }
+    return `<div style="padding:4px 12px 2px">
+      <div style="font-size:0.68rem;color:var(--text);margin-bottom:2px">${ic('users')} 社团成员 (${members.length})</div>
+      ${members.join('')}
+      ${!state.hasPartner ? `<div style="font-size:0.68rem;color:var(--text);padding:4px 0;font-style:italic">暂无搭档 — 去「打破次元壁」寻找合作伙伴</div>` : ''}
+    </div>`;
+  })();
+
   return `
     <div class="phone-clock">
       <div class="phone-clock-time">${age}<span class="phone-clock-unit">岁</span></div>
@@ -29,9 +59,12 @@ export function renderPhoneNarrative(state, partnerInfo, debuffInfo, recessionIn
     </div>
     <div class="phone-stats-panel collapsed" id="phone-stats-panel">
       <div class="phone-stats-handle" id="phone-stats-toggle"><div class="phone-stats-bar"></div></div>
-      ${badges ? `<div class="phone-badges">${badges}</div>` : ''}
-      ${invLine || skillLine ? `<div class="phone-inv">${invLine}${invLine && skillLine ? ' · ' : ''}${skillLine}</div>` : ''}
-      <div style="padding:0 12px 8px">${narrative}</div>
+      <div style="max-height:70vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:40vh">
+        ${badges ? `<div class="phone-badges">${badges}</div>` : ''}
+        ${invLine || skillLine ? `<div class="phone-inv">${invLine}${invLine && skillLine ? ' · ' : ''}${skillLine}</div>` : ''}
+        ${memberCard}
+        <div style="padding:0 12px 8px">${narrative}</div>
+      </div>
     </div>`;
 }
 

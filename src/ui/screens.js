@@ -1028,7 +1028,8 @@ function openSettings(state, onClose) {
             <img id="settings-avatar-preview" src="${escapeHtml(currentAvatar)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary)">
             <div id="settings-avatar-edit" style="position:absolute;bottom:0;right:0;width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.7rem">${ic('pencil-simple', '0.7rem')}</div>
           </div>
-          <div style="margin-top:4px;font-size:0.65rem;color:var(--text-muted)">点击头像更换</div>
+          <div style="margin-top:6px;font-size:0.9rem;font-weight:700">沈星然</div>
+          <div style="font-size:0.65rem;color:var(--text-muted)">点击头像更换</div>
           ${loadAvatar() ? `<button id="settings-avatar-reset" style="margin-top:4px;background:none;border:none;color:var(--danger);font-size:0.65rem;cursor:pointer;text-decoration:underline">恢复默认头像</button>` : ''}
         </div>
 

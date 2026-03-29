@@ -601,37 +601,106 @@ export function executeAction(state, actionId) {
     }
 
   } else if (action.type === 'jobSearch') {
+    // Helper: clear all job-tier related state and debuffs
+    const clearJobTierState = () => {
+      state.jobTier = null;
+      state.timeDebuffs = state.timeDebuffs.filter(d =>
+        !['promotion', '996', 'elite_job', 'labor_drain'].includes(d.id) &&
+        !d.id.startsWith('commute_') && !d.id.startsWith('social_') && !d.id.startsWith('burnout_')
+      );
+    };
+
     // If full-time doujin, first transition to job-seeking
     if (state.fullTimeDoujin && !state.unemployed) {
       state.fullTimeDoujin = false;
       state.unemployed = true;
       state.jobSearchTurns = 0;
+      clearJobTierState();
       state.doujinWorkYearReset = state.turn; // remember for salary reset
       result.deltas.push({ icon: 'briefcase', label: '决定回去找工作', value: '全职同人→求职中', positive: false });
       result.deltas.push({ icon: 'warning', label: '重返职场后薪资从头开始', value: '基础¥800/月', positive: false });
       result.tip = { label: '回归职场', text: '放弃全职同人回去上班——这不是失败，是务实的选择。但离开职场这段时间不计入工龄，薪资要从基础水平重新开始。' };
     } else {
-    // === UNEMPLOYMENT: looking for work ===
+    // === UNEMPLOYMENT: looking for work (three-tier job system) ===
     state.passion -= 10;
     state.jobSearchTurns++;
     result.deltas.push({ icon: 'heart', label: '面试奔波消耗', value: '-10', positive: false });
-    // Base find probability: 30%, +10% per month searching, recession halves it
-    // Frequent doujin switchers have harder time finding jobs (HR dislikes job-hopping)
-    const switchMalus = Math.min(0.3, ((state.doujinQuitCount || 0) - 1) * 0.1); // 0, 0.1, 0.2, 0.3
-    const baseProb = Math.max(0.05, 0.3 - switchMalus) + state.jobSearchTurns * 0.1;
-    const findProb = Math.min(0.85, state.recessionTurnsLeft > 0 ? baseProb * 0.5 : baseProb);
-    if (Math.random() < findProb) {
+
+    // Frequent doujin switchers have harder time (HR dislikes job-hopping)
+    const switchMalus = Math.min(0.3, ((state.doujinQuitCount || 0) - 1) * 0.1);
+    const recessionMod = state.recessionTurnsLeft > 0 ? 0.5 : 1;
+
+    // --- Three tiers of jobs ---
+    // Tier 1: 大厂设计师 (elite) — very rare, requires high reputation
+    const eliteBase = Math.max(0.01, 0.03 + (state.reputation >= 5 ? 0.02 : 0) + (state.reputation >= 8 ? 0.03 : 0));
+    const eliteProb = Math.min(0.12, eliteBase * recessionMod * (1 - switchMalus));
+
+    // Tier 2: 普通职员 (normal) — current system baseline
+    const normalBase = Math.max(0.05, 0.3 - switchMalus) + state.jobSearchTurns * 0.1;
+    const normalProb = Math.min(0.85, normalBase * recessionMod);
+
+    // Tier 3: 基层工作 (labor) — easy but not free, hop penalty delays guarantee
+    const laborBase = 0.6 + state.jobSearchTurns * 0.15 - switchMalus * 0.5;
+    const laborGuaranteeMonth = 3 + Math.floor(switchMalus * 10); // 3, 4, 5, 6 months
+    const laborProb = state.jobSearchTurns >= laborGuaranteeMonth ? 1.0 : Math.max(0.3, laborBase * recessionMod);
+
+    const roll = Math.random();
+    let hired = false;
+    let jobTier = null; // 'elite', 'normal', 'labor'
+
+    if (roll < eliteProb) {
+      jobTier = 'elite';
+      hired = true;
+    } else if (roll < eliteProb + normalProb) {
+      jobTier = 'normal';
+      hired = true;
+    } else if (roll < eliteProb + normalProb + Math.max(0, laborProb - eliteProb - normalProb)) {
+      jobTier = 'labor';
+      hired = true;
+    }
+
+    if (hired) {
+      clearJobTierState(); // clear previous tier debuffs before applying new ones
       state.unemployed = false;
       state.jobSearchTurns = 0;
-      state.lastReturnToWorkTurn = state.turn; // record for cooldown gate
-      // Salary reset if returning from full-time doujin
-      if (state.doujinWorkYearReset > 0) state.doujinWorkYearReset = state.turn; // reset work year reference
-      result.deltas.push({ icon: 'confetti', label: '找到工作了！', value: '恢复正常生活', positive: true });
-      result.tip = TIPS.jobFound;
+      state.lastReturnToWorkTurn = state.turn;
+      if (state.doujinWorkYearReset > 0) state.doujinWorkYearReset = state.turn;
+
+      // Job-hopping debuff: applies to all tiers, scales with quit count
+      const quitCount = state.doujinQuitCount || 0;
+      if (quitCount >= 2) {
+        const hopPenalty = Math.min(3, quitCount - 1); // 1, 2, 3
+        state.timeDebuffs.push({ id: 'job_hop_penalty', delta: -hopPenalty, turnsLeft: 6, reason: `频繁跳槽观察期 闲暇-${hopPenalty}天` });
+        result.deltas.push({ icon: 'warning', label: '频繁跳槽，新公司观察期', value: `闲暇-${hopPenalty}天/月（6个月）`, positive: false });
+      }
+
+      if (jobTier === 'elite') {
+        // 大厂设计师：高薪 + 声誉加成，但闲暇减少
+        state.jobTier = 'elite';
+        addReputation(state, 0.5);
+        result.deltas.push({ icon: 'star-four', label: '拿到大厂设计师offer！', value: '薪资×1.8 声誉+0.5', positive: true });
+        result.deltas.push({ icon: 'timer', label: '大厂节奏快，闲暇会减少', value: '闲暇-2天/月', positive: false });
+        state.timeDebuffs.push({ id: 'elite_job', delta: -2, turnsLeft: 9999, reason: '大厂高强度' });
+        result.tip = { label: '设计师之路', text: '大厂设计师——用同人创作磨练出的美术功底在职场上也是硬通货。薪资丰厚、声誉加成，但高强度工作意味着留给同人创作的时间更少了。这不是商业出道，你依然是一个有本职工作的同人创作者。' };
+      } else if (jobTier === 'labor') {
+        // 基层工作：100%能找到，薪资低，热情衰减加剧
+        state.jobTier = 'labor';
+        const laborJobs = ['食品厂流水线', '快递分拣员', '仓库理货员', '超市收银员', '外卖骑手'];
+        const laborJob = laborJobs[Math.floor(Math.random() * laborJobs.length)];
+        result.deltas.push({ icon: 'package', label: `找到了一份工作：${laborJob}`, value: '薪资×0.6', positive: false });
+        result.deltas.push({ icon: 'smiley-sad', label: '基层工作消磨创作热情', value: '每月额外热情-3', positive: false });
+        state.timeDebuffs.push({ id: 'labor_drain', delta: 0, turnsLeft: 9999, reason: `${laborJob}（热情衰减）` });
+        result.tip = { label: '先活下去', text: `${laborJob}——不是你梦想中的工作，但至少能付房租。重复性的体力劳动会持续消磨创作热情，但好消息是你随时可以继续找更好的工作。先活下去，再谈梦想。` };
+      } else {
+        // 普通职员：现有逻辑
+        state.jobTier = 'normal';
+        result.deltas.push({ icon: 'confetti', label: '找到工作了！', value: '恢复正常生活', positive: true });
+        result.tip = TIPS.jobFound;
+      }
     } else {
       result.deltas.push({ icon: 'smiley-nervous', label: '还没找到工作...', value: `已找${state.jobSearchTurns}个月`, positive: false });
       if (state.recessionTurnsLeft > 0) {
-        result.deltas.push({ icon: 'trend-down', label: '经济下行增加求职难度', value: `成功率${Math.round(findProb * 100)}%`, positive: false });
+        result.deltas.push({ icon: 'trend-down', label: '经济下行增加求职难度', value: '', positive: false });
       }
       result.tip = TIPS.jobSearching;
     }
@@ -1167,9 +1236,10 @@ export function executeAction(state, actionId) {
     state.doujinMonths = 0;
     state.monthlyIncome = 0;
     state.jobSearchTurns = 0;
+    state.jobTier = null;
     state.doujinWorkYearReset = state.turn; // mark for salary reset if returning
-    // Clear work-related debuffs (promotion, commute, 996 etc.)
-    state.timeDebuffs = state.timeDebuffs.filter(d => !['promotion', '996'].includes(d.id) && !d.id.startsWith('commute_') && !d.id.startsWith('social_') && !d.id.startsWith('burnout_'));
+    // Clear work-related debuffs (promotion, commute, 996, job tier, hop penalty etc.)
+    state.timeDebuffs = state.timeDebuffs.filter(d => !['promotion', '996', 'elite_job', 'labor_drain', 'job_hop_penalty'].includes(d.id) && !d.id.startsWith('commute_') && !d.id.startsWith('social_') && !d.id.startsWith('burnout_'));
     state.time = Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)));
     // Passion boost diminishes with each switch: 1st=full, 2nd=half, 3rd+=0
     const basePBoost = wasUnemployed ? 15 : 10;

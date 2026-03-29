@@ -332,11 +332,26 @@ export function endMonth(state) {
     } else {
       const bgSalaryMult = BACKGROUNDS[state.background]?.salaryMult || 1.0;
       const workStart = state.doujinWorkYearReset > 0 ? state.doujinWorkYearReset : 50; // reset if returned from doujin
-      const baseSalary = Math.round((800 + Math.max(0, Math.floor((state.turn - workStart) / 12)) * 200) * bgSalaryMult);
+      const tierMult = state.jobTier === 'elite' ? 1.8 : state.jobTier === 'labor' ? 0.6 : 1.0;
+      const tierLabel = state.jobTier === 'elite' ? '设计师' : state.jobTier === 'labor' ? '基层' : '';
+      const baseSalary = Math.round((800 + Math.max(0, Math.floor((state.turn - workStart) / 12)) * 200) * bgSalaryMult * tierMult);
       const salary = state.recessionTurnsLeft > 0 ? Math.floor(baseSalary * 0.8) : baseSalary; // recession cuts salary
       addMoney(state, salary);
       state.monthlyIncome = salary;
-      result.deltas.push({ icon: 'briefcase', label: `工资${state.recessionTurnsLeft > 0 ? '(下行-20%)' : ''}`, value: `+¥${salary}`, positive: true });
+      const salaryLabel = `工资${tierLabel ? '(' + tierLabel + ')' : ''}${state.recessionTurnsLeft > 0 ? '(下行-20%)' : ''}`;
+      result.deltas.push({ icon: 'briefcase', label: salaryLabel, value: `+¥${salary}`, positive: true });
+
+      // Elite job: monthly reputation bonus from industry connections
+      if (state.jobTier === 'elite') {
+        addReputation(state, 0.05);
+        result.deltas.push({ icon: 'star', label: '业界人脉加成', value: '声誉+0.05', positive: true });
+      }
+      // Labor job: passion drain from monotonous work
+      if (state.jobTier === 'labor') {
+        const laborDrain = 3;
+        state.passion = Math.max(0, state.passion - laborDrain);
+        result.deltas.push({ icon: 'smiley-sad', label: '基层劳动消磨热情', value: `热情-${laborDrain}`, positive: false });
+      }
 
       // Recession: risk of losing job each month
       const fireChance = Math.max(0.005, 0.06 - (BACKGROUNDS[state.background]?.fireResist || 0));
@@ -344,9 +359,10 @@ export function endMonth(state) {
         state.unemployed = true;
         state.jobSearchTurns = 0;
         state.monthlyIncome = 0;
+        state.jobTier = null;
         // Clear work-related debuffs (no longer employed)
         state.timeDebuffs = state.timeDebuffs.filter(d =>
-          !['promotion', '996'].includes(d.id) &&
+          !['promotion', '996', 'elite_job', 'labor_drain', 'job_hop_penalty'].includes(d.id) &&
           !d.id.startsWith('commute_') &&
           !d.id.startsWith('social_') &&
           !d.id.startsWith('burnout_')
