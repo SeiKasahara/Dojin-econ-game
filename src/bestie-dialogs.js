@@ -360,6 +360,86 @@ const STATE_DIALOGS = [
       { text: '还在想…', response: '不急不急，先看看别人怎么做的，找找灵感~' },
     ],
   },
+  // 赞助社群后
+  {
+    trigger: s => s.lastSponsorTurn >= 0 && s.turn - s.lastSponsorTurn <= 2,
+    npc: '听说你赞助了社区活动！好大方啊',
+    replies: [
+      { text: '回馈社区嘛', response: '好有前辈风范！大家都在说你好话呢~' },
+      { text: '花了不少钱…', response: '钱花在这种地方很值得的！口碑是买不到的' },
+      { text: '顺便认识了些新朋友', response: '这就是社区活动的魅力嘛，人脉比钱重要！' },
+    ],
+  },
+  // 投资社群-高等级（工坊/社区祭/基金）
+  {
+    trigger: s => s.reputation >= 7 && s.lastSponsorTurn >= 0 && s.turn - s.lastSponsorTurn <= 2,
+    npc: '你办的那个活动好多人参加啊！我朋友圈都在发',
+    replies: [
+      { text: '办活动比出本子还累', response: '哈哈哈但影响力完全不一样！你现在是圈子里的"建设者"了' },
+      { text: '希望能帮到新人', response: '肯定能！好多人就是因为你的活动才入坑的' },
+      { text: '花了好大一笔钱', response: '投资嘛…你在圈子里种下的种子以后都会开花的' },
+    ],
+  },
+  // IP黄昏/消亡期
+  {
+    trigger: s => s.official?.ipPhase === 'twilight' || s.official?.ipPhase === 'death',
+    npc: '这个IP好像越来越冷了…你还打算继续做吗',
+    replies: [
+      { text: '当然，这是我的热爱', response: '…你说得对。不是所有事都要看热度的。我支持你' },
+      { text: '在考虑转型', response: '嗯…如果决定了我帮你参谋，不管怎样我都挺你' },
+      { text: '冷门有冷门的好处', response: '确实！竞争少，真爱粉质量高。你是这个圈子的定海神针' },
+    ],
+  },
+  // IP复兴
+  {
+    trigger: s => s.official?.ipPhase === 'revival',
+    npc: '天哪这个IP突然又火起来了！！好多新人涌进来',
+    replies: [
+      { text: '赶紧出新作！', response: '对对对！趁热度赶紧冲！我帮你宣传！' },
+      { text: '坚守终于有回报了', response: '你一直在的时候没人说什么，IP火了大家才知道你的坚持有多难得' },
+      { text: '新人太多有点不适应', response: '哈哈老前辈心态！对新人好一点嘛，都是因为热爱才来的' },
+    ],
+  },
+  // 30岁以上还在做
+  {
+    trigger: s => Math.floor(s.turn / 12) + 18 >= 30 && s.totalHVP >= 5,
+    npc: '你做同人都十几年了吧…有没有想过为什么一直在坚持',
+    replies: [
+      { text: '习惯了吧', response: '习惯也是一种热爱的形式呀。你的坚持让圈子里很多人都有了信心' },
+      { text: '因为还有人在等我的作品', response: '…你说这话的时候眼睛在发光诶。好，那就继续画！' },
+      { text: '我也不知道，停不下来', response: '停不下来就对了！这就是你的答案嘛~' },
+    ],
+  },
+  // 35岁以上
+  {
+    trigger: s => Math.floor(s.turn / 12) + 18 >= 35,
+    npc: '你身体还好吗？最近有按时吃饭睡觉吗',
+    replies: [
+      { text: '还行，注意着呢', response: '那就好…不年轻了，别仗着以前能熬就继续熬啊' },
+      { text: '偶尔还是会熬夜', response: '唉…你看看你的黑眼圈！给我保证以后十二点前睡！' },
+      { text: '你怎么跟我妈一样', response: '因为关心你！你妈说得对！少熬夜多喝水！' },
+    ],
+  },
+  // 带新人/有人请教
+  {
+    trigger: s => s.reputation >= 4 && s.turn > 110,
+    npc: '有新人跟我说很崇拜你诶，你现在是"前辈"了',
+    replies: [
+      { text: '哈哈我还是觉得自己是新人', response: '你都出了这么多作品了还新人！你在新人眼里就是神好吗' },
+      { text: '有点受宠若惊', response: '别谦虚了！你值得被仰望~' },
+      { text: '希望能帮到他们', response: '你的作品本身就是最好的教材了，加上你人又好，新人们有福了' },
+    ],
+  },
+  // IP冷门逆袭后
+  {
+    trigger: s => s.market?._initialIpType === 'cold' && s.market?.ipType === 'normal',
+    npc: '你们那个IP居然火起来了！！当初选冷门的人现在都在偷笑吧',
+    replies: [
+      { text: '谁说冷门没前途的', response: '打脸了打脸了！你们这些坚持的人才是功臣啊' },
+      { text: '终于不用解释"这是什么IP"了', response: '哈哈哈之前每次提起来都要科普半天，现在都知道了' },
+      { text: '竞争也变多了', response: '确实…但先来的人有先发优势嘛，你的地位稳得很' },
+    ],
+  },
 ];
 
 /**

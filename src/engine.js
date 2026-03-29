@@ -12,7 +12,7 @@ export { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, CHOICE_EFFECTS, getQualit
 export { ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT,
          BACKGROUNDS, rollBackground, createInitialState } from './engine/state.js';
 export { ACTIONS, getActionDisplay, getFreelanceTimeCost, getTimeCost,
-         canPerformAction, needsPricing, rollEventCondition, rollPartnerBusy } from './engine/actions.js';
+         canPerformAction, needsPricing, rollEventCondition, rollPartnerBusy, getSponsorTiers } from './engine/actions.js';
 export { calculateSales, getSupplyDemandData, sellFromWorks, calculateFeedback } from './engine/sales.js';
 export { generateEvents, generateEventCalendar, ensureEventCalendar } from './engine/event-calendar.js';
 export { rollEvent, applyEvent } from './engine/event-roll.js';

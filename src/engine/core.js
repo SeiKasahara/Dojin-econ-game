@@ -140,9 +140,12 @@ export function applyPassionDecay(turn, rawAmount) {
 }
 
 // === Reputation helper ===
+// Diminishing returns: harder to grow at higher reputation
+// factor = 1 / (1 + r)^0.7  — steeper than sqrt, softer than linear
+// r=0→1.0, r=3→0.38, r=5→0.27, r=8→0.19, r=10→0.16
 export function addReputation(state, rawGain) {
   if (rawGain <= 0) { state.reputation = Math.max(0, state.reputation + rawGain); return rawGain; }
-  const factor = 1 / Math.sqrt(1 + 2 * state.reputation);
+  const factor = 1 / Math.pow(1 + state.reputation, 0.7);
   const actual = rawGain * factor;
   state.reputation += actual;
   return actual;

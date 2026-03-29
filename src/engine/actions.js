@@ -41,8 +41,8 @@ export const ACTIONS = {
                  costLabel: '¥800~1500 加速当前同人本进度', requires: { time: 1 } },
   upgradeEquipment: { id: 'upgradeEquipment', name: '升级设备', emoji: 'desktop', type: 'upgradeEquipment',
                  costLabel: '一次性大额投入 永久提升创作质量', requires: {} },
-  sponsorCommunity: { id: 'sponsorCommunity', name: '赞助社区', emoji: 'hand-heart', type: 'sponsorCommunity',
-                 costLabel: '¥1500~3000 声誉↑热情↑ 冷却6月', requires: {} },
+  sponsorCommunity: { id: 'sponsorCommunity', name: '投资社群', emoji: 'hand-heart', type: 'sponsorCommunity',
+                 costLabel: '花钱回馈社群 声誉↑热情↑ 冷却3月', requires: {} },
 };
 
 // Dynamic action info (for UI)
@@ -162,11 +162,52 @@ export function getActionDisplay(actionId, state) {
   if (actionId === 'sponsorCommunity') {
     const cd = 6 - (state.turn - state.lastSponsorTurn);
     if (cd > 0) return { ...base, costLabel: `冷却中（还剩${cd}月）` };
-    const cs = state.market ? state.market.communitySize : 10000;
-    const cost = Math.round(1500 + cs / 10000 * 1500);
-    return { ...base, costLabel: `¥${cost} 声誉↑ 热情+8 曝光↑` };
+    const tiers = getSponsorTiers(state);
+    const available = tiers.filter(t => t.unlocked);
+    if (available.length === 0) return { ...base, costLabel: '资金不足' };
+    const best = available[available.length - 1];
+    return { ...base, costLabel: `${available.length}种方案可选 · ¥${available[0].cost}~¥${best.cost}` };
   }
   return base;
+}
+
+// === Sponsor Community Tiers ===
+// Higher reputation + age unlocks bigger (more expensive) sponsorship options
+export function getSponsorTiers(state) {
+  const cs = state.market ? state.market.communitySize : 10000;
+  const rep = state.reputation;
+  const age = getAge(state.turn);
+  const baseCost = Math.round(1500 + cs / 10000 * 1500);
+  return [
+    {
+      id: 'basic', name: '赞助茶歇', emoji: 'coffee',
+      desc: '为社区线下聚会提供茶歇和场地费',
+      cost: baseCost, repGain: 0.15, passionGain: 8, infoGain: 0.15, contacts: 2,
+      unlocked: state.money >= baseCost,
+    },
+    {
+      id: 'workshop', name: '举办创作工坊', emoji: 'chalkboard-teacher',
+      desc: '组织创作经验分享会，你是主讲人',
+      cost: Math.round(baseCost * 2.5), repGain: 0.30, passionGain: 12, infoGain: 0.25, contacts: 3,
+      unlocked: rep >= 5 && age >= 20 && state.money >= Math.round(baseCost * 2.5),
+      tip: '分享经验不仅帮助新人，也是巩固自身地位的社交投资。教学相长——整理思路本身就是创作力的来源。',
+    },
+    {
+      id: 'festival', name: '冠名社区祭', emoji: 'confetti',
+      desc: '出资冠名一场小型同人交流祭',
+      cost: Math.round(baseCost * 5), repGain: 0.50, passionGain: 15, infoGain: 0.35, contacts: 5,
+      unlocked: rep >= 7 && age >= 22 && state.money >= Math.round(baseCost * 5),
+      tip: '冠名活动是"社区领袖"的标志性行为——你不只是参与者，而是生态的塑造者。但花费巨大，量力而行。',
+    },
+    {
+      id: 'fund', name: '设立新人基金', emoji: 'hand-coins',
+      desc: '设立以你的社团名义命名的新人扶持基金',
+      cost: Math.round(baseCost * 10), repGain: 0.80, passionGain: 20, infoGain: 0.50, contacts: 4,
+      unlocked: rep >= 9 && age >= 28 && state.money >= Math.round(baseCost * 10),
+      communityGrowth: true,
+      tip: '新人基金是最高级别的社区投资——用金钱换取"圈子建设者"的永久标签。基金会持续吸引新创作者加入社群。',
+    },
+  ];
 }
 
 // Whether an action needs the pricing flow before executing
@@ -287,7 +328,7 @@ export function canPerformAction(state, actionId) {
   if (actionId === 'upgradeEquipment') {
     if (state.equipmentLevel >= 3) return false;
   }
-  // sponsorCommunity: need money and cooldown
+  // sponsorCommunity: need money and cooldown (6 months)
   if (actionId === 'sponsorCommunity') {
     if (state.money < 1500) return false;
     if (state.turn - state.lastSponsorTurn < 6) return false;

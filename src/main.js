@@ -4,7 +4,7 @@
  */
 
 import './style.css';
-import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost, calculateSales, getActionDisplay, needsPricing, rollEventCondition, rollPartnerBusy } from './engine.js';
+import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost, calculateSales, getActionDisplay, needsPricing, rollEventCondition, rollPartnerBusy, getSponsorTiers } from './engine.js';
 import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderWorkNameInput, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp } from './ui.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES, getQualityStars } from './engine.js';
 import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
@@ -636,6 +636,55 @@ function handleAction(actionId) {
       executeInMonth(actionId);
     });
     overlay.querySelector('#btn-fl-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+    return;
+  }
+
+  // === Sponsor Community: tier selector ===
+  if (actionId === 'sponsorCommunity') {
+    const tiers = getSponsorTiers(state);
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    overlay.innerHTML = `
+      <div class="event-card" style="max-width:380px;text-align:left">
+        <div style="text-align:center;margin-bottom:10px">
+          <div style="font-size:1.3rem">${ic('hand-heart', '1.3rem')}</div>
+          <div style="font-weight:700">投资社群</div>
+          <div style="font-size:0.75rem;color:var(--text-light)">选择赞助方式（冷却6个月）</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+          ${tiers.map(t => `
+            <div class="price-btn sponsor-tier${t.unlocked ? '' : ' disabled'}" data-tier="${t.id}" style="padding:12px;cursor:${t.unlocked ? 'pointer' : 'not-allowed'};${t.unlocked ? '' : 'opacity:0.4;'}">
+              <div style="font-weight:700;font-size:0.9rem">${ic(t.emoji || 'hand-heart')} ${t.name}</div>
+              <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">${t.desc}</div>
+              <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">¥${t.cost.toLocaleString()} · 声誉↑ · 热情+${t.passionGain} · 曝光+${Math.round(t.infoGain * 100)}%${t.communityGrowth ? ' · 社群扩张' : ''}</div>
+              ${!t.unlocked ? `<div style="font-size:0.62rem;color:var(--danger);margin-top:2px">${ic('lock', '0.6rem')} ${state.money < t.cost ? '资金不足' : '需要更高声誉或更多经验'}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-sponsor-go" disabled style="opacity:0.5">请选择赞助方式</button>
+        <button class="btn btn-block" id="btn-sponsor-back" style="margin-top:6px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    let selectedTier = null;
+    overlay.querySelectorAll('.sponsor-tier:not(.disabled)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        overlay.querySelectorAll('.sponsor-tier').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
+        btn.style.border = '2px solid var(--primary)';
+        btn.style.background = '#F0FAF8';
+        selectedTier = btn.dataset.tier;
+        const cfm = overlay.querySelector('#btn-sponsor-go');
+        cfm.disabled = false;
+        cfm.style.opacity = '1';
+        cfm.textContent = '确认赞助';
+      });
+    });
+    overlay.querySelector('#btn-sponsor-go').addEventListener('click', () => {
+      if (!selectedTier) return;
+      state._sponsorTier = selectedTier;
+      overlay.remove();
+      executeInMonth(actionId);
+    });
+    overlay.querySelector('#btn-sponsor-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
     return;
   }
 

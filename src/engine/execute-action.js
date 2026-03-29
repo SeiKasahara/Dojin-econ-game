@@ -1,6 +1,6 @@
 import { getLifeStage, getAge, getCreativeSkill, getSkillEffects, getSkillLabel, addMoney, addReputation, getRealityDrain, applyPassionDecay, computeEffectiveTime } from './core.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, PARTNER_TYPES, CHOICE_EFFECTS, applyCreativeChoice, getQualityStars, getWorkQualityEffects, syncInventoryAggregates, addContact } from './definitions.js';
-import { ACTIONS, getTimeCost, getFreelanceTimeCost } from './actions.js';
+import { ACTIONS, getTimeCost, getFreelanceTimeCost, getSponsorTiers } from './actions.js';
 import { calculateSales, getSupplyDemandData, sellFromWorks, calculateFeedback } from './sales.js';
 import { TIPS } from './tips.js';
 import { BACKGROUNDS } from './state.js';
@@ -1062,25 +1062,40 @@ export function executeAction(state, actionId) {
 
   // --- Sponsor community ---
   if (action.type === 'sponsorCommunity') {
-    const cs = state.market ? state.market.communitySize : 10000;
-    const cost = Math.round(1500 + cs / 10000 * 1500);
-    addMoney(state, -cost);
+    const tiers = getSponsorTiers(state);
+    const tierId = state._sponsorTier || 'basic';
+    state._sponsorTier = null;
+    const tier = tiers.find(t => t.id === tierId) || tiers[0];
+
+    addMoney(state, -tier.cost);
     state.lastSponsorTurn = state.turn;
-    const repGain = addReputation(state, 0.12 + Math.min(0.08, state.reputation * 0.01));
+    const repGain = addReputation(state, tier.repGain);
     state.maxReputation = Math.max(state.maxReputation, state.reputation);
-    state.passion = Math.min(100, state.passion + 8);
-    state.infoDisclosure = Math.min(1, state.infoDisclosure + 0.15);
-    result.deltas.push({ icon: 'hand-heart', label: '赞助社区活动', value: `-¥${cost}`, positive: false });
+    state.passion = Math.min(100, state.passion + tier.passionGain);
+    state.infoDisclosure = Math.min(1, state.infoDisclosure + tier.infoGain);
+
+    result.deltas.push({ icon: tier.emoji || 'hand-heart', label: tier.name, value: `-¥${tier.cost}`, positive: false });
     result.deltas.push({ icon: 'star', label: '社区好感', value: `声誉+${repGain.toFixed(2)}`, positive: true });
-    result.deltas.push({ icon: 'heart', label: '回馈的满足感', value: '热情+8', positive: true });
-    result.deltas.push({ icon: 'megaphone', label: '曝光度提升', value: '+15%', positive: true });
-    // Add contacts from community sponsorship
-    const sponsorContacts = 2 + (Math.random() < 0.5 ? 1 : 0);
-    for (let i = 0; i < sponsorContacts; i++) {
-      const c = addContact(state, { source: 'sponsor', affinity: 1.5 });
-      if (c) result.deltas.push({ icon: 'address-book', label: `认识了${c.name}`, value: '赞助活动结识', positive: true });
+    result.deltas.push({ icon: 'heart', label: '回馈的满足感', value: `热情+${tier.passionGain}`, positive: true });
+    result.deltas.push({ icon: 'megaphone', label: '曝光度提升', value: `+${Math.round(tier.infoGain * 100)}%`, positive: true });
+
+    // Community growth effect for top tier (new people join the fandom)
+    if (tier.communityGrowth && state.market) {
+      const growth = Math.round(state.market.communitySize * 0.03);
+      state.market.communitySize += growth;
+      result.deltas.push({ icon: 'users', label: '基金吸引新人入圈', value: `社群+${growth}`, positive: true });
     }
-    result.tip = { label: '社区赞助', text: '赞助同人展或社区活动是建立口碑的有效方式。不仅提升声誉和曝光度，还能认识新朋友扩展人脉。冷却6个月。' };
+
+    // Add contacts from community sponsorship
+    const contactCount = tier.contacts + (Math.random() < 0.5 ? 1 : 0);
+    for (let i = 0; i < contactCount; i++) {
+      const affinityBase = tierId === 'fund' ? 2.5 : tierId === 'festival' ? 2.0 : 1.5;
+      const c = addContact(state, { source: 'sponsor', affinity: affinityBase });
+      if (c) result.deltas.push({ icon: 'address-book', label: `认识了${c.name}`, value: '活动结识', positive: true });
+    }
+
+    result.tip = tier.tip ? { label: '社群投资', text: tier.tip }
+      : { label: '社群投资', text: '赞助同人社区活动是建立口碑的有效方式。不仅提升声誉和曝光度，还能认识新朋友扩展人脉。冷却6个月。' };
   }
 
   // --- Commercial transition: player accepts publisher offer ---

@@ -324,6 +324,41 @@ function clubObserverPosts(market, playerState) {
     pool.push(() => `"「${club}」的人好像也在玩织梦交易" ——有人在八卦`);
   }
 
+  // 投资社群反馈
+  if (playerState.lastSponsorTurn >= 0 && playerState.turn - playerState.lastSponsorTurn <= 2) {
+    pool.push(() => `"「${club}」赞助了上次的社区活动，大家都很感激"`);
+    pool.push(() => `"因为「${club}」的赞助，这次聚会的茶歇特别丰盛"`);
+    if (playerState.reputation >= 5) {
+      pool.push(() => `"「${club}」对社群的贡献有目共睹，不只是出作品，还在回馈社区"`);
+    }
+    if (playerState.reputation >= 7) {
+      pool.push(() => `"「${club}」举办的创作工坊干货满满，好多新人都是那次入坑的"`);
+      pool.push(() => `"参加了「${club}」赞助的社区祭，氛围超好，明年还想来"`);
+    }
+    if (playerState.reputation >= 9) {
+      pool.push(() => `"「${club}」设立的新人基金真的帮到了很多刚入圈的创作者，圈子里的前辈气质这一块"`);
+    }
+  }
+
+  // 中后期事件反馈
+  const age = Math.floor(playerState.turn / 12) + 18;
+  if (age >= 30 && playerState.totalHVP >= 8) {
+    pool.push(() => `"「${club}」出了这么多本了，算是圈子里的常青树了吧"`);
+  }
+  if (age >= 35) {
+    pool.push(() => `"「${club}」居然还在出本，太佩服了，好多同期的社团早就不做了"`);
+  }
+
+  // IP阶段相关
+  const ipPhase = playerState.official?.ipPhase;
+  if (ipPhase === 'twilight' || ipPhase === 'death') {
+    pool.push(() => `"「${club}」在这种时候还在坚持产出…真的是真爱粉"`);
+    pool.push(() => `"IP都快没人关注了，「${club}」还在做，让人肃然起敬"`);
+  }
+  if (ipPhase === 'revival') {
+    pool.push(() => `"「${club}」在IP复兴的时候立刻出了新作，反应好快"`);
+  }
+
   if (pool.length === 0) return [];
   if (r() < 0.35) {
     const fn = pool[Math.floor(r() * pool.length)];
