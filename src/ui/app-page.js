@@ -179,6 +179,10 @@ export function renderAppPage(appId, state, onAction, onBack) {
         if (state.activeContactId === cid) {
           state.hasPartner = false; state.partnerType = null; state.partnerTurns = 0; state.activeContactId = null;
         }
+        // Clean up chat history for this contact
+        if (state._chatHistory) {
+          delete state._chatHistory[`partner_${cid}`];
+        }
         row?.remove();
         const countEl = overlay.querySelector('.contact-pool-count');
         if (countEl) countEl.innerHTML = `${ic('users')} 人脉池 (${state.contacts.length})`;
