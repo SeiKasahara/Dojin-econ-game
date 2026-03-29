@@ -367,6 +367,14 @@ export function endMonth(state) {
     }
   }
 
+  // --- New creator fund upkeep (permanent monthly cost) ---
+  if (state._fundEstablished) {
+    const cs = state.market ? state.market.communitySize : 10000;
+    const fundCost = Math.round(300 + cs / 10000 * 200); // ¥300~500/month depending on community size
+    addMoney(state, -fundCost);
+    result.deltas.push({ icon: 'hand-coins', label: '新人基金运营', value: `-¥${fundCost}`, positive: false });
+  }
+
   // --- Creative fatigue decay ---
   if (state.creativeFatigue > 0) {
     state.creativeFatigue = Math.max(0, state.creativeFatigue - 0.5);

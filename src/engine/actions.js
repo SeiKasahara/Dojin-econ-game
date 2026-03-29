@@ -177,35 +177,36 @@ export function getSponsorTiers(state) {
   const cs = state.market ? state.market.communitySize : 10000;
   const rep = state.reputation;
   const age = getAge(state.turn);
+  const remaining = state.time - (state.monthTimeSpent || 0);
   const baseCost = Math.round(1500 + cs / 10000 * 1500);
   return [
     {
       id: 'basic', name: '赞助茶歇', emoji: 'coffee',
       desc: '为社区线下聚会提供茶歇和场地费',
-      cost: baseCost, repGain: 0.15, passionGain: 8, infoGain: 0.15, contacts: 2,
+      cost: baseCost, timeCost: 0, repGain: 0.15, passionGain: 8, infoGain: 0.15, contacts: 2,
       unlocked: state.money >= baseCost,
     },
     {
       id: 'workshop', name: '举办创作工坊', emoji: 'chalkboard-teacher',
       desc: '组织创作经验分享会，你是主讲人',
-      cost: Math.round(baseCost * 2.5), repGain: 0.30, passionGain: 12, infoGain: 0.25, contacts: 3,
-      unlocked: rep >= 5 && age >= 20 && state.money >= Math.round(baseCost * 2.5),
+      cost: Math.round(baseCost * 2.5), timeCost: 2, repGain: 0.30, passionGain: 12, infoGain: 0.25, contacts: 3,
+      unlocked: rep >= 5 && age >= 20 && remaining >= 2 && state.money >= Math.round(baseCost * 2.5),
       tip: '分享经验不仅帮助新人，也是巩固自身地位的社交投资。教学相长——整理思路本身就是创作力的来源。',
     },
     {
       id: 'festival', name: '冠名社区祭', emoji: 'confetti',
       desc: '出资冠名一场小型同人交流祭',
-      cost: Math.round(baseCost * 5), repGain: 0.50, passionGain: 15, infoGain: 0.35, contacts: 5,
-      unlocked: rep >= 7 && age >= 22 && state.money >= Math.round(baseCost * 5),
+      cost: Math.round(baseCost * 5), timeCost: 3, repGain: 0.50, passionGain: 15, infoGain: 0.35, contacts: 5,
+      unlocked: rep >= 7 && age >= 22 && remaining >= 3 && state.money >= Math.round(baseCost * 5),
       tip: '冠名活动是"社区领袖"的标志性行为——你不只是参与者，而是生态的塑造者。但花费巨大，量力而行。',
     },
     {
       id: 'fund', name: '设立新人基金', emoji: 'hand-coins',
-      desc: '设立以你的社团名义命名的新人扶持基金',
-      cost: Math.round(baseCost * 10), repGain: 0.80, passionGain: 20, infoGain: 0.50, contacts: 4,
-      unlocked: rep >= 9 && age >= 28 && state.money >= Math.round(baseCost * 10),
+      desc: `设立以你的社团名义命名的新人扶持基金${state._fundEstablished ? '（已设立）' : '（永久占用每月1天闲暇）'}`,
+      cost: Math.round(baseCost * 10), timeCost: 4, repGain: 0.80, passionGain: 20, infoGain: 0.50, contacts: 4,
+      unlocked: rep >= 9 && age >= 28 && remaining >= 4 && state.money >= Math.round(baseCost * 10) && !state._fundEstablished,
       communityGrowth: true,
-      tip: '新人基金是最高级别的社区投资——用金钱换取"圈子建设者"的永久标签。基金会持续吸引新创作者加入社群。',
+      tip: '新人基金是最高级别的社区投资——用金钱换取"圈子建设者"的永久标签。基金会持续吸引新创作者加入社群，但运营需要持续投入精力（每月闲暇永久-1天）。',
     },
   ];
 }
@@ -257,7 +258,13 @@ export function getTimeCost(state, actionId) {
   if (actionId === 'buyGoods') return 1;
   if (actionId === 'sellGoods') return 1;
   if (actionId === 'hireAssistant') return 1;
-  // 0-cost decisions: upgradeEquipment, sponsorCommunity, quitForDoujin, goCommercial
+  // sponsorCommunity: time cost depends on selected tier
+  if (actionId === 'sponsorCommunity') {
+    const tierId = state._sponsorTier || 'basic';
+    const tierTimeCosts = { basic: 0, workshop: 2, festival: 3, fund: 4 };
+    return tierTimeCosts[tierId] || 0;
+  }
+  // 0-cost decisions: upgradeEquipment, quitForDoujin, goCommercial
   return 0;
 }
 

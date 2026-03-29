@@ -9,4 +9,4 @@ export { renderMessageApp } from './ui/app-message.js';
 export { openBrowserApp } from './ui/app-browser.js';
 export { openMarketApp } from './ui/app-market.js';
 export { openSNSPanel } from './ui/app-sns.js';
-export { renderPriceSelector, renderSubtypeSelector, renderWorkNameInput, renderCreativeChoice, renderStrategySelector, renderEventModeSelector, renderEventSelector, renderReprintSelector } from './ui/selectors.js';
+export { renderPriceSelector, renderSubtypeSelector, renderWorkNameInput, renderCreativeChoice, renderStrategySelector, renderEventModeSelector, renderEventSelector, renderReprintSelector, renderEventWorksSelector } from './ui/selectors.js';

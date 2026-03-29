@@ -102,8 +102,10 @@ export function sellFromWorks(state, type, baseDemand) {
   // Phase 2: sort by attractiveness (best first)
   workData.sort((a, b) => b.workMult - a.workMult);
 
-  // Phase 3: allocate baseDemand weighted by workMult
-  const totalWeight = workData.reduce((s, d) => s + d.workMult, 0);
+  // Phase 3: allocate baseDemand weighted by workMult²
+  // Squared weights concentrate demand on top works (consumer browsing behavior:
+  // attractive items get disproportionate attention, long tail gets very little)
+  const totalWeight = workData.reduce((s, d) => s + d.workMult * d.workMult, 0);
   let remaining = Math.round(baseDemand);
   let totalRev = 0;
   const details = [];
@@ -112,7 +114,8 @@ export function sellFromWorks(state, type, baseDemand) {
   for (const d of workData) {
     if (remaining <= 0) break;
     if (d.workMult <= 0) continue; // fully saturated — no demand
-    const share = totalWeight > 0 ? d.workMult / totalWeight : 1 / workData.length;
+    const sqW = d.workMult * d.workMult;
+    const share = totalWeight > 0 ? sqW / totalWeight : 1 / workData.length;
     const workDemand = Math.max(0, Math.round(baseDemand * share));
     const sell = Math.min(remaining, Math.min(workDemand, d.work.qty));
     if (sell > 0) {
@@ -232,10 +235,23 @@ export function calculateSales(actionId, state) {
   const advMod = state.advanced ? getAdvancedSalesMod(state.advanced, type) : 1.0;
   const noise = 0.85 + Math.random() * 0.3;
 
-  // --- Catalog diversity bonus: multiple distinct works attract more browsers ---
+  // --- Catalog display bonus: inverted-U curve ---
+  // 1-4 types: more variety attracts browsers (bonus rises)
+  // 5+: booth gets cluttered, each work gets less prominent display (bonus falls)
+  // Sweet spot at 3-4 types. Applies across ALL types at the booth, not per-type.
+  const totalUniqueWorks = (state.inventory?.works?.filter(w => w.qty > 0).length) || 0;
   const uniqueWorks = state.inventory?.works?.filter(w => w.type === type && w.qty > 0).length || 0;
-  const catalogBonus = 1 + Math.min(0.3, Math.max(0, uniqueWorks - 1) * 0.1);
-  // 1件=1.0, 2件=1.1, 3件=1.2, 4件+=1.3(上限)
+  let catalogBonus;
+  if (totalUniqueWorks <= 4) {
+    catalogBonus = 1 + Math.min(0.3, Math.max(0, uniqueWorks - 1) * 0.1);
+    // 1=1.0, 2=1.1, 3=1.2, 4=1.3
+  } else {
+    // Clutter penalty: each extra type beyond 4 reduces display quality
+    // 5=-5%, 6=-10%, 8=-20%, 10+=-30% (floor 0.7)
+    const clutter = Math.max(0.7, 1.0 - (totalUniqueWorks - 4) * 0.05);
+    catalogBonus = 1.3 * clutter;
+    // 5=1.24, 6=1.17, 8=1.04, 10+=0.91
+  }
 
   // --- High info bonus: word-of-mouth effect when awareness ≥ 80% ---
   const infoHighBonus = state.infoDisclosure >= 0.6 ? 1.12 : 1.0;

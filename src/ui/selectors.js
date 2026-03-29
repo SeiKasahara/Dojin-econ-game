@@ -613,3 +613,91 @@ export function renderReprintSelector(state, onSelect, onCancel) {
     if (onCancel) onCancel();
   });
 }
+
+// === Event Works Selector: choose which works to bring to the event ===
+export function renderEventWorksSelector(state, eventName, onConfirm, onCancel) {
+  const works = (state.inventory?.works || []).filter(w => w.qty > 0);
+  if (works.length === 0) { onConfirm([]); return; }
+  // Only 1 work: auto-select all of it, skip the picker
+  if (works.length === 1) { onConfirm([{ workId: works[0].id, qty: works[0].qty }]); return; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  const rowsHtml = works.map(w => {
+    const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
+    const age = Math.max(0, state.turn - (w.turn || state.turn));
+    const tags = (age <= 0 ? '<span style="background:#27AE60;color:#fff;padding:0 4px;border-radius:3px;font-size:0.58rem;margin-left:3px">新刊</span>' : age <= 2 ? '<span style="background:#F39C12;color:#fff;padding:0 4px;border-radius:3px;font-size:0.58rem;margin-left:3px">近期</span>' : '') + (w.isCultHit ? ' <span style="color:#E91E63;font-size:0.65rem">★Cult</span>' : '');
+    const qC = w.workQuality >= 1.3 ? 'var(--success)' : w.workQuality < 0.8 ? 'var(--danger)' : 'var(--text-muted)';
+    const nameStr = sub.name + (w.name ? '·' + escapeHtml(w.name) : '');
+    return `<div class="ew-row" data-wid="${w.id}" style="display:flex;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" class="ew-check" data-wid="${w.id}" checked style="width:18px;height:18px;accent-color:var(--primary);flex-shrink:0">
+      <span style="flex-shrink:0">${ic(sub.emoji, '1rem')}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nameStr}${tags}</div>
+        <div style="font-size:0.65rem;color:var(--text-muted)">Q<span style="color:${qC}">${(w.workQuality || 1).toFixed(1)}</span> · ¥${w.price} · ${w.type === 'hvp' ? '本' : '谷'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;min-width:90px">
+        <div style="display:flex;align-items:center;gap:0">
+          <button class="ew-minus" data-wid="${w.id}" style="width:32px;height:32px;border:1.5px solid var(--border);border-radius:8px 0 0 8px;background:var(--bg);cursor:pointer;font-size:1rem;font-weight:700;color:var(--text);touch-action:manipulation">\u2212</button>
+          <span class="ew-qty-tap" data-wid="${w.id}" data-max="${w.qty}" style="min-width:36px;height:32px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;border-top:1.5px solid var(--border);border-bottom:1.5px solid var(--border);background:#fff;cursor:pointer;user-select:none">${w.qty}</span>
+          <button class="ew-plus" data-wid="${w.id}" style="width:32px;height:32px;border:1.5px solid var(--border);border-radius:0 8px 8px 0;background:var(--bg);cursor:pointer;font-size:1rem;font-weight:700;color:var(--text);touch-action:manipulation">+</button>
+        </div>
+        <span style="font-size:0.58rem;color:var(--text-muted)">库存 ${w.qty}</span>
+      </div></div>`;
+  }).join('');
+  overlay.innerHTML = `<div class="app-page" style="max-height:80vh;max-width:400px">
+    <div class="app-titlebar" style="border-bottom-color:#E84393">
+      <button class="app-back" id="ew-back">${ic('arrow-left')} 返回</button>
+      <span class="app-title">${ic('package')} 选择参展作品</span><span style="width:60px"></span>
+    </div>
+    <div style="padding:8px 12px;font-size:0.75rem;color:var(--text-light);text-align:center;border-bottom:1px solid var(--border)">${escapeHtml(eventName)} · 选择要带去展会的作品和数量</div>
+    <div class="app-page-body" style="padding:0">
+      <div style="display:flex;justify-content:space-between;padding:8px 12px;font-size:0.72rem">
+        <button id="ew-all" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:0.72rem">${ic('check-square','0.7rem')} 全选</button>
+        <span id="ew-sum" style="color:var(--text-muted)"></span>
+        <button id="ew-none" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.72rem">清空</button>
+      </div>${rowsHtml}
+    </div>
+    <div style="padding:10px 12px"><button id="ew-go" class="btn btn-primary btn-block" style="font-size:0.85rem;padding:10px">${ic('tent')} 出发参展</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const sel = {}; works.forEach(w => { sel[w.id] = w.qty; });
+  const sync = () => {
+    const tot = Object.values(sel).reduce((s,q) => s+q, 0);
+    const cnt = Object.values(sel).filter(q => q > 0).length;
+    const e = overlay.querySelector('#ew-sum'); if (e) e.textContent = cnt + '种 / ' + tot + '件';
+    const b = overlay.querySelector('#ew-go'); if (b) { b.disabled = tot<=0; b.style.opacity = tot>0?'1':'0.4'; }
+  };
+  const setQ = (wid, q) => {
+    const w = works.find(w => w.id === wid); if (!w) return;
+    sel[wid] = Math.max(0, Math.min(w.qty, q));
+    const span = overlay.querySelector(`.ew-qty-tap[data-wid="${wid}"]`); if (span) span.textContent = sel[wid];
+    const ch = overlay.querySelector(`.ew-check[data-wid="${wid}"]`); if (ch) ch.checked = sel[wid] > 0;
+    sync();
+  };
+  overlay.querySelectorAll('.ew-minus').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setQ(+b.dataset.wid, sel[+b.dataset.wid]-1); }));
+  overlay.querySelectorAll('.ew-plus').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setQ(+b.dataset.wid, sel[+b.dataset.wid]+1); }));
+  // Tap the number to type directly (mobile-friendly prompt)
+  overlay.querySelectorAll('.ew-qty-tap').forEach(span => {
+    span.addEventListener('click', e => {
+      e.stopPropagation();
+      const wid = +span.dataset.wid;
+      const max = +span.dataset.max;
+      const val = prompt(`输入携带数量 (0~${max})`, sel[wid]);
+      if (val !== null) setQ(wid, parseInt(val) || 0);
+    });
+  });
+  overlay.querySelectorAll('.ew-check').forEach(c => c.addEventListener('change', () => { const w = works.find(w => w.id === +c.dataset.wid); setQ(+c.dataset.wid, c.checked ? w.qty : 0); }));
+  overlay.querySelectorAll('.ew-row').forEach(r => r.addEventListener('click', e => {
+    if (e.target.closest('.ew-minus') || e.target.closest('.ew-plus') || e.target.classList.contains('ew-check')) return;
+    const w = works.find(w => w.id === +r.dataset.wid); setQ(+r.dataset.wid, sel[+r.dataset.wid] > 0 ? 0 : w.qty);
+  }));
+  overlay.querySelector('#ew-all').addEventListener('click', () => works.forEach(w => setQ(w.id, w.qty)));
+  overlay.querySelector('#ew-none').addEventListener('click', () => works.forEach(w => setQ(w.id, 0)));
+  overlay.querySelector('#ew-go').addEventListener('click', () => {
+    const r = Object.entries(sel).filter(([,q]) => q > 0).map(([id,q]) => ({ workId: +id, qty: q }));
+    overlay.remove(); onConfirm(r);
+  });
+  overlay.querySelector('#ew-back').addEventListener('click', () => { overlay.remove(); if (onCancel) onCancel(); });
+  sync();
+}

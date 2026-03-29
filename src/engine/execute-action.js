@@ -281,6 +281,7 @@ export function executeAction(state, actionId) {
       // Read and consume mode/minigame state BEFORE branching (shared by cancelled + normal paths)
       const mode = state._eventMode || 'attend';
       state._eventMode = null;
+
       const isAttend = mode === 'attend';
       const mg = isAttend ? state._minigameResult : null;
       state._minigameResult = null;
@@ -295,8 +296,11 @@ export function executeAction(state, actionId) {
           result.deltas.push({ icon: 'coins', label: '路费+住宿（沉没成本）', value: `-¥${evt.travelCost + cancelLodging}`, positive: false });
           result.deltas.push({ icon: 'heart', label: '白忙一场的沮丧', value: '-5', positive: false });
         } else {
-          // 寄售流展：货还在手里，只损失邮费
-          const shipCost = Math.round(evt.travelCost * 0.3);
+          // 寄售流展：货还在手里，只损失邮费（含货物运费，来回双程）
+          const shipWeightKg = state.inventory.hvpStock * 0.2 + state.inventory.lvpStock * 0.08;
+          const shipPerKg = evt.city === '本市' ? 2 : evt.city === '邻市' ? 5 : evt.city === '异地' ? 18 : 10;
+          const shipFirstFee = evt.city === '本市' ? 10 : evt.city === '邻市' ? 15 : evt.city === '异地' ? 22 : 20;
+          const shipCost = Math.round(shipFirstFee + shipWeightKg * shipPerKg);
           addMoney(state, -shipCost);
           state.passion = Math.max(0, state.passion - 1);
           result.deltas.push({ icon: 'package', label: `${evt.name}@${evt.city} 流展！`, value: '寄售取消，货物退回', positive: false });
@@ -329,11 +333,26 @@ export function executeAction(state, actionId) {
         if (recentCount >= drainStart) fatigueDrain = Math.max(1, (recentCount - drainStart + 1) * Math.max(1, 4 - res)); // res0: 4/8, res3: 1/2
       }
 
+      // Logistics cost: personally carrying to the venue
+      // Estimate weight: HVP ~0.2kg/item, LVP ~0.08kg/item
+      // First ~15kg free (fits in suitcase, ~60 HVP or ~180 LVP)
+      // Excess shipped separately: tiered by distance (based on SF Express rates)
+      const carryWeightKg = state.inventory.hvpStock * 0.2 + state.inventory.lvpStock * 0.08;
+      const freeCarryKg = 15; // one suitcase worth
+      let cargoCost = 0;
+      if (carryWeightKg > freeCarryKg) {
+        const excessKg = carryWeightKg - freeCarryKg;
+        // Tiered rate: 同城2/kg, 邻市5/kg, 省会~一线8/kg, 异地14/kg (approximating SF Express)
+        const perKg = evt.city === '本市' ? 2 : evt.city === '邻市' ? 5 : evt.city === '异地' ? 14 : 8;
+        const firstWeightFee = evt.city === '本市' ? 10 : evt.city === '邻市' ? 12 : evt.city === '异地' ? 22 : 18;
+        cargoCost = Math.round(firstWeightFee + excessKg * perKg);
+      }
+
       if (isAttend && mg) {
         // === 亲参 with minigame ===
         state.consecutiveConsigns = 0; // reset on attend
         state.passion -= 5;
-        addMoney(state, -(evt.travelCost + lodgingCost + mg.moneySpent));
+        addMoney(state, -(evt.travelCost + lodgingCost + cargoCost + mg.moneySpent));
         const fatiguePassion = Math.round(mg.passionDelta * eventFatigue);
         state.passion = Math.min(100, state.passion + fatiguePassion);
         addReputation(state, mg.reputationDelta);
@@ -342,7 +361,7 @@ export function executeAction(state, actionId) {
         state.attendingEvent = { ...evt, salesBoost: attendBoost };
 
         result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: `表现${mg.performance}分 销量×${attendBoost}`, positive: mg.performance >= 50 });
-        result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位' + (mg.moneySpent > 0 ? '+无料' : ''), value: `-¥${evt.travelCost + lodgingCost + mg.moneySpent}`, positive: false });
+        result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位' + (cargoCost > 0 ? '+搬运' : '') + (mg.moneySpent > 0 ? '+无料' : ''), value: `-¥${evt.travelCost + lodgingCost + cargoCost + mg.moneySpent}`, positive: false });
         result.deltas.push({ icon: 'heart', label: '展会热情', value: `${fatiguePassion > 0 ? '+' : ''}${fatiguePassion}`, positive: fatiguePassion > 0 });
         if (fatigueDrain > 0) {
           state.passion -= fatigueDrain;
@@ -359,14 +378,14 @@ export function executeAction(state, actionId) {
         // === 亲参 but skipped minigame ===
         state.consecutiveConsigns = 0; // reset on attend
         state.passion -= 5;
-        addMoney(state, -(evt.travelCost + lodgingCost));
+        addMoney(state, -(evt.travelCost + lodgingCost + cargoCost));
         const fatigueBoost = Math.round(evt.passionBoost * eventFatigue);
         state.passion = Math.min(100, state.passion + fatigueBoost);
         addReputation(state, evt.reputationBoost);
         state.maxReputation = Math.max(state.maxReputation, state.reputation);
         state.attendingEvent = evt;
         result.deltas.push({ icon: 'storefront', label: `亲参 ${evt.name}@${evt.city}`, value: '(快速结算)', positive: true });
-        result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位', value: `-¥${evt.travelCost + lodgingCost}`, positive: false });
+        result.deltas.push({ icon: 'coins', label: '路费+住宿餐饮+摊位' + (cargoCost > 0 ? '+搬运' : ''), value: `-¥${evt.travelCost + lodgingCost + cargoCost}`, positive: false });
         if (fatigueDrain > 0) {
           state.passion -= fatigueDrain;
           result.deltas.push({ icon: 'battery-medium', label: '连续参展身心俱疲', value: `热情-${fatigueDrain}`, positive: false });
@@ -374,7 +393,12 @@ export function executeAction(state, actionId) {
       } else {
         // === 寄售 (consignment) ===
         state.consecutiveConsigns++;
-        const shipCost = Math.round(evt.travelCost * 0.3);
+        // Shipping cost: realistic courier rates (no free tier — everything must be shipped)
+        // Weight: HVP ~0.2kg, LVP ~0.08kg. SF Express-style tiered pricing.
+        const shipWeightKg = state.inventory.hvpStock * 0.2 + state.inventory.lvpStock * 0.08;
+        const shipPerKg = evt.city === '本市' ? 2 : evt.city === '邻市' ? 5 : evt.city === '异地' ? 18 : 10;
+        const shipFirstFee = evt.city === '本市' ? 10 : evt.city === '邻市' ? 15 : evt.city === '异地' ? 22 : 20;
+        const shipCost = Math.round(shipFirstFee + shipWeightKg * shipPerKg);
         state.passion -= 2;
         addMoney(state, -shipCost);
         const consignDiscount = 0.55; // consignment agent takes a cut + less engagement
@@ -1084,6 +1108,13 @@ export function executeAction(state, actionId) {
       const growth = Math.round(state.market.communitySize * 0.03);
       state.market.communitySize += growth;
       result.deltas.push({ icon: 'users', label: '基金吸引新人入圈', value: `社群+${growth}`, positive: true });
+      // Permanent time cost: running a fund takes ongoing effort (-1 day/month forever)
+      if (!state._fundEstablished) {
+        state._fundEstablished = true;
+        state.timeDebuffs.push({ id: 'fund_admin', reason: '新人基金运营', turnsLeft: 9999, delta: -1 });
+        state.time = computeEffectiveTime(state.turn, state.timeDebuffs);
+        result.deltas.push({ icon: 'hourglass', label: '基金运营占用时间', value: '每月闲暇永久-1天', positive: false });
+      }
     }
 
     // Add contacts from community sponsorship

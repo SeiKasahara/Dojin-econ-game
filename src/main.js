@@ -5,7 +5,7 @@
 
 import './style.css';
 import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost, calculateSales, getActionDisplay, needsPricing, rollEventCondition, rollPartnerBusy, getSponsorTiers } from './engine.js';
-import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderWorkNameInput, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp } from './ui.js';
+import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderWorkNameInput, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp, renderEventWorksSelector } from './ui.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES, getQualityStars } from './engine.js';
 import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
 import { ic } from './icons.js';
@@ -189,16 +189,48 @@ function handleAction(actionId) {
         }
 
         state._eventMode = mode;
+
+        // --- Works selection: choose which works to bring ---
+        const eventLabel = chosenEvent.name + '@' + chosenEvent.city;
+        renderEventWorksSelector(state, eventLabel, (worksSelection) => {
+          state._eventWorksSelection = worksSelection; // [{ workId, qty }]
+
+          // Apply selection to inventory NOW so minigame + CES see only selected works
+          const _savedQtys = new Map();
+          for (const w of state.inventory.works) {
+            _savedQtys.set(w.id, w.qty);
+            const sel = worksSelection.find(s => s.workId === w.id);
+            w.qty = sel ? Math.min(sel.qty, w.qty) : 0;
+          }
+          state.inventory.hvpStock = state.inventory.works.filter(w => w.type === 'hvp').reduce((s, w) => s + w.qty, 0);
+          state.inventory.lvpStock = state.inventory.works.filter(w => w.type === 'lvp').reduce((s, w) => s + w.qty, 0);
+
+          // Restore function: called after minigame/consign, before executeAction
+          const restoreInventory = () => {
+            for (const w of state.inventory.works) {
+              const orig = _savedQtys.get(w.id);
+              if (orig != null) {
+                const brought = worksSelection.find(s => s.workId === w.id)?.qty || 0;
+                const soldFromThis = Math.max(0, Math.min(brought, orig) - w.qty);
+                w.qty = orig - soldFromThis;
+              }
+            }
+            state.inventory.hvpStock = state.inventory.works.filter(w => w.type === 'hvp').reduce((s, w) => s + w.qty, 0);
+            state.inventory.lvpStock = state.inventory.works.filter(w => w.type === 'lvp').reduce((s, w) => s + w.qty, 0);
+            // Engine doesn't need to re-apply selection — already consumed
+            state._eventWorksSelection = null;
+          };
+
         if (mode === 'attend') {
           // 亲参 → play minigame
-          // Pre-compute CES floor so minigame can use it as per-customer buy minimum
+          // Pre-compute CES floor (now uses filtered inventory)
           const savedAttending = state.attendingEvent;
-          state.attendingEvent = { ...chosenEvent, salesBoost: chosenEvent.salesBoost }; // temp for CES calc
+          state.attendingEvent = { ...chosenEvent, salesBoost: chosenEvent.salesBoost };
           state.playerPrice.hvp = state.inventory?.hvpPrice || 50;
           state.playerPrice.lvp = state.inventory?.lvpPrice || 15;
-          const cesHvp = state.inventory?.hvpStock > 0 ? (calculateSales('hvp', state).hvpSales || 0) : 0;
-          const cesLvp = state.inventory?.lvpStock > 0 ? (calculateSales('lvp', state).lvpSales || 0) : 0;
-          state.attendingEvent = savedAttending; // restore
+          const cesHvp = state.inventory.hvpStock > 0 ? (calculateSales('hvp', state).hvpSales || 0) : 0;
+          const cesLvp = state.inventory.lvpStock > 0 ? (calculateSales('lvp', state).lvpSales || 0) : 0;
+          state.attendingEvent = savedAttending;
           const cesFloorTotal = cesHvp + cesLvp;
 
           syncBGM('minigame');
@@ -207,19 +239,23 @@ function handleAction(actionId) {
             removeLoadingOverlay();
             startMinigame(state, { ...chosenEvent, _cesFloor: cesFloorTotal }, (mgResult) => {
               state._minigameResult = mgResult || null;
+              restoreInventory();
               syncBGM('game');
               executeInMonth(actionId);
             });
           }).catch(() => {
             removeLoadingOverlay();
+            restoreInventory();
             syncBGM('game');
             executeInMonth(actionId);
           });
         } else {
           // 寄售 → skip minigame, use CES model
           state._minigameResult = null;
+          restoreInventory();
           executeInMonth(actionId);
         }
+        }, cancelBack); // close renderEventWorksSelector
       }, cancelBack);
     };
 
@@ -656,8 +692,8 @@ function handleAction(actionId) {
             <div class="price-btn sponsor-tier${t.unlocked ? '' : ' disabled'}" data-tier="${t.id}" style="padding:12px;cursor:${t.unlocked ? 'pointer' : 'not-allowed'};${t.unlocked ? '' : 'opacity:0.4;'}">
               <div style="font-weight:700;font-size:0.9rem">${ic(t.emoji || 'hand-heart')} ${t.name}</div>
               <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">${t.desc}</div>
-              <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">¥${t.cost.toLocaleString()} · 声誉↑ · 热情+${t.passionGain} · 曝光+${Math.round(t.infoGain * 100)}%${t.communityGrowth ? ' · 社群扩张' : ''}</div>
-              ${!t.unlocked ? `<div style="font-size:0.62rem;color:var(--danger);margin-top:2px">${ic('lock', '0.6rem')} ${state.money < t.cost ? '资金不足' : '需要更高声誉或更多经验'}</div>` : ''}
+              <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">¥${t.cost.toLocaleString()}${t.timeCost > 0 ? ` · ${t.timeCost}天` : ''} · 声誉↑ · 热情+${t.passionGain} · 曝光+${Math.round(t.infoGain * 100)}%${t.communityGrowth ? ' · 社群扩张' : ''}</div>
+              ${!t.unlocked ? `<div style="font-size:0.62rem;color:var(--danger);margin-top:2px">${ic('lock', '0.6rem')} ${state.money < t.cost ? '资金不足' : (state.time - (state.monthTimeSpent || 0)) < t.timeCost ? '闲暇不足' : '需要更高声誉或更多经验'}</div>` : ''}
             </div>
           `).join('')}
         </div>
@@ -680,6 +716,37 @@ function handleAction(actionId) {
     });
     overlay.querySelector('#btn-sponsor-go').addEventListener('click', () => {
       if (!selectedTier) return;
+      // Fund tier: show irreversibility warning
+      if (selectedTier === 'fund') {
+        const cs = state.market ? state.market.communitySize : 10000;
+        const monthlyCost = Math.round(300 + cs / 10000 * 200);
+        const warn = document.createElement('div');
+        warn.className = 'event-overlay';
+        warn.style.zIndex = '110';
+        warn.innerHTML = `
+          <div class="event-card" style="max-width:320px;text-align:center">
+            <div style="font-size:1.5rem;margin-bottom:8px">${ic('warning', '1.5rem')}</div>
+            <div style="font-weight:700;font-size:1rem;margin-bottom:8px;color:var(--danger)">这是一条不归路</div>
+            <div style="font-size:0.82rem;color:var(--text-light);line-height:1.7;margin-bottom:14px;text-align:left">
+              设立新人基金后，<b>无法撤销</b>。你将永久承担：<br/>
+              <span style="color:var(--danger)">· 每月闲暇 -1天</span>（运营事务）<br/>
+              <span style="color:var(--danger)">· 每月自动扣除 ¥${monthlyCost}</span>（运营费用）<br/><br/>
+              这意味着你的时间和资金都会被持续消耗——<br/>投入容易，抽身难。<br/><br/>
+              <span style="font-size:0.75rem;color:var(--text-muted);font-style:italic">"种下一棵树最好的时间是十年前，第二好的时间是现在。但浇水的责任，从此以后每一天都是你的。"</span>
+            </div>
+            <button class="btn btn-block" id="fund-confirm" style="background:#FFF0F0;border:1px solid var(--danger);color:var(--danger);margin-bottom:6px;font-weight:700">我想清楚了，设立基金</button>
+            <button class="btn btn-block" id="fund-cancel" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">再想想</button>
+          </div>`;
+        document.body.appendChild(warn);
+        warn.querySelector('#fund-cancel').addEventListener('click', () => warn.remove());
+        warn.querySelector('#fund-confirm').addEventListener('click', () => {
+          warn.remove();
+          state._sponsorTier = selectedTier;
+          overlay.remove();
+          executeInMonth(actionId);
+        });
+        return;
+      }
       state._sponsorTier = selectedTier;
       overlay.remove();
       executeInMonth(actionId);

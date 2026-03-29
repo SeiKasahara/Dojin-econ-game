@@ -86,6 +86,7 @@ const PERSISTENT_UNDERSCORED = new Set([
   '_partnerChatLastTurn',     // partner chat cooldown tracking
   '_clubContractFired',       // player club prediction contract (one-time)
   '_marketManipulated',       // achievement flag: won a club contract
+  '_fundEstablished',         // new creator fund established (permanent time debuff)
 ]);
 
 function cleanState(state) {
