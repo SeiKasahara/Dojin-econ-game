@@ -179,22 +179,27 @@ export const RANDOM_EVENTS = [
     weight: 4, when: (s) => getLifeStage(s.turn) === 'university', maxTotal: 2,
   },
   {
-    id: 'work_raise', emoji: 'trend-up', title: '升职加薪！',
-    desc: '工作表现不错，获得了加薪。但责任更重，时间更少...',
-    effect: '资金+1000 时间-1天（12~18月）', effectClass: 'neutral',
-    apply: (s) => { addMoney(s, 1000); s.timeDebuffs.push({ id: 'promotion', reason: '升职加责', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
+    id: 'work_raise', emoji: 'trend-up',
+    title: (s) => s.jobTier === 'elite' ? '绩效S级！股票期权到手' : s.jobTier === 'labor' ? '转正了！' : '升职加薪！',
+    desc: (s) => s.jobTier === 'elite' ? '年度考核拿到了最高评级，公司给了一笔不菲的期权。但KPI更高了...' : s.jobTier === 'labor' ? '从临时工转成了正式员工，工资涨了一点。至少稳定了。' : '工作表现不错，获得了加薪。但责任更重，时间更少...',
+    effect: (s) => { const bonus = s.jobTier === 'elite' ? 2500 : s.jobTier === 'labor' ? 300 : 1000; return `资金+${bonus} 时间-1天（12~18月）`; },
+    effectClass: 'neutral',
+    apply: (s) => { const bonus = s.jobTier === 'elite' ? 2500 : s.jobTier === 'labor' ? 300 : 1000; addMoney(s, bonus); s.timeDebuffs.push({ id: 'promotion', reason: s.jobTier === 'elite' ? 'KPI加码' : s.jobTier === 'labor' ? '转正加责' : '升职加责', turnsLeft: 12 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '高收入者的时间机会成本更高。',
-    weight: 4, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed && !s.fullTimeDoujin, maxTotal: 3,
+    weight: (s) => s.jobTier === 'elite' ? 6 : s.jobTier === 'labor' ? 2 : 4,
+    when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed && !s.fullTimeDoujin, maxTotal: 3,
   },
   {
-    id: 'work_996', emoji: 'building-office', title: '996加班季',
-    desc: '项目紧急，公司要求全员加班。几乎没有私人时间...',
-    effect: '时间-4天(3回合) 资金+500', effectClass: 'negative',
-    apply: (s) => { s.timeDebuffs.push({ id: '996', reason: '996加班', turnsLeft: 3, delta: -4 }); s.time = computeTime(s.turn, s.timeDebuffs); addMoney(s, 500); },
+    id: 'work_996', emoji: 'building-office',
+    title: (s) => s.jobTier === 'elite' ? '大厂冲刺季' : s.jobTier === 'labor' ? '连续加班排班' : '996加班季',
+    desc: (s) => s.jobTier === 'elite' ? '季度冲刺，全组通宵。OKR必须达标...' : s.jobTier === 'labor' ? '人手不够，连上三周没有休息日。身体快扛不住了...' : '项目紧急，公司要求全员加班。几乎没有私人时间...',
+    effect: (s) => { const bonus = s.jobTier === 'elite' ? 800 : s.jobTier === 'labor' ? 200 : 500; return `时间-4天(3回合) 资金+${bonus}`; },
+    effectClass: 'negative',
+    apply: (s) => { const bonus = s.jobTier === 'elite' ? 800 : s.jobTier === 'labor' ? 200 : 500; s.timeDebuffs.push({ id: '996', reason: s.jobTier === 'elite' ? '大厂冲刺' : s.jobTier === 'labor' ? '连续排班' : '996加班', turnsLeft: 3, delta: -4 }); s.time = computeTime(s.turn, s.timeDebuffs); addMoney(s, bonus); },
     tip: '滞胀特征：需要更多工作时间维持生活',
-    weight: 7, when: (s) => {
+    weight: (s) => s.jobTier === 'elite' ? 10 : s.jobTier === 'labor' ? 5 : 7,
+    when: (s) => {
       if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin) return false;
-      // Not during remote work, flexible hours, or dept transfer
       return !s.timeDebuffs.some(d => d.id.startsWith('remote_') || d.id.startsWith('flex_') || d.id.startsWith('transfer_'));
     }, maxTotal: Infinity,
   },
@@ -328,14 +333,16 @@ export const RANDOM_EVENTS = [
     weight: 5, when: (s) => getLifeStage(s.turn) === 'work', maxTotal: 3,
   },
   {
-    id: 'work_burnout', emoji: 'smiley-sad', title: '职业倦怠',
-    desc: '每天重复的工作内容让你感到麻木，回到家只想瘫着什么都不做，还忍不住冲动消费...',
-    effect: '热情-8 时间-2天(3回合) 资金-¥300~600', effectClass: 'negative',
-    apply: (s) => { s.passion = Math.max(0, s.passion - 8); addMoney(s, -(300 + Math.floor(Math.random() * 300))); s.timeDebuffs.push({ id: 'burnout_' + s.turn, reason: '职业倦怠', turnsLeft: 3, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); },
-    tip: '职业倦怠不是懒——是长期高强度低回报工作的心理防御机制。',
-    weight: 6, when: (s) => {
+    id: 'work_burnout', emoji: 'smiley-sad',
+    title: (s) => s.jobTier === 'labor' ? '身体吃不消了' : '职业倦怠',
+    desc: (s) => s.jobTier === 'labor' ? '日复一日的体力劳动让身体开始报警，膝盖酸痛、腰椎不适，回家倒头就睡...' : s.jobTier === 'elite' ? '高强度输出、无尽的评审会议、永远完不成的需求池……你开始怀疑自己到底在为谁画画。' : '每天重复的工作内容让你感到麻木，回到家只想瘫着什么都不做，还忍不住冲动消费...',
+    effect: (s) => { const drain = s.jobTier === 'labor' ? 12 : s.jobTier === 'elite' ? 6 : 8; return `热情-${drain} 时间-2天(3回合) 资金-¥300~600`; },
+    effectClass: 'negative',
+    apply: (s) => { const drain = s.jobTier === 'labor' ? 12 : s.jobTier === 'elite' ? 6 : 8; s.passion = Math.max(0, s.passion - drain); addMoney(s, -(300 + Math.floor(Math.random() * 300))); s.timeDebuffs.push({ id: 'burnout_' + s.turn, reason: s.jobTier === 'labor' ? '体力透支' : '职业倦怠', turnsLeft: 3, delta: -2 }); s.time = computeTime(s.turn, s.timeDebuffs); },
+    tip: (s) => s.jobTier === 'labor' ? '基层体力劳动的倦怠是身体层面的——不是不想画，是回家后真的抬不起手。' : '职业倦怠不是懒——是长期高强度低回报工作的心理防御机制。',
+    weight: (s) => s.jobTier === 'labor' ? 9 : s.jobTier === 'elite' ? 4 : 6,
+    when: (s) => {
       if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin) return false;
-      // Not during transfer to easy dept or partner support
       return !s.timeDebuffs.some(d => d.id.startsWith('transfer_') || d.id.startsWith('bestie_support_') || d.id.startsWith('bestie_save_'));
     }, maxTotal: Infinity,
   },
@@ -357,15 +364,18 @@ export const RANDOM_EVENTS = [
       }
     },
     tip: (s) => s.obsessiveTrait === 'social' ? '社交达人把每次聚会都变成了推广机会——别人在应付，你在享受。' : '职场社交是一种"强制消费"——你用时间和金钱购买的不是快乐，而是职场关系的维护成本。',
-    weight: 6, when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed && !s.fullTimeDoujin, maxTotal: Infinity,
+    weight: (s) => s.jobTier === 'elite' ? 8 : s.jobTier === 'labor' ? 2 : 6,
+    when: (s) => getLifeStage(s.turn) === 'work' && !s.unemployed && !s.fullTimeDoujin, maxTotal: Infinity,
   },
   {
-    id: 'commute_hell', emoji: 'train', title: '通勤地狱',
-    desc: '公司搬了办公地点，或者你不得不搬到更远的地方住。每天通勤时间大幅增加...',
+    id: 'commute_hell', emoji: 'train',
+    title: (s) => s.jobTier === 'labor' ? '工厂搬远了' : '通勤地狱',
+    desc: (s) => s.jobTier === 'labor' ? '工厂搬到了更偏远的工业区，每天通勤要多花一个多小时...' : '公司搬了办公地点，或者你不得不搬到更远的地方住。每天通勤时间大幅增加...',
     effect: '时间-1天（6~12月）', effectClass: 'negative',
-    apply: (s) => { s.timeDebuffs.push({ id: 'commute_' + s.turn, reason: '通勤时间增加', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
+    apply: (s) => { s.timeDebuffs.push({ id: 'commute_' + s.turn, reason: s.jobTier === 'labor' ? '工厂通勤' : '通勤时间增加', turnsLeft: 6 + Math.floor(Math.random() * 6), delta: -1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '通勤是城市生活最大的时间黑洞。',
-    weight: 3, when: (s) => {
+    weight: (s) => s.jobTier === 'elite' ? 2 : s.jobTier === 'labor' ? 5 : 3,
+    when: (s) => {
       if (getLifeStage(s.turn) !== 'work' || s.unemployed || s.fullTimeDoujin) return false;
       // Not during remote work
       return !s.timeDebuffs.some(d => d.id.startsWith('remote_'));

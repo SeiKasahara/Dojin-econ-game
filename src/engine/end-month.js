@@ -353,8 +353,9 @@ export function endMonth(state) {
         result.deltas.push({ icon: 'smiley-sad', label: '基层劳动消磨热情', value: `热情-${laborDrain}`, positive: false });
       }
 
-      // Recession: risk of losing job each month
-      const fireChance = Math.max(0.005, 0.06 - (BACKGROUNDS[state.background]?.fireResist || 0));
+      // Recession: risk of losing job each month (tier-aware)
+      const tierFireMod = state.jobTier === 'elite' ? 0.5 : state.jobTier === 'labor' ? 1.8 : 1.0;
+      const fireChance = Math.max(0.005, (0.06 - (BACKGROUNDS[state.background]?.fireResist || 0)) * tierFireMod);
       if (state.recessionTurnsLeft > 0 && Math.random() < fireChance) {
         state.unemployed = true;
         state.jobSearchTurns = 0;

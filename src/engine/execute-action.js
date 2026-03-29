@@ -666,12 +666,13 @@ export function executeAction(state, actionId) {
       state.lastReturnToWorkTurn = state.turn;
       if (state.doujinWorkYearReset > 0) state.doujinWorkYearReset = state.turn;
 
-      // Job-hopping debuff: applies to all tiers, scales with quit count
+      // Job-hopping debuff: applies to all tiers, duration/severity varies by tier
       const quitCount = state.doujinQuitCount || 0;
       if (quitCount >= 2) {
         const hopPenalty = Math.min(3, quitCount - 1); // 1, 2, 3
-        state.timeDebuffs.push({ id: 'job_hop_penalty', delta: -hopPenalty, turnsLeft: 6, reason: `频繁跳槽观察期 闲暇-${hopPenalty}天` });
-        result.deltas.push({ icon: 'warning', label: '频繁跳槽，新公司观察期', value: `闲暇-${hopPenalty}天/月（6个月）`, positive: false });
+        const hopDuration = jobTier === 'elite' ? 12 : jobTier === 'labor' ? 3 : 6;
+        state.timeDebuffs.push({ id: 'job_hop_penalty', delta: -hopPenalty, turnsLeft: hopDuration, reason: `频繁跳槽观察期 闲暇-${hopPenalty}天` });
+        result.deltas.push({ icon: 'warning', label: '频繁跳槽，新公司观察期', value: `闲暇-${hopPenalty}天/月（${hopDuration}个月）`, positive: false });
       }
 
       if (jobTier === 'elite') {

@@ -125,13 +125,15 @@ export function rollEvent(state) {
   if (eligible.length === 0) return null;
 
   // Apply weight reduction for money-loss events based on background
+  // weight can be a number or a function(state)
+  const getWeight = (e) => typeof e.weight === 'function' ? e.weight(state) : e.weight;
   const totalWeight = eligible.reduce((sum, e) => {
-    const w = MONEY_LOSS_EVENTS.has(e.id) ? e.weight * moneyLossWeightMult : e.weight;
+    const w = MONEY_LOSS_EVENTS.has(e.id) ? getWeight(e) * moneyLossWeightMult : getWeight(e);
     return sum + w;
   }, 0);
   let roll = Math.random() * totalWeight;
   for (const event of eligible) {
-    const w = MONEY_LOSS_EVENTS.has(event.id) ? event.weight * moneyLossWeightMult : event.weight;
+    const w = MONEY_LOSS_EVENTS.has(event.id) ? getWeight(event) * moneyLossWeightMult : getWeight(event);
     roll -= w;
     if (roll <= 0) return event;
   }

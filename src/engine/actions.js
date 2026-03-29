@@ -233,11 +233,14 @@ export function rollPartnerBusy(candidate) {
   return Math.random() < busyChance;
 }
 
-// Freelance time cost depends on life situation
+// Freelance time cost depends on life situation and job tier
 export function getFreelanceTimeCost(state) {
   if (state.unemployed || state.fullTimeDoujin) return 2;  // 失业/全职同人：时间多
   if (getLifeStage(state.turn) === 'university') return 3; // 学生：中等
-  return 5;                                               // 在职：下班后还要接稿，消耗大
+  // 在职：按工种分化
+  if (state.jobTier === 'elite') return 6;                 // 大厂加班多，几乎没时间接稿
+  if (state.jobTier === 'labor') return 4;                 // 基层体力活，但时间相对固定
+  return 5;                                               // 普通职员：下班后接稿
 }
 
 export function getTimeCost(state, actionId) {
