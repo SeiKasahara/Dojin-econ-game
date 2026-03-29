@@ -4,6 +4,7 @@
  */
 
 import { getLifeStage, getCreativeSkill, addMoney, addReputation, computeEffectiveTime, getCalendarMonth } from './engine/core.js';
+import { addContact } from './partner.js';
 
 // Find an HVP work eligible to become a "rare work" (海景房):
 // sold out 12+ months, quality >= 1.0 or cult hit, not already marked
@@ -526,5 +527,132 @@ export const RANDOM_EVENTS = [
     apply: (s) => { s.passion = Math.min(100, s.passion + 10); s.timeDebuffs.push({ id: 'bestie_booth_' + s.turn, reason: '闺蜜助阵', turnsLeft: 3, delta: 1 }); s.time = computeTime(s.turn, s.timeDebuffs); },
     tip: '展会上有个信任的人帮忙看摊，你才能放心去逛别的摊位、交换名片。这就是社交资本在实际场景中的价值。',
     weight: 2, when: (s) => (s.bestieAffinity || 0) >= 45 && (s.availableEvents?.length || 0) > 0, maxTotal: Infinity,
+  },
+  // === Mid-late game exclusive events ===
+  {
+    id: 'career_pivot', emoji: 'arrows-clockwise', title: '创意行业猎头找上门了',
+    desc: '一位创意行业的猎头联系了你："你的作品集很有潜力，我们有一个更贴近你兴趣的岗位。薪水略低，但工作时间宽松很多。"',
+    effect: '时间+2天（12月）收入略降', effectClass: 'positive',
+    apply: (s) => {
+      s.timeDebuffs.push({ id: 'career_pivot_' + s.turn, reason: '转行创意行业', turnsLeft: 12, delta: 2 });
+      s.time = computeTime(s.turn, s.timeDebuffs);
+      s.passion = Math.min(100, s.passion + 5);
+    },
+    tip: '转行到创意行业是很多同人创作者的隐性目标——虽然收入可能下降，但时间自由度的提升往往能带来更高的创作产出和满足感。经济学上这是用收入换取闲暇的理性选择。',
+    weight: 3, when: (s) => s.turn > 96 && getLifeStage(s.turn) === 'work' && !s.fullTimeDoujin && !s.unemployed, maxTotal: 1,
+  },
+  {
+    id: 'mentee_appears', emoji: 'graduation-cap', title: '有新人来请教你了',
+    desc: '一位刚入圈的创作者发来私信，说你的作品是TA入坑的契机，想向你请教创作经验。带新人很有成就感，但也需要额外花时间。',
+    effect: '热情+12 声誉+0.3 时间-1天（6月）', effectClass: 'positive',
+    apply: (s) => {
+      s.passion = Math.min(100, s.passion + 12);
+      addReputation(s, 0.3);
+      s.timeDebuffs.push({ id: 'mentee_' + s.turn, reason: '带新人', turnsLeft: 6, delta: -1 });
+      s.time = computeTime(s.turn, s.timeDebuffs);
+    },
+    tip: '带新人是同人社群代际传承的核心机制。你花费的时间会转化为社群的"社会资本"——新人成长后会记住谁帮过TA，形成长期的声誉网络效应。',
+    weight: 4, when: (s) => s.reputation >= 4 && s.turn > 110 && s.totalHVP >= 5, maxTotal: 2,
+  },
+  {
+    id: 'legacy_rediscovery', emoji: 'sparkle', title: '旧作被挖坟安利了！',
+    desc: '有人在论坛发了一个"被低估的宝藏作品"帖子，你多年前的一部作品赫然在列。评论区很多人表示"居然现在才发现这么好的东西"。',
+    effect: '信息+25% 热情+6', effectClass: 'positive',
+    apply: (s) => {
+      s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.25);
+      s.passion = Math.min(100, s.passion + 6);
+    },
+    tip: '同人作品的生命周期比商业作品更长——因为没有营销预算的时效性，好作品可以在社群中通过口碑持续被发现。这就是"长尾效应"在同人市场的体现。',
+    weight: 4, when: (s) => s.turn > 134 && s.totalHVP >= 8, maxTotal: 2,
+  },
+  {
+    id: 'fandom_split', emoji: 'warning-circle', title: '圈子CP大战！',
+    desc: '两个主要CP派系爆发了激烈的论战，整个圈子被撕裂成两半。无论你站不站队，都会被卷入这场风暴...',
+    effect: (s) => {
+      const lucky = Math.random() < 0.5;
+      return lucky ? '热情-5 声誉+0.5（站对了队）' : '热情-5 声誉-0.3（被误伤）';
+    },
+    effectClass: 'negative',
+    apply: (s) => {
+      s.passion = Math.max(0, s.passion - 5);
+      if (Math.random() < 0.5) {
+        addReputation(s, 0.5);
+      } else {
+        addReputation(s, -0.3);
+      }
+    },
+    tip: 'CP战争是同人圈特有的"派系冲突"——本质上是消费者偏好的不可调和性。在网络效应下，社群分裂会导致整体活跃度下降，但各小圈子的内部凝聚力反而可能增强。',
+    weight: 3, when: (s) => s.turn > 86 && s.market && s.market.communitySize > 8000, maxTotal: 2,
+  },
+  {
+    id: 'health_warning', emoji: 'first-aid', title: '体检报告亮红灯了',
+    desc: '年度体检结果出来，好几项指标都不正常。医生严肃地说："你必须调整作息，减少熬夜。接下来要做进一步检查和治疗。"',
+    effect: '资金-¥2000 热情-5 时间-2天（3月）', effectClass: 'negative',
+    apply: (s) => {
+      addMoney(s, -2000);
+      s.passion = Math.max(0, s.passion - 5);
+      s.timeDebuffs.push({ id: 'health_warning_' + s.turn, reason: '身体检查', turnsLeft: 3, delta: -2 });
+      s.time = computeTime(s.turn, s.timeDebuffs);
+    },
+    tip: '长期熬夜创作的代价是延后的——年轻时透支的体力会在中年以健康问题的形式集中爆发。体力禀赋低的创作者尤其要注意：身体是不可再生的资源。',
+    weight: 3, when: (s) => s.turn > 158 && (s.endowments.stamina || 0) <= 1, maxTotal: 1,
+  },
+  {
+    id: 'underground_anthology', emoji: 'book-open', title: '受邀参与高质量合志',
+    desc: '圈内几位知名创作者正在筹划一本主题合志，你收到了邀请函。这是一个和大佬们同台亮相的好机会，但要在截稿日前完成高质量的稿件。',
+    effect: '声誉+0.5 热情+8 时间-2天（2月）', effectClass: 'positive',
+    apply: (s) => {
+      addReputation(s, 0.5);
+      s.passion = Math.min(100, s.passion + 8);
+      s.timeDebuffs.push({ id: 'anthology_' + s.turn, reason: '参与合志', turnsLeft: 2, delta: -2 });
+      s.time = computeTime(s.turn, s.timeDebuffs);
+    },
+    tip: '合志是同人圈的"联名款"——多位创作者的声誉形成互补效应，参与者都能获得超过单独创作的曝光。这是社群协作的经典正外部性案例。',
+    weight: 4, when: (s) => s.turn > 134 && s.reputation >= 3 && getCreativeSkill(s) >= 2, maxTotal: 2,
+  },
+  {
+    id: 'generational_shift', emoji: 'users', title: '新一代粉丝的审美变了',
+    desc: '你发现最近涌入的新粉丝喜欢的风格和你擅长的完全不同。评论区开始出现"画风有点老气"的声音，这让你既不甘又焦虑...',
+    effect: '技艺经验+30 热情-8', effectClass: 'neutral',
+    apply: (s) => {
+      s.skillExp = (s.skillExp || 0) + 30;
+      s.passion = Math.max(0, s.passion - 8);
+    },
+    tip: '审美代际更替是文化产业的客观规律。被迫学习新风格虽然痛苦，但也是技艺成长的催化剂——最有生命力的创作者，往往是那些既保持个人风格又能吸收新潮流的人。',
+    weight: 5, when: (s) => s.turn > 182, maxTotal: 1,
+  },
+  {
+    id: 'doujin_documentary', emoji: 'video', title: '有人要拍你的纪录片！',
+    desc: '一位独立纪录片导演联系你，想以你为主角拍一部关于同人创作者的纪录片。"你的故事很有代表性——从大学社团到现在，十几年的坚持本身就是最好的剧本。"',
+    effect: '声誉+1.0 信息+40% 热情+8', effectClass: 'positive',
+    apply: (s) => {
+      addReputation(s, 1.0);
+      s.infoDisclosure = Math.min(1, s.infoDisclosure + 0.4);
+      s.passion = Math.min(100, s.passion + 8);
+    },
+    tip: '纪录片是同人文化"被看见"的重要途径——它将亚文化转译为大众叙事，带来的不仅是个人曝光，更是整个社群的合法性提升。但信息高度披露也意味着你将失去匿名创作的自由。',
+    weight: 2, when: (s) => s.turn > 158 && s.reputation >= 6 && s.totalHVP >= 10, maxTotal: 1,
+  },
+  {
+    id: 'old_collab_returns', emoji: 'chat-circle', title: '大学时代的搭档找回来了',
+    desc: '你突然收到一条消息："还记得我吗？我们大学时一起做过本子的！最近又想开始画了，能加个好友吗？" 多年未见，但默契还在。',
+    effect: '获得一位高亲密度联系人 热情+10', effectClass: 'positive',
+    apply: (s) => {
+      s.passion = Math.min(100, s.passion + 10);
+      addContact(s, { source: 'old_collab', affinity: 3.5 });
+    },
+    tip: '沉睡的社交关系可以被重新激活——而且由于共同经历的信任基础，重建关系的成本远低于从零开始。这是社会资本的"休眠期"特性：关系不会归零，只是需要一个契机唤醒。',
+    weight: 3, when: (s) => s.turn > 134 && !s.hasPartner, maxTotal: 1,
+  },
+  {
+    id: 'creative_plateau', emoji: 'wall', title: '风格成熟，但也成了牢笼',
+    desc: '你已经形成了自己独特的风格，粉丝也因此而关注你。但你越来越觉得自己在重复——每一笔都太熟练了，缺少了当初那种探索的刺激感...',
+    effect: '热情-10 下一部HVP将获得突破加成', effectClass: 'neutral',
+    apply: (s) => {
+      s.passion = Math.max(0, s.passion - 10);
+      s._plateauBreakthroughPending = true;
+    },
+    tip: '创作高原期是技艺成熟后的必经之路——心理学称之为"专家困境"。突破的关键不是学习新技术，而是主动打破舒适区。痛苦本身就是成长的信号，下一部作品往往会因此获得质的飞跃。',
+    weight: 4, when: (s) => s.turn > 110 && getCreativeSkill(s) >= 3, maxTotal: 2,
   },
 ];

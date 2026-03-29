@@ -1,7 +1,7 @@
 import { getLifeStage, getCreativeSkill, getSkillEffects, addReputation } from './core.js';
 import { getWorkQualityEffects, getTrendBonus, syncInventoryAggregates } from './definitions.js';
 import { getMarketAvgPrice, getCompetitionModifier } from '../market.js';
-import { getSecondHandModifier } from '../official.js';
+import { getSecondHandModifier, computeIPPhase } from '../official.js';
 import { getAdvancedSalesMod } from '../advanced.js';
 import { PARTNER_TYPES } from '../partner.js';
 
@@ -14,6 +14,29 @@ const SAT_COEFF_LVP  = 0.012;      // LVP饱和系数 (谷子饱和更慢)
 const SAT_FLOOR      = 0;          // 完全饱和=0需求，不保底
 const AGE_RAMP       = 8;          // 年龄惩罚爬满月数
 const BASE_AGE_DECAY = 0.15;       // 无二手压力时的基础年龄衰减
+
+// === IP Phase sales modifier ===
+function getIPPhaseModifier(official, communitySize) {
+  if (!official) return { hvp: 1.0, lvp: 1.0 };
+  const phase = computeIPPhase(official);
+  // Small community loyalty bonus during twilight/death:
+  // Fewer than 5000 people = tight-knit circle, fans are devoted repeat buyers.
+  // HVP gets stronger premium (collectors), LVP penalty softened (fans buy everything from creators they know).
+  const isSmall = (communitySize || 10000) < 5000;
+  switch (phase) {
+    case 'growth':   return { hvp: 1.15, lvp: 1.15 };
+    case 'peak':     return { hvp: 1.0,  lvp: 1.0  };
+    case 'decline':  return { hvp: 0.85, lvp: 0.75 };
+    case 'twilight': return isSmall
+      ? { hvp: 1.30, lvp: 0.80 }  // small circle: loyal fans pay premium for HVP, still buy some LVP
+      : { hvp: 1.10, lvp: 0.50 }; // large circle: moderate HVP premium, LVP collapses
+    case 'death':    return isSmall
+      ? { hvp: 0.60, lvp: 0.25 }  // small circle: even in death, a handful of diehards remain
+      : { hvp: 0.30, lvp: 0.10 }; // large circle: almost no one left
+    case 'revival':  return { hvp: 1.30, lvp: 1.20 };
+    default:         return { hvp: 1.0,  lvp: 1.0  };
+  }
+}
 
 // Sell items from works array, weighted by per-work attractiveness
 // Each work's demand share is determined by: quality, trend, novelty, saturation, age
@@ -29,6 +52,8 @@ export function sellFromWorks(state, type, baseDemand) {
 
   // Phase 1: compute per-work attractiveness weight
   const satCoeff = type === 'hvp' ? SAT_COEFF_HVP : SAT_COEFF_LVP;
+  const phaseMod = getIPPhaseModifier(state.official, communitySize);
+  const phaseModForType = type === 'hvp' ? phaseMod.hvp : phaseMod.lvp;
   const workData = works.map(w => {
     const age = Math.max(0, state.turn - (w.turn || state.turn));
     // Quality multiplier (per-work, was previously global)
@@ -69,9 +94,9 @@ export function sellFromWorks(state, type, baseDemand) {
     else if (pr > 1.4) priceMult = 0.7;
     else if (pr < 0.15) priceMult = 0.2;
     else if (pr < 0.3) priceMult = 0.5;
-    // Combined attractiveness
-    const workMult = qualityMult * trendMult * noveltyBonus * saturationFactor * ageDecay * priceMult;
-    return { work: w, workMult, qualityMult, trendMult, noveltyBonus, saturationFactor, ageDecay, priceMult };
+    // Combined attractiveness (includes IP phase modifier)
+    const workMult = qualityMult * trendMult * noveltyBonus * saturationFactor * ageDecay * priceMult * phaseModForType;
+    return { work: w, workMult, qualityMult, trendMult, noveltyBonus, saturationFactor, ageDecay, priceMult, phaseMod: phaseModForType };
   });
 
   // Phase 2: sort by attractiveness (best first)

@@ -16,12 +16,33 @@ export function createOfficialState(ipType = 'normal') {
     shadowPrice: 0,         // P_D: negative=subsidy, positive=restriction
     lastReleaseType: null,  // 'major'|'minor'|null
 
+    // IP Lifecycle Phase (derived from initial ipHeat)
+    ipPhase: ipType === 'cold' ? 'decline' : 'growth',
+    phaseTransitionTurn: 0,      // turn when last phase transition occurred
+    revivalTurnsLeft: 0,         // countdown for revival phase (6 turns)
+
     // Second-hand market
     secondHandPool: { hvp: 0, lvp: 0 },  // aggregate available secondhand items
     secondHandPressure: 0,                 // 0-1, how much secondhand is eating into new sales
     playerInventory: [],                    // player's past works: [{ type, turn, reputation, qty }]
   };
 }
+
+// === IP Lifecycle Phase computation ===
+export function computeIPPhase(official) {
+  if (official.revivalTurnsLeft > 0) return 'revival';
+  const h = official.ipHeat;
+  if (h >= 70) return 'growth';
+  if (h >= 50) return 'peak';
+  if (h >= 20) return 'decline';
+  if (h >= 5) return 'twilight';
+  return 'death';
+}
+
+const IP_PHASE_NAMES = {
+  growth: '上升期', peak: '鼎盛期', decline: '衰退期',
+  twilight: '黄昏期', death: '消亡期', revival: '复兴期',
+};
 
 // === Tick Official IP each turn ===
 export function tickOfficial(official, market, playerState) {
@@ -105,8 +126,84 @@ export function tickOfficial(official, market, playerState) {
   }
 
   // IP Heat update
-  const heatDelta = officialInput + doujinContrib - lambda * official.ipHeat;
+  const prevHeat = official.ipHeat;
+  const prevPhase = official.ipPhase || computeIPPhase(official);
+  // Phase-specific decay modifier: decline phase accelerates decay
+  const phaseDecayMult = prevPhase === 'decline' ? 1.2 : 1.0;
+  const heatDelta = officialInput + doujinContrib - (lambda * phaseDecayMult) * official.ipHeat;
   official.ipHeat = Math.max(0, Math.min(100, official.ipHeat + heatDelta));
+
+  // --- IP Phase transition logic ---
+  const heatJump = official.ipHeat - prevHeat;
+  // Check revival trigger: ipHeat jumped >= 20 from twilight/death
+  if ((prevPhase === 'twilight' || prevPhase === 'death') && heatJump >= 20) {
+    official.revivalTurnsLeft = 6;
+  }
+  // Decrement revival countdown
+  if (official.revivalTurnsLeft > 0) {
+    official.revivalTurnsLeft--;
+  }
+  const newPhase = computeIPPhase(official);
+  if (newPhase !== prevPhase) {
+    official.ipPhase = newPhase;
+    official.phaseTransitionTurn = playerState.turn;
+    const phaseName = IP_PHASE_NAMES[newPhase];
+    const phaseEventMap = {
+      growth:   { emoji: 'fire',      effectClass: 'positive', desc: 'IP进入上升期！官方势头强劲，整个圈子充满活力。', effect: 'IP进入上升期' },
+      peak:     { emoji: 'star',      effectClass: 'positive', desc: 'IP进入鼎盛期，热度稳定在高位，创作和消费都很活跃。', effect: 'IP进入鼎盛期' },
+      decline:  { emoji: 'warning',   effectClass: 'negative', desc: 'IP开始走下坡路了...官方内容减少，热度逐渐流失。衰退期的热度衰减会加速。', effect: 'IP进入衰退期 热度衰减加速' },
+      twilight: { emoji: 'hourglass', effectClass: 'negative', desc: 'IP进入黄昏期。只有最忠实的粉丝还在，高价值创作反而稀缺溢价，但低价值品几乎卖不动。', effect: 'IP进入黄昏期 谷子销量大幅下降' },
+      death:    { emoji: 'snowflake', effectClass: 'negative', desc: 'IP几乎消亡了...社群所剩无几，只有极少数人还记得这个作品。', effect: 'IP进入消亡期' },
+      revival:  { emoji: 'sparkles',  effectClass: 'positive', desc: 'IP奇迹般地复兴了！沉寂已久的作品重新成为话题，大量新老粉丝涌入，创作迎来第二春。', effect: 'IP复兴！销量大幅提升（持续6个月）' },
+    };
+    const pe = phaseEventMap[newPhase];
+    events.push({
+      type: 'ip_phase_transition', emoji: pe.emoji,
+      title: `IP生命周期：${phaseName}`,
+      desc: pe.desc, effect: pe.effect, effectClass: pe.effectClass,
+      tip: newPhase === 'revival' ? '复兴期是难得的窗口——抓紧创作，复兴只持续6个月。'
+        : newPhase === 'twilight' ? '黄昏期的高价值创作（同人本）反而有溢价——稀缺性让真爱粉愿意付更多。但谷子已经没人买了。'
+        : newPhase === 'decline' ? '衰退期要做好转型准备。可以考虑转向其他IP，或者深耕核心粉丝。'
+        : newPhase === 'death' ? '消亡期的IP几乎没有商业价值。除非官方奇迹般复活，否则建议尽早转型。'
+        : 'IP处于良好状态，正是创作的好时机。',
+    });
+  } else {
+    official.ipPhase = newPhase;
+  }
+
+  // --- IP Breakthrough: cold IP sleeper hit (only for initially cold IPs) ---
+  // When a cold IP's heat stays in growth/revival (>=70) for 6+ consecutive months, it upgrades.
+  // This only applies to IPs that started as cold — hot/normal IPs cycling through
+  // decline→revival is a natural fluctuation, not a "breakthrough".
+  // Only cold IPs can break through (one-time: cold → normal).
+  // Normal/hot IPs grow via the lifecycle phase system, not ipType changes.
+  if (market._initialIpType === 'cold' && market.ipType === 'cold') {
+    if (newPhase === 'growth' || newPhase === 'revival') {
+      official._growthStreak = (official._growthStreak || 0) + 1;
+    } else {
+      official._growthStreak = 0;
+    }
+    if (official._growthStreak >= 6) {
+      market.ipType = 'normal';
+      market.carryingCapacity = 25000;
+      official._growthStreak = 0;
+      events.push({
+        type: 'ip_breakthrough', emoji: 'rocket',
+        title: '冷门逆袭！IP被发掘了',
+        desc: '曾经无人问津的冷门作品，在持续的创作热潮和官方关注下终于迎来了爆发！社群天花板大幅提升，更多创作者和粉丝涌入。这就是同人力量创造的奇迹——你们的热爱让官方都重新重视起了这个IP。',
+        effect: '社群上限→25,000 官方活动频率↑ 衰减速度↓',
+        effectClass: 'positive',
+        tip: '冷门IP逆袭成功！这就是"小众变主流"——当累积的创作质量突破临界点，网络效应会让增长变成指数级的。但更大的市场也意味着更多竞争者涌入和更高的信号通胀。',
+      });
+    }
+  }
+
+  // Twilight phase: suppress official events (official has given up)
+  if (newPhase === 'twilight' || newPhase === 'death') {
+    official.officialActive = false;
+  } else if (!official.officialActive && (newPhase === 'growth' || newPhase === 'peak' || newPhase === 'revival')) {
+    official.officialActive = true;
+  }
 
   // Shadow price decays back to 0 over time
   official.shadowPrice *= 0.9;
@@ -172,13 +269,32 @@ export function getResaleValue(work, currentTurn) {
   return Math.max(5, price);
 }
 
-// === IP Heat narratives ===
+// === IP Heat narratives (phase-aware) ===
 export function getOfficialNarratives(official) {
   const phrases = [];
-  if (official.ipHeat > 80) phrases.push(`${ic('fire')} IP热度很高，创作正当时！`);
-  else if (official.ipHeat > 50) phrases.push('IP热度尚可，官方和同人共同维持着话题度。');
-  else if (official.ipHeat > 20) phrases.push(`${ic('warning')} IP热度在下降。官方断更太久，只靠同人在续命...`);
-  else phrases.push(`${ic('snowflake')} IP几乎被遗忘了。只有最核心的同人创作者还在坚持。社群正在萎缩...`);
+  const phase = official.ipPhase || computeIPPhase(official);
+  const phaseName = IP_PHASE_NAMES[phase] || phase;
+
+  switch (phase) {
+    case 'growth':
+      phrases.push(`${ic('fire')} IP正处于【${phaseName}】，热度高涨，创作正当时！`);
+      break;
+    case 'peak':
+      phrases.push(`${ic('star')} IP处于【${phaseName}】，热度稳定，官方和同人共同维持着繁荣。`);
+      break;
+    case 'decline':
+      phrases.push(`${ic('warning')} IP进入【${phaseName}】。热度在加速流失，官方更新变少了...`);
+      break;
+    case 'twilight':
+      phrases.push(`${ic('hourglass')} IP已步入【${phaseName}】。只有最忠实的粉丝还在坚持，同人本反而成了稀缺品。`);
+      break;
+    case 'death':
+      phrases.push(`${ic('snowflake')} IP进入【${phaseName}】。几乎被遗忘了，社群所剩无几...`);
+      break;
+    case 'revival':
+      phrases.push(`${ic('sparkles')} IP正在【${phaseName}】！沉寂的作品重获新生，创作迎来黄金窗口！（剩余${official.revivalTurnsLeft}个月）`);
+      break;
+  }
 
   if (official.dormancyTurns > 12) phrases.push('官方已经' + official.dormancyTurns + '个月没有任何动静了...');
 

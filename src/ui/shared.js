@@ -201,6 +201,35 @@ export function buildNarrativeSections(state) {
   if (state.turn === 38) personal.push('大四上学期，秋招、考研，现实的压力越来越大。还能坚持创作吗？');
   if (state.turn === 50) personal.push('毕业了，正式踏入社会。工作占据了大部分时间，但每个月有了固定收入。同人创作从此成了"业余爱好"...');
 
+  // === Work stage milestones ===
+  if (state.turn === 62) personal.push('工作一年了。下班回家打开画板的那一刻，才觉得这一天真正属于自己。同事们聊房价、聊绩效，你默默想着下一本的分镜。');
+  if (state.turn === 86) {
+    const peer = state.reputation >= 3 ? '你在圈里已经有了名气，但现实世界里没人知道这意味着什么。' : '同龄人升职的升职，你还在为几十本的销量开心。';
+    personal.push(`25岁了。朋友圈里都是晒offer和旅行的，而你的快乐是新刊售罄。${peer}`);
+  }
+  if (state.turn === 110) personal.push('工作第五年。画技在进步，但每天下班后拖着疲惫的身体还要打开软件，这件事本身就是一种战斗。你开始理解为什么很多人在这个阶段退坑了。');
+  if (state.turn === 134) {
+    personal.push('快三十了。家里开始催婚，同学聚会时总有人问"你那个画画的爱好还在搞吗？"你笑着点头，心里五味杂陈。');
+    if (state.fullTimeDoujin) personal.push('全职同人这条路没有先例可循，每一步都是你自己趟出来的。');
+  }
+  if (state.turn === 158) {
+    const skillNote = getCreativeSkill(state) >= 3 ? '你的技艺已经相当精湛了——至少在这个圈子里，你的名字意味着品质保证。' : '虽然技艺还在磨练，但这么多年的坚持本身就是一种天赋。';
+    personal.push(`三十出头。${skillNote}有新人给你发私信请教入坑经验，你突然意识到自己不知不觉已经成了"前辈"。`);
+  }
+  if (state.turn === 182) personal.push('33岁。你见过太多人来了又走——曾经一起摆摊的朋友，有人转行了，有人结婚后再也没出过新刊。而你还在这里，还在画。这大概就是所谓的热爱吧。');
+  if (state.turn === 206) {
+    personal.push('35岁。熬夜赶稿第二天明显比以前难恢复了。你开始认真考虑作息时间这件事——身体在提醒你，它不是无限的资源。');
+  }
+  if (state.turn === 230) {
+    const repNote = state.reputation >= 6 ? '后辈们提到你的名字时语气里带着敬意。你在这个圈子的故事，已经成了一种传说。' : '虽然不是什么大佬，但能坚持到现在的人本就寥寥无几。你的存在本身就有意义。';
+    personal.push(`37岁。做同人已经快二十年了。${repNote}`);
+  }
+  if (state.turn === 254) personal.push('39岁。翻到自己十年前的本子，画工青涩得让人发笑。但那个时候的热情和冲劲，纸张都快兜不住了。你有多久没有那种"非画不可"的冲动了？');
+  if (state.turn === 278) {
+    const legacy = state.totalHVP >= 15 ? `你已经出了${state.totalHVP}本同人志——这是一份相当厚实的创作年表。` : '作品数量也许不多，但每一本都是认真做的。';
+    personal.push(`41岁。${legacy}不管接下来怎样，这段旅程已经足够精彩。`);
+  }
+
   if (state.passion > 85) personal.push('你充满干劲，灵感源源不断！');
 
   if (state.hasPartner && state.partnerType) {

@@ -2,6 +2,7 @@ import { ENDOWMENTS, HVP_SUBTYPES, LVP_SUBTYPES } from '../engine.js';
 import { ic, escapeHtml } from '../icons.js';
 import { fogConfidence, fogTrend, fogConsumerAlpha, fogSecondHand, fogCreatorRange, fogCreatorCount } from '../market-fog.js';
 import { buildNarrativeSections } from './shared.js';
+import { computeIPPhase } from '../official.js';
 
 export function openMarketApp(state) {
   const market = state.market;
@@ -11,7 +12,10 @@ export function openMarketApp(state) {
   let marketHtml = '';
   if (market) {
     const ipHeat = official ? Math.round(official.ipHeat) : 80;
-    const ipColor = ipHeat > 60 ? '#E74C3C' : ipHeat > 30 ? 'var(--warning)' : '#888';
+    const ipPhase = official ? computeIPPhase(official) : 'peak';
+    const ipPhaseNames = { growth: '上升期', peak: '鼎盛期', decline: '衰退期', twilight: '黄昏期', death: '消亡期', revival: '复兴期' };
+    const ipPhaseColors = { growth: '#E74C3C', peak: 'var(--primary)', decline: 'var(--warning)', twilight: '#9B59B6', death: '#888', revival: '#E91E63' };
+    const ipColor = ipPhaseColors[ipPhase] || '#888';
     const divPct = Math.round(market.diversityHealth * 100);
     const confPct = Math.round(market.marketConfidence * 100);
     const divColor = divPct > 60 ? 'var(--success)' : divPct > 30 ? 'var(--warning)' : 'var(--danger)';
@@ -35,7 +39,7 @@ export function openMarketApp(state) {
       <div style="display:flex;flex-direction:column;gap:8px;padding:0 4px 12px">
         <div class="stat-row"><span class="stat-icon">${ic('users')}</span><span class="stat-label">多样</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${divPct}%;background:linear-gradient(90deg,${divColor},${divColor}88)"></div></div><span class="stat-value" style="color:${divColor}">${divLabel}</span></div>
         <div class="stat-row"><span class="stat-icon">${ic(confFog.icon)}</span><span class="stat-label">信心</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${confPct}%;background:linear-gradient(90deg,${confFog.color},${confFog.color}88)"></div></div><span class="stat-value" style="color:${confFog.color}">${confFog.label}</span></div>
-        <div class="stat-row"><span class="stat-icon">${ic('film-strip')}</span><span class="stat-label">IP热</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${ipHeat}%;background:linear-gradient(90deg,${ipColor},${ipColor}88)"></div></div><span class="stat-value">${ipHeat > 60 ? '火热' : ipHeat > 30 ? '温和' : '冷淡'}</span></div>
+        <div class="stat-row"><span class="stat-icon">${ic('film-strip')}</span><span class="stat-label">IP热</span><div class="stat-bar-wrap"><div class="stat-bar" style="width:${ipHeat}%;background:linear-gradient(90deg,${ipColor},${ipColor}88)"></div></div><span class="stat-value" style="color:${ipColor}">${ipPhaseNames[ipPhase] || '未知'}</span></div>
       </div>
       ${trendFog ? `<div style="font-size:0.78rem;padding:8px 4px;color:var(--primary);font-weight:600;border-top:1px solid var(--border)">${ic('fire')} 热门话题:「${trendFog.tag}」${trendFog.heat}</div>` : ''}
       ${alphaFog ? `<div style="font-size:0.75rem;color:var(--danger);padding:4px">${ic('warning')} ${alphaFog}</div>` : ''}

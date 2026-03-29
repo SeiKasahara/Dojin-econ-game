@@ -76,6 +76,7 @@ export function createMarketState(communityPreset = 'mid', ipType = 'normal') {
     nLVP: Math.max(5, Math.round(p.nLVP * creatorScale)),
     communitySize: cappedSize,
     ipType,
+    _initialIpType: ipType,  // immutable: tracks original IP type for breakthrough logic
     carryingCapacity: ip.carryingCapacity,
     hvpZeroStreak: 0,
     consumerAlpha: 1.0,
