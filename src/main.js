@@ -205,7 +205,7 @@ function handleAction(actionId) {
           state.inventory.hvpStock = state.inventory.works.filter(w => w.type === 'hvp').reduce((s, w) => s + w.qty, 0);
           state.inventory.lvpStock = state.inventory.works.filter(w => w.type === 'lvp').reduce((s, w) => s + w.qty, 0);
 
-          // Restore function: called after minigame/consign, before executeAction
+          // Restore function: called after executeAction to add back works not brought to this event
           const restoreInventory = () => {
             for (const w of state.inventory.works) {
               const orig = _savedQtys.get(w.id);
@@ -239,20 +239,20 @@ function handleAction(actionId) {
             removeLoadingOverlay();
             startMinigame(state, { ...chosenEvent, _cesFloor: cesFloorTotal }, (mgResult) => {
               state._minigameResult = mgResult || null;
-              restoreInventory();
+              state._restoreEventInventory = restoreInventory;
               syncBGM('game');
               executeInMonth(actionId);
             });
           }).catch(() => {
             removeLoadingOverlay();
-            restoreInventory();
+            state._restoreEventInventory = restoreInventory;
             syncBGM('game');
             executeInMonth(actionId);
           });
         } else {
           // 寄售 → skip minigame, use CES model
           state._minigameResult = null;
-          restoreInventory();
+          state._restoreEventInventory = restoreInventory;
           executeInMonth(actionId);
         }
         }, cancelBack); // close renderEventWorksSelector
@@ -775,6 +775,12 @@ function handleAction(actionId) {
 // === Month Loop: every action shows full result, month-end is silent transition ===
 function executeInMonth(actionId) {
   const { result, monthOver } = executeAction(state, actionId);
+
+  // Restore event inventory: add back works not brought to this event, deduct sold
+  if (state._restoreEventInventory) {
+    state._restoreEventInventory();
+    state._restoreEventInventory = null;
+  }
 
   // Immediate gameover (goCommercial, etc.)
   if (state.phase === 'gameover') {
