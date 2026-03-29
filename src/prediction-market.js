@@ -266,7 +266,7 @@ export function openPredictionMarket(state) {
         ${contractsHtml || '<div style="font-size:0.72rem;color:var(--text-muted);text-align:center;padding:16px">暂无可交易的合约</div>'}
         ${historyHtml}
         <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:10px 0;line-height:1.5">
-          ${ic('warning', '0.55rem')} 每份YES+NO=¥100 · 单合约最大赔付¥2,000(20份) · 买入上限资金30%<br>
+          ${ic('warning', '0.55rem')} 每份YES+NO=¥100 · 单合约最大赔付¥2,000(20份) · 同时最多5笔持仓 · 买入上限资金30%<br>
           到期结算: 正确方每份=¥100 · 错误方=¥0
         </div>
       </div>
@@ -291,6 +291,12 @@ export function openPredictionMarket(state) {
       const side = btn.dataset.side;
       const contract = pm.contracts.filter(c => state.turn < c.resolveTurn)[cidx];
       if (!contract) return;
+      // Max 5 active holdings at any time
+      const MAX_HOLDINGS = 5;
+      if (pm.holdings.length >= MAX_HOLDINGS) {
+        showToast(overlay, `最多同时持有${MAX_HOLDINGS}笔持仓，请先卖出或等待结算`);
+        return;
+      }
       const pricePerShare = side === 'yes' ? contract.price : 100 - contract.price;
       const MAX_PAYOUT = 2000;
       // Allow buying if player can afford at least 1 share (no 30% cap for minimum)
