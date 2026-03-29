@@ -938,9 +938,10 @@ export function startMinigame(mainState, event, onComplete) {
   const { canvas, ctx, container, cleanup } = renderMinigame(mg, ACTIONS, (actionId) => {
     if (mg.phase === 'playing') performAction(mg, actionId);
   }, () => {
-    // Skip button
+    // Skip button — settle based on current minigame state (sold count at time of skip)
+    const result = calculateResult(mg, event);
     cleanup();
-    onComplete(null); // null = use default instant-resolve
+    onComplete(result);
   }, () => {
     // Neighbor chat
     if (mg.neighborChatAvailable && mg.neighborChatsUsed < 2) {
