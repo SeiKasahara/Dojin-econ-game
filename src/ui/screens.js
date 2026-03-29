@@ -554,7 +554,7 @@ export function renderGame(state, onAction, onRetire) {
         <div style="font-size:2rem;margin-bottom:8px">${ic('smiley-sad')}</div>
         <div style="font-weight:700;font-size:1rem;margin-bottom:8px">放下画笔</div>
         <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:16px;line-height:1.5">
-          ${months < 6 ? '才刚开始就想放弃了吗...也许同人创作不适合每个人。'
+          ${months < 6 ? '才刚开始就想放弃了吗...也许同人创作不适合每个人。（请注意社团名字不要有奇怪的内容，否则无法提交排名）'
             : hasWorks ? `创作了${months}个月，也许是时候去过另一种生活了。你的作品会留在这里。`
             : `在圈子里待了${months}个月，虽然一直没动笔，但这段时光也不算白费。`}
         </div>
@@ -1271,7 +1271,7 @@ export function renderGameOver(state, onRestart) {
             btn.innerHTML = `${ic('trophy')} 查看排行榜`;
             btn.onclick = () => {
               import('../leaderboard.js').then(({ openLeaderboard }) => {
-                openLeaderboard(state, () => renderGameOver(state, onRestart));
+                openLeaderboard(state, onRestart);
               });
             };
           }, 1500);
