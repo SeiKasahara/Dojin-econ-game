@@ -39,6 +39,7 @@ export function buildLeaderboardPayload(state) {
     totalLVP: state.totalLVP,
     achievementCount: (state.achievements || []).length,
     endingType,
+    tampered: !!state.tampered,
   };
 
   // Build info (for leaderboard flavor, not scored)

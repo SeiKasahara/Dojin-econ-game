@@ -1231,16 +1231,26 @@ export function renderGameOver(state, onRestart) {
         <button class="btn btn-secondary btn-block mt-8" id="btn-copy" style="font-size:0.85rem">复制分享文案</button>
       </div>
 
-      ${state.turn >= 6 ? `<button class="btn btn-secondary btn-block" id="btn-leaderboard-submit" style="margin-bottom:10px;font-size:0.85rem">${ic('trophy')} 提交到排行榜</button>` : ''}
+      ${state.turn >= 6 && !state.tampered ? `<button class="btn btn-secondary btn-block" id="btn-leaderboard-submit" style="margin-bottom:10px;font-size:0.85rem">${ic('trophy')} 提交到排行榜</button>` : ''}
       <button class="btn btn-primary" id="btn-restart">再来一局</button>
+      <button id="btn-go-export" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer;margin-top:10px">${ic('export')} 导出存档</button>
 
       <p class="tagline mt-16" style="font-size:0.7rem">
-        理论基石请访问个人博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a>
+        理论基石请访问个人博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a><br/>
+        排行榜提交问题请反馈：<a href="https://github.com/SeiKasahara/Dojin-econ-game/issues" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">GitHub Issues</a>
       </p>
     </div>
   `;
 
   $('#btn-restart').addEventListener('click', onRestart);
+  $('#btn-go-export').addEventListener('click', () => {
+    import('../save.js').then(({ exportSave }) => {
+      exportSave();
+      const btn = $('#btn-go-export');
+      btn.innerHTML = `${ic('check')} 已导出`;
+      setTimeout(() => { btn.innerHTML = `${ic('export')} 导出存档`; }, 1500);
+    });
+  });
   $('#btn-leaderboard-submit')?.addEventListener('click', () => {
     const btn = $('#btn-leaderboard-submit');
     btn.disabled = true;

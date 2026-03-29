@@ -634,6 +634,45 @@ export function endMonth(state) {
     state._repDelta3m = state.reputation - pastRep; // negative = dropping
   }
 
+  // Capture month financial summary BEFORE reset
+  result.monthFinancial = { income: state._monthIncome || 0, expense: state._monthExpense || 0 };
+
+  // --- Anti-cheat: record chained digest + action log (BEFORE turn++) ---
+  {
+    const acts = (state.monthActions || []).map(a => a.actionId);
+    const prevDigest = state._digestChain.length > 0
+      ? state._digestChain[state._digestChain.length - 1]
+      : '';
+    const snapshot = {
+      t: state.turn,
+      m: Math.round(state.money),
+      r: Math.round(state.reputation * 100),
+      p: Math.round(state.passion),
+      rv: state.totalRevenue,
+      ts: state.totalSales,
+      hv: state.totalHVP,
+      lv: state.totalLVP,
+      hs: state.inventory.hvpStock,
+      ls: state.inventory.lvpStock,
+      a: acts.join(','),
+    };
+    const digest = chainDigest(prevDigest, snapshot);
+    state._digestChain.push(digest);
+    state._actionLog.push({
+      t: snapshot.t,
+      a: acts,
+      m: snapshot.m,
+      r: snapshot.r,
+      p: snapshot.p,
+      rv: snapshot.rv,
+      s: snapshot.ts,
+      hv: snapshot.hv,
+      lv: snapshot.lv,
+      hs: snapshot.hs,
+      ls: snapshot.ls,
+    });
+  }
+
   // --- Advance turn ---
   state.turn++;
   state.time = (state.unemployed || state.fullTimeDoujin)
@@ -651,48 +690,6 @@ export function endMonth(state) {
     state._smallCircleLegendShown = true;
     result.deltas.push({ icon: 'crown', label: '镇圈之宝', value: '你定义了这个圈子', positive: true });
     result.tip = { label: '一个人撑起一个圈', text: `在不到${_cs.toLocaleString()}人的社群里达到声誉${state.reputation.toFixed(1)}，你已经不只是"有名的创作者"——你的作品就是这个圈子的文化符号。新人因为你入坑，老人因为你留下。但这也意味着，如果你停下来，这个小世界可能会跟着安静下去。` };
-  }
-
-  // Capture month financial summary BEFORE reset
-  result.monthFinancial = { income: state._monthIncome || 0, expense: state._monthExpense || 0 };
-
-  // --- Anti-cheat: record chained digest + action log ---
-  {
-    const acts = (state.monthActions || []).map(a => a.actionId);
-    const prevDigest = state._digestChain.length > 0
-      ? state._digestChain[state._digestChain.length - 1]
-      : '';
-    // Snapshot of key state values that the digest covers
-    const snapshot = {
-      t: state.turn,
-      m: Math.round(state.money),
-      r: Math.round(state.reputation * 100),  // ×100 for integer precision
-      p: Math.round(state.passion),
-      rv: state.totalRevenue,
-      ts: state.totalSales,
-      hv: state.totalHVP,
-      lv: state.totalLVP,
-      hs: state.inventory.hvpStock,
-      ls: state.inventory.lvpStock,
-      a: acts.join(','),
-    };
-    const digest = chainDigest(prevDigest, snapshot);
-    state._digestChain.push(digest);
-    // Compact action log entry — must contain ALL fields used in snapshot
-    // so the server can recompute the digest chain independently
-    state._actionLog.push({
-      t: snapshot.t,
-      a: acts,
-      m: snapshot.m,
-      r: snapshot.r,
-      p: snapshot.p,
-      rv: snapshot.rv,
-      s: snapshot.ts,
-      hv: snapshot.hv,
-      lv: snapshot.lv,
-      hs: snapshot.hs,
-      ls: snapshot.ls,
-    });
   }
 
   // --- Reset month state ---
