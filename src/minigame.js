@@ -611,7 +611,7 @@ function updateCustomers(mg, dt) {
 function fillTemplate(str, vars) {
   return str.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '');
 }
-function resolveDialog(tmpl, vars) {
+function resolveTemplate(tmpl, vars) {
   return {
     customer: fillTemplate(tmpl.customer, vars),
     choices: tmpl.choices.map(c => ({ ...c, text: fillTemplate(c.text, vars), reply: fillTemplate(c.reply, vars) })),
@@ -637,7 +637,7 @@ function pickContextDialog(pool, vars) {
   if (!pool || pool.length === 0) return null;
   const eligible = pool.filter(t => !t.requires || t.requires.every(k => vars[k]));
   if (eligible.length === 0) return null;
-  return resolveDialog(pick(eligible), vars);
+  return resolveTemplate(pick(eligible), vars);
 }
 function generateContextDialog(actionId, customer, mg) {
   const vars = buildDialogVars(customer, mg);
@@ -649,7 +649,7 @@ function pickPriceDialog(poolKey, workName, workPrice) {
   const pool = dialogData[poolKey];
   if (!pool || pool.length === 0) return null;
   const vars = { workName, workPrice };
-  return resolveDialog(pick(pool), vars);
+  return resolveTemplate(pick(pool), vars);
 }
 
 function tryTriggerDialog(mg, actionId, nearby) {
