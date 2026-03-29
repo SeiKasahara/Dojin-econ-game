@@ -64,6 +64,8 @@ const PERSISTENT_UNDERSCORED = new Set([
   '_clubContractFired',       // player club prediction contract (one-time)
   '_marketManipulated',       // achievement flag: won a club contract
   '_fundEstablished',         // new creator fund established (permanent time debuff)
+  '_digestChain',             // anti-cheat: chained digest per month (leaderboard verification)
+  '_actionLog',               // anti-cheat: compact action log per month (leaderboard verification)
 ]);
 
 function cleanState(state) {
