@@ -930,14 +930,14 @@ renderTitle(startGame, continueGame);
 // === Staggered preloading for slow connections (GitHub Pages from China) ===
 // User spends 5-10s on title screen; use that time to warm caches.
 const preloadImg = (src) => { const i = new Image(); i.src = src; };
-const preloadChunk = (path) => import(path).catch(() => {});
 const idle = (fn, ms) => typeof requestIdleCallback === 'function' ? requestIdleCallback(fn) : setTimeout(fn, ms);
 
 // Phase 1 (~0s): JS chunks — most critical, unblocks minigame loading
+// String literals so Vite can resolve hashed chunk filenames
 idle(() => {
-  preloadChunk('./minigame.js');
-  preloadChunk('./promote-minigame.js');
-  preloadChunk('./chat-npc.js');
+  import('./minigame.js').catch(() => {});
+  import('./promote-minigame.js').catch(() => {});
+  import('./chat-npc.js').catch(() => {});
 }, 1000);
 
 // Phase 2 (~3s): game screen images — needed right after clicking "start"

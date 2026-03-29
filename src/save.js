@@ -141,6 +141,9 @@ export function loadGame() {
     // Migrate skillExp for saves from before the experience-based skill system
     // getCreativeSkill will handle the actual migration on first call
     if (state.skillExp == null) state.skillExp = 0;
+    // Anti-cheat digest chain (added in v5)
+    if (!state._digestChain) state._digestChain = [];
+    if (!state._actionLog) state._actionLog = [];
 
     // Rebuild prediction market resolveCheck functions from serializable descriptors
     if (state._predictions?.contracts) {
