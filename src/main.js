@@ -85,14 +85,21 @@ function continueGame() {
   const saved = loadGame();
   if (!saved) return;
   state = saved;
+  // If saved state is gameover, go straight to Game Over screen (don't resume game)
+  if (state.phase === 'gameover') {
+    syncBGM('gameover');
+    renderGameOver(state, () => { deleteSave(); syncBGM('title'); renderTitle(startGame, continueGame); });
+    return;
+  }
   syncBGM('game');
   renderGame(state, handleAction, handleRetire);
 }
 
 function handleRetire() {
-  deleteSave();
+  state.phase = 'gameover';
+  saveGame(state);
   syncBGM('gameover');
-  renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); });
+  renderGameOver(state, () => { deleteSave(); syncBGM('title'); renderTitle(startGame, continueGame); });
 }
 
 // needsPricing is now imported from engine.js
@@ -785,9 +792,9 @@ function executeInMonth(actionId) {
 
   // Immediate gameover (goCommercial, etc.)
   if (state.phase === 'gameover') {
-    deleteSave();
+    saveGame(state);
     syncBGM('gameover');
-    renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); });
+    renderGameOver(state, () => { deleteSave(); syncBGM('title'); renderTitle(startGame, continueGame); });
     return;
   }
 
@@ -829,9 +836,9 @@ function finishMonth() {
   monthResult.actionEmoji = 'calendar-check';
 
   if (state.phase === 'gameover') {
-    deleteSave();
+    saveGame(state);
     syncBGM('gameover');
-    renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); });
+    renderGameOver(state, () => { deleteSave(); syncBGM('title'); renderTitle(startGame, continueGame); });
     return;
   }
 
@@ -867,7 +874,7 @@ function afterMonthTransition(monthResult) {
         // Reset monthly accumulators so event money doesn't leak into next month's report
         state._monthIncome = 0;
         state._monthExpense = 0;
-        if (state.phase === 'gameover') { deleteSave(); syncBGM('gameover'); renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
+        if (state.phase === 'gameover') { saveGame(state); syncBGM('gameover'); renderGameOver(state, () => { deleteSave(); syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
         state.phase = 'action';
         syncBGM('game');
         saveGame(state);
@@ -910,7 +917,7 @@ function showEventChain(events, done) {
     import('./chat-npc.js').then(({ triggerGoddessEvent }) => triggerGoddessEvent(state, evt.id));
   }
   renderEvent(evt, () => {
-    if (state.phase === 'gameover') { deleteSave(); syncBGM('gameover'); renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
+    if (state.phase === 'gameover') { saveGame(state); syncBGM('gameover'); renderGameOver(state, () => { deleteSave(); syncBGM('title'); renderTitle(startGame, continueGame); }); return; }
     showEventChain(events, done);
   });
 }
