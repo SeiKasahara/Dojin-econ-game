@@ -169,6 +169,27 @@ export function getActionDisplay(actionId, state) {
   return base;
 }
 
+// Whether an action needs the pricing flow before executing
+export function needsPricing(state, actionId) {
+  if (actionId === 'hvp' && state.hvpProject && state.hvpProject.progress + 1 >= state.hvpProject.needed) return true;
+  return false;
+}
+
+// Roll event condition (cancelled / popular / normal) for a doujin event
+export function rollEventCondition(event, isRecession) {
+  const baseCancelChance = event.size === 'mega' ? 0.01 : event.size === 'big' ? 0.03 : 0.05;
+  const cancelChance = isRecession ? baseCancelChance * 3 : baseCancelChance;
+  const roll = Math.random();
+  if (roll < cancelChance) return 'cancelled';
+  return roll < 0.30 ? 'popular' : 'normal';
+}
+
+// Roll whether a partner candidate is busy this month
+export function rollPartnerBusy(candidate) {
+  const busyChance = candidate.tier === 'trusted' ? 0.05 : candidate.tier === 'familiar' ? 0.15 : 0.25;
+  return Math.random() < busyChance;
+}
+
 // Freelance time cost depends on life situation
 export function getFreelanceTimeCost(state) {
   if (state.unemployed || state.fullTimeDoujin) return 2;  // 失业/全职同人：时间多

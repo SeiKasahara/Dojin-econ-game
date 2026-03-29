@@ -4,7 +4,7 @@
  */
 
 import './style.css';
-import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost, calculateSales, getActionDisplay } from './engine.js';
+import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost, calculateSales, getActionDisplay, needsPricing, rollEventCondition, rollPartnerBusy } from './engine.js';
 import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderWorkNameInput, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp } from './ui.js';
 import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES, getQualityStars } from './engine.js';
 import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
@@ -94,11 +94,7 @@ function handleRetire() {
   renderGameOver(state, () => { syncBGM('title'); renderTitle(startGame, continueGame); });
 }
 
-function needsPricing(actionId) {
-  // LVP pricing is now handled in the LVP subtype flow
-  if (actionId === 'hvp' && state.hvpProject && state.hvpProject.progress + 1 >= state.hvpProject.needed) return true;
-  return false;
-}
+// needsPricing is now imported from engine.js
 
 function handleAction(actionId) {
   const cancelBack = () => renderGame(state, handleAction, handleRetire);
@@ -163,16 +159,7 @@ function handleAction(actionId) {
   // === Attend Event: event selection → mode → mini-game/consign → proceed ===
   if (actionId === 'attendEvent') {
     const processEvent = (chosenEvent) => {
-      // Roll event condition: cancelled / normal / popular
-      // Bigger events are more organized → lower cancel chance
-      const baseCancelChance = chosenEvent.size === 'mega' ? 0.01 : chosenEvent.size === 'big' ? 0.03 : 0.05;
-      const cancelChance = state.recessionTurnsLeft > 0 ? baseCancelChance * 3 : baseCancelChance;
-      const condRoll = Math.random();
-      if (condRoll < cancelChance) {
-        chosenEvent.condition = 'cancelled';
-      } else {
-        chosenEvent.condition = condRoll < 0.30 ? 'popular' : 'normal';
-      }
+      chosenEvent.condition = rollEventCondition(chosenEvent, state.recessionTurnsLeft > 0);
 
       // Show attend mode selector: 亲参 vs 寄售
       renderEventModeSelector(state, chosenEvent, (mode) => {
@@ -254,7 +241,7 @@ function handleAction(actionId) {
   }
 
   // === HVP flow: new project → all choices upfront; continue → just confirm ===
-  if (actionId === 'hvp' && !needsPricing(actionId)) {
+  if (actionId === 'hvp' && !needsPricing(state, actionId)) {
     if (!state.hvpProject) {
       // New project: subtype → name → theme → execution → finalPolish → proceed
       renderSubtypeSelector(state, 'hvp', (subtypeId) => {
@@ -318,7 +305,7 @@ function handleAction(actionId) {
   }
 
   // === Pricing ===
-  if (needsPricing(actionId)) {
+  if (needsPricing(state, actionId)) {
     const type = actionId === 'lvp' ? 'lvp' : 'hvp';
     renderPriceSelector(state, type, (chosenPrice) => {
       state.playerPrice[type] = chosenPrice;
@@ -449,9 +436,7 @@ function handleAction(actionId) {
           const idx = parseInt(el.dataset.idx);
           if (busyThisMonth.has(idx)) return;
           const candidate = candidates[idx];
-          // Busy chance: acquaintance 25%, familiar 15%, trusted 5%
-          const busyChance = candidate.tier === 'trusted' ? 0.05 : candidate.tier === 'familiar' ? 0.15 : 0.25;
-          if (Math.random() < busyChance) {
+          if (rollPartnerBusy(candidate)) {
             busyThisMonth.add(idx);
             const excuse = BUSY_EXCUSES[Math.floor(Math.random() * BUSY_EXCUSES.length)];
             const busyPopup = document.createElement('div');
