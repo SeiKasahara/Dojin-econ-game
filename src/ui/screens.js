@@ -3,7 +3,7 @@ import { createChartCanvas, drawSupplyDemand } from '../chart.js';
 import { IP_TYPES } from '../market.js';
 import { ic, escapeHtml } from '../icons.js';
 import { toggleMute, isMuted } from '../bgm.js';
-import { hasSave, getSaveSummary } from '../save.js';
+import { hasSave, getSaveSummary, exportSave, importSave } from '../save.js';
 import { fogRecession } from '../market-fog.js';
 import { $, app, renderPhoneNarrative, renderStatsBar, renderStats, getNarrativeTitle, buildNarrativeSections, renderAlertBanner, renderSpotlightCard, renderPersonalNarrative } from './shared.js';
 import { renderAppDesktop } from './app-page.js';
@@ -46,7 +46,11 @@ export function renderTitle(onStart, onContinue) {
         玩法：每回合选择行动，管理热情·声誉·资金<br/>
         热情归零 = 游戏结束
       </p>
-      <div class="title-reveal-6"><button id="btn-mute" style="margin-top:10px;background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button></div>
+      <div class="title-reveal-6" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px">
+        <button id="btn-mute" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${isMuted() ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启'}</button>
+        ${save ? `<button id="btn-export" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${ic('export')} 导出存档</button>` : ''}
+        <button id="btn-import" style="background:none;border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:0.75rem;color:var(--text-light);cursor:pointer">${ic('download-simple')} 导入存档</button>
+      </div>
       <p class="tagline title-reveal-6" style="font-size:0.65rem;margin-top:8px">
         作者博客：<a href="https://seikasahara.com/zh/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">seikasahara.com/zh/</a><br/>
         音乐：<a href="https://amachamusic.chagasi.com/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">甘茶音乐工坊</a><br/>
@@ -75,6 +79,40 @@ export function renderTitle(onStart, onContinue) {
   $('#btn-mute').addEventListener('click', () => {
     const m = toggleMute();
     $('#btn-mute').innerHTML = m ? ic('speaker-slash') + ' 音乐已关闭' : ic('speaker-high') + ' 音乐已开启';
+  });
+  document.getElementById('btn-export')?.addEventListener('click', () => {
+    if (exportSave()) {
+      const btn = document.getElementById('btn-export');
+      if (btn) { btn.innerHTML = `${ic('check')} 已导出`; setTimeout(() => { btn.innerHTML = `${ic('export')} 导出存档`; }, 1500); }
+    }
+  });
+  document.getElementById('btn-import')?.addEventListener('click', () => {
+    const doImport = async () => {
+      const { success, error } = await importSave();
+      if (success) {
+        renderTitle(onStart, onContinue);
+      } else if (error && error !== '已取消') {
+        const btn = document.getElementById('btn-import');
+        if (btn) { btn.innerHTML = `${ic('warning')} ${error}`; setTimeout(() => { btn.innerHTML = `${ic('download-simple')} 导入存档`; }, 2000); }
+      }
+    };
+    if (hasSave()) {
+      const overlay = document.createElement('div');
+      overlay.className = 'event-overlay';
+      overlay.innerHTML = `
+        <div class="event-card" style="max-width:300px;text-align:center">
+          <div style="font-size:1.3rem;margin-bottom:6px">${ic('warning', '1.3rem')}</div>
+          <div style="font-weight:700;margin-bottom:6px">覆盖当前存档？</div>
+          <div style="font-size:0.8rem;color:var(--text-light);margin-bottom:12px;line-height:1.5">导入会覆盖当前的自动存档。<br/>建议先导出当前存档作为备份。</div>
+          <button class="btn btn-primary btn-block" id="import-yes" style="margin-bottom:6px">确认导入</button>
+          <button class="btn btn-block" id="import-no" style="background:var(--bg);border:1px solid var(--border);color:var(--text-light)">取消</button>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#import-yes').addEventListener('click', () => { overlay.remove(); doImport(); });
+      overlay.querySelector('#import-no').addEventListener('click', () => overlay.remove());
+    } else {
+      doImport();
+    }
   });
   document.getElementById('btn-continue')?.addEventListener('click', () => {
     if (onContinue) onContinue();

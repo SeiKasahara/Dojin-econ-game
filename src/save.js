@@ -202,3 +202,66 @@ export function deleteSave() {
     // ignore
   }
 }
+
+/** Export save as a downloadable JSON file */
+export function exportSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const blob = new Blob([raw], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const data = JSON.parse(raw);
+    let filename = 'dojin-save';
+    // Try to include age in filename for identification
+    if (data.p) {
+      try {
+        const s = JSON.parse(fromBase64(data.p));
+        filename = `dojin-save-${getAge(s.turn)}岁`;
+      } catch (_) { /* ignore */ }
+    }
+    a.href = url;
+    a.download = `${filename}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Import save from a JSON file. Returns a Promise that resolves to { success, error? } */
+export function importSave() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) { resolve({ success: false, error: '未选择文件' }); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const raw = reader.result;
+          const data = JSON.parse(raw);
+          // Validate structure: must have v+p (v2) or state (v1)
+          if (!((data.v >= 2 && data.p) || data.state)) {
+            resolve({ success: false, error: '文件格式不正确' });
+            return;
+          }
+          localStorage.setItem(SAVE_KEY, raw);
+          resolve({ success: true });
+        } catch (e) {
+          resolve({ success: false, error: '文件解析失败' });
+        }
+      };
+      reader.onerror = () => resolve({ success: false, error: '文件读取失败' });
+      reader.readAsText(file);
+    });
+    // User cancelled file picker
+    input.addEventListener('cancel', () => resolve({ success: false, error: '已取消' }));
+    input.click();
+  });
+}
