@@ -205,6 +205,7 @@ const SORT_OPTIONS = [
   { key: 'reputation', label: '声誉', icon: 'star', fmt: v => v.stats.maxReputation.toFixed(1) },
   { key: 'bestWork', label: '名作', icon: 'book-open-text', fmt: v => v.stats.bestWorkSales ? `${v.stats.bestWorkSales}售 ${v.stats.bestWorkName || ''}` : '—' },
   { key: 'turns', label: '月数', icon: 'calendar', fmt: v => `${v.stats.turns}月` },
+  { key: 'earlyCommercial', label: '速通出道', icon: 'star-four', fmt: v => `${v.stats.turns}月(${v.stats.age}岁)` },
 ];
 
 const ENDING_LABELS = { commercial: '商业出道', burnout: '燃尽', open: '待续', idle: '沉寂' };
