@@ -28,6 +28,8 @@ const RESOLVE_REGISTRY = {
   ip_heat_gt:      (s, p) => (s.official?.ipHeat || 0) > p.threshold,
   ip_heat_lt:      (s, p) => (s.official?.ipHeat || 0) < p.threshold,
   player_hvp_gt:   (s, p) => (s.totalHVP || 0) > p.baseline,
+  trend_tag_neq:   (s, p) => s.market?.currentTrend?.tag !== p.tag,
+  confidence_gte:  (s, p) => s.market && s.market.marketConfidence >= p.threshold,
 };
 
 /** Rebuild resolveCheck function from resolveType + resolveParams (used after loading save) */
@@ -64,19 +66,20 @@ function trendExact(state) {
   };
 }
 
-function trendRepeat(state) {
+function trendNotRepeat(state) {
   const m = state.market;
-  if (!m?.currentTrend || !m.trendHistory?.length) return null;
-  const lastTag = m.trendHistory[m.trendHistory.length - 1];
-  // Game explicitly avoids repeating last trend, so this is almost always NO
+  if (!m?.currentTrend) return null;
+  const tag = m.currentTrend.tag;
+  // Game avoids repeating the last trend → nearly guaranteed YES
+  // Low odds but free money for players who understand trend rotation
   return {
-    id: `trend_repeat_${state.turn}`,
-    question: `下一轮潮流会再次是「${lastTag}」吗？`,
-    icon: 'arrows-clockwise',
-    odds: 15.0,
+    id: `trend_norepeat_${state.turn}`,
+    question: `下一轮潮流会换成「${tag}」以外的类型吗？`,
+    icon: 'arrows-split',
+    odds: 1.5,
     resolveTurn: state.turn + m.currentTrend.turnsLeft + 1,
-    resolveCheck: (s) => s.market?.currentTrend?.tag === lastTag,
-    resolveType: 'trend_tag_eq', resolveParams: { tag: lastTag },
+    resolveCheck: (s) => s.market?.currentTrend?.tag !== tag,
+    resolveType: 'trend_tag_neq', resolveParams: { tag },
     category: '潮流',
   };
 }
@@ -143,20 +146,39 @@ function hvpCreatorSwing(state) {
   };
 }
 
-function lvpFlood(state) {
+function hvpEquilibrium(state) {
   const m = state.market;
   if (!m) return null;
-  const threshold = m.nLVP + 10;
-  return {
-    id: `lvp_flood_${state.turn}`,
-    question: `6个月后谷子创作者会突破${threshold}人吗？`,
-    icon: 'key',
-    odds: 6.0,
-    resolveTurn: state.turn + 6,
-    resolveCheck: (s) => s.market && s.market.nLVP > threshold,
-    resolveType: 'nlvp_gt', resolveParams: { threshold },
-    category: '竞争',
-  };
+  const nHVP = m.nHVP;
+  const EQ = 9;
+  if (Math.abs(nHVP - EQ) < 3) return null;
+  // Mean reversion: HVP population tends toward equilibrium (~9)
+  // Players who understand entry/exit rates can predict direction
+  if (nHVP > EQ + 2) {
+    const threshold = nHVP - 2;
+    return {
+      id: `hvp_eq_${state.turn}`,
+      question: '同人本创作者多得互相挤压，4个月后竞争会缓和吗？',
+      icon: 'scales',
+      odds: 2.5,
+      resolveTurn: state.turn + 4,
+      resolveCheck: (s) => s.market && s.market.nHVP < threshold,
+      resolveType: 'nhvp_lt', resolveParams: { threshold },
+      category: '竞争',
+    };
+  } else {
+    const threshold = nHVP + 2;
+    return {
+      id: `hvp_eq_${state.turn}`,
+      question: '同人本创作者寥寥无几，4个月后会有新人入场吗？',
+      icon: 'scales',
+      odds: 2.5,
+      resolveTurn: state.turn + 4,
+      resolveCheck: (s) => s.market && s.market.nHVP > threshold,
+      resolveType: 'nhvp_gt', resolveParams: { threshold },
+      category: '竞争',
+    };
+  }
 }
 
 // === 宏观类 ===
@@ -189,6 +211,25 @@ function doubleRecession(state) {
   };
 }
 
+
+function recessionExodus(state) {
+  // During recession, HVP exit rate is 1.5× normal
+  // Players who know this can predict creator losses with confidence
+  if (state.recessionTurnsLeft <= 0) return null;
+  const m = state.market;
+  if (!m || m.nHVP <= 3) return null;
+  const threshold = m.nHVP - 2;
+  return {
+    id: `rec_exodus_${state.turn}`,
+    question: '经济下行中创作者加速退坑，4个月后创作者群体会明显缩水吗？',
+    icon: 'user-minus',
+    odds: 2.5,
+    resolveTurn: state.turn + 4,
+    resolveCheck: (s) => s.market && s.market.nHVP < threshold,
+    resolveType: 'nhvp_lt', resolveParams: { threshold },
+    category: '竞争',
+  };
+}
 
 // === 二手市场类 ===
 function secondHandSpike(state) {
@@ -235,57 +276,61 @@ function npcCollabRumor(state) {
   };
 }
 
-function npcRetirementRumor(state) {
-  // "某位创作者说最近很累想退坑，TA真的会退吗？"
+function diversityCrisis(state) {
+  // When nHVP=0: community loses 3%/month (diversityPenalty) + normal churn
+  // Players who understand this penalty can predict steep community decline
   const m = state.market;
-  if (!m || m.nHVP < 5) return null;
-  const names = m.npcNames || [];
-  const name = names.length > 0 ? names[Math.floor(Math.random() * names.length)] : '某位老创作者';
-  const threshold = m.nHVP - 2;
+  if (!m || m.nHVP > 0 || m.communitySize < 2000) return null;
+  const threshold = Math.round(m.communitySize * 0.85);
   return {
-    id: `retire_rumor_${state.turn}`,
-    question: `「${name}」说想退坑了…4个月后同人本创作者会减少2人以上吗？`,
-    icon: 'smiley-sad',
-    odds: 4.0,
-    resolveTurn: state.turn + 4,
-    resolveCheck: (s) => s.market && s.market.nHVP <= threshold,
-    resolveType: 'nhvp_lte', resolveParams: { threshold },
-    category: '传闻',
-  };
-}
-
-function officialAnnouncementBet(state) {
-  // "官方最近有新动作的迹象，会不会带动一波社群增长？"
-  const m = state.market;
-  if (!m || !state.official) return null;
-  const csNow = m.communitySize;
-  const boom = Math.round(csNow * 1.08); // 8% growth = significant
-  return {
-    id: `official_boom_${state.turn}`,
-    question: `有人说官方要搞大动作，4个月后社群能突破${boom.toLocaleString()}人吗？`,
-    icon: 'megaphone',
-    odds: 5.0,
-    resolveTurn: state.turn + 4,
-    resolveCheck: (s) => s.market && s.market.communitySize >= boom,
-    resolveType: 'community_gte', resolveParams: { threshold: boom },
-    category: '传闻',
-  };
-}
-
-function printingCrisisRumor(state) {
-  // "听说印刷厂在涨价/产能紧张，下次出本成本会暴涨吗？"
-  // Resolves by checking if inflation event fires (eventCounts.inflation increases)
-  if (state.turn < 12) return null;
-  const currentInflationCount = state.eventCounts?.inflation || 0;
-  return {
-    id: `print_crisis_${state.turn}`,
-    question: '圈内传言印刷厂要涨价，半年内会出现印刷成本上涨事件吗？',
-    icon: 'printer',
-    odds: 5.5,
+    id: `diversity_crisis_${state.turn}`,
+    question: '市场已无同人本创作者，半年后社群会严重萎缩吗？',
+    icon: 'warning-circle',
+    odds: 2.0,
     resolveTurn: state.turn + 6,
-    resolveCheck: (s) => (s.eventCounts?.inflation || 0) > currentInflationCount,
-    resolveType: 'event_count_gt', resolveParams: { key: 'inflation', count: currentInflationCount },
-    category: '传闻',
+    resolveCheck: (s) => s.market && s.market.communitySize < threshold,
+    resolveType: 'community_lt', resolveParams: { threshold },
+    category: '社群',
+  };
+}
+
+function phaseTransitionBet(state) {
+  // Test knowledge of IP heat phase boundaries (70/50/20)
+  // Player who knows decay rate λ = baseLambda + ipAge×0.003 can calculate trajectory
+  const heat = state.official?.ipHeat;
+  if (heat == null || heat < 25 || heat > 75) return null;
+  const threshold = heat >= 55 ? 50 : 20;
+  const phaseName = threshold === 50 ? '衰退期' : '黄昏期';
+  return {
+    id: `phase_${state.turn}`,
+    question: `IP势头在走下坡路，4个月后会跌入${phaseName}吗？`,
+    icon: 'thermometer',
+    odds: 3.0,
+    resolveTurn: state.turn + 4,
+    resolveCheck: (s) => (s.official?.ipHeat || 0) < threshold,
+    resolveType: 'ip_heat_lt', resolveParams: { threshold },
+    category: 'IP',
+  };
+}
+
+function confidenceForecast(state) {
+  // Market confidence is an EMA toward 1.0 (or 0.6 during recession)
+  // Player who understands: no recession → confidence recovers ~20%/turn toward 1.0
+  // During recession → confidence drops toward 0.6 (betting YES here is a trap)
+  const m = state.market;
+  if (!m || m.marketConfidence == null || m.marketConfidence > 0.9) return null;
+  const conf = m.marketConfidence;
+  const target = Math.round((conf + 0.12) * 100) / 100;
+  const mood = conf >= 0.65 ? '平稳' : conf >= 0.45 ? '悲观' : '恐慌';
+  return {
+    id: `conf_${state.turn}`,
+    question: `市场情绪「${mood}」，3个月后能好转吗？`,
+    icon: 'chart-line-up',
+    odds: 2.5,
+    resolveTurn: state.turn + 3,
+    resolveCheck: (s) => s.market && s.market.marketConfidence >= target,
+    resolveType: 'confidence_gte', resolveParams: { threshold: target },
+    category: '宏观',
   };
 }
 
@@ -321,17 +366,16 @@ function viralPrediction(state) {
   };
 }
 
-function speculatorCrash(state) {
-  // "二手市场最近很热，投机泡沫会破吗？"
-  const sh = state.official?.secondHandPressure;
-  if (!sh || (sh.hvp || 0) < 0.1) return null;
+function bubbleChainBet(state) {
+  // bubble_burst can only fire AFTER speculator_rush has happened
+  // Players who understand event chains: rush → burst is a learnable pattern
+  if (!(state.eventCounts?.speculator_rush > 0) || state.turn < 18) return null;
   const burstCount = state.eventCounts?.bubble_burst || 0;
-  const rushCount = state.eventCounts?.speculator_rush || 0;
   return {
-    id: `spec_crash_${state.turn}`,
-    question: '二手市场传出有人大量囤货，半年内会发生泡沫破裂吗？',
+    id: `bubble_chain_${state.turn}`,
+    question: '投机客已入场扫货，半年内泡沫会破裂吗？',
     icon: 'trend-down',
-    odds: 6.0,
+    odds: 3.5,
     resolveTurn: state.turn + 6,
     resolveCheck: (s) => (s.eventCounts?.bubble_burst || 0) > burstCount,
     resolveType: 'event_count_gt', resolveParams: { key: 'bubble_burst', count: burstCount },
@@ -343,23 +387,22 @@ function speculatorCrash(state) {
 
 
 
-function exactCommunitySize(state) {
+function saturationStall(state) {
+  // Near carrying capacity, logistic growth slows drastically
+  // Player who notices growth slowing can infer saturation and avoid this bet
   const m = state.market;
-  if (!m) return null;
+  if (!m || m.communitySize < 8000) return null;
   const cs = m.communitySize;
-  // Will community land in a narrow ±2% band?
-  const center = Math.round(cs * (0.97 + Math.random() * 0.06));
-  const lo = Math.round(center * 0.99);
-  const hi = Math.round(center * 1.01);
+  const target = Math.round(cs * 1.08);
   return {
-    id: `cs_exact_${state.turn}`,
-    question: `2个月后社群人数会在${lo.toLocaleString()}~${hi.toLocaleString()}之间吗？`,
-    icon: 'crosshair',
-    odds: 15.0,
-    resolveTurn: state.turn + 2,
-    resolveCheck: (s) => s.market && s.market.communitySize >= lo && s.market.communitySize <= hi,
-    resolveType: 'community_range', resolveParams: { lo, hi },
-    category: '精准',
+    id: `sat_stall_${state.turn}`,
+    question: '社群增长似乎到了瓶颈，4个月后还能大幅扩张吗？',
+    icon: 'chart-line-up',
+    odds: 3.5,
+    resolveTurn: state.turn + 4,
+    resolveCheck: (s) => s.market && s.market.communitySize > target,
+    resolveType: 'community_gt', resolveParams: { threshold: target },
+    category: '社群',
   };
 }
 
@@ -406,23 +449,77 @@ function playerClubContract(state) {
   };
 }
 
+function npcRetirementRumor(state) {
+  const m = state.market;
+  if (!m || m.nHVP < 5) return null;
+  const names = m.npcNames || [];
+  const name = names.length > 0 ? names[Math.floor(Math.random() * names.length)] : '某位老创作者';
+  const threshold = m.nHVP - 2;
+  return {
+    id: `retire_rumor_${state.turn}`,
+    question: `「${name}」说想退坑了…4个月后同人本创作者会减少2人以上吗？`,
+    icon: 'smiley-sad',
+    odds: 4.0,
+    resolveTurn: state.turn + 4,
+    resolveCheck: (s) => s.market && s.market.nHVP <= threshold,
+    resolveType: 'nhvp_lte', resolveParams: { threshold },
+    category: '传闻',
+  };
+}
+
+function officialAnnouncementBet(state) {
+  const m = state.market;
+  if (!m || !state.official) return null;
+  const csNow = m.communitySize;
+  const boom = Math.round(csNow * 1.08);
+  return {
+    id: `official_boom_${state.turn}`,
+    question: '有人说官方要搞大动作，4个月后社群能大幅增长吗？',
+    icon: 'megaphone',
+    odds: 5.0,
+    resolveTurn: state.turn + 4,
+    resolveCheck: (s) => s.market && s.market.communitySize >= boom,
+    resolveType: 'community_gte', resolveParams: { threshold: boom },
+    category: '传闻',
+  };
+}
+
+function printingCrisisRumor(state) {
+  if (state.turn < 12) return null;
+  const currentInflationCount = state.eventCounts?.inflation || 0;
+  return {
+    id: `print_crisis_${state.turn}`,
+    question: '圈内传言印刷厂要涨价，半年内会出现印刷成本上涨事件吗？',
+    icon: 'printer',
+    odds: 5.5,
+    resolveTurn: state.turn + 6,
+    resolveCheck: (s) => (s.eventCounts?.inflation || 0) > currentInflationCount,
+    resolveType: 'event_count_gt', resolveParams: { key: 'inflation', count: currentInflationCount },
+    category: '传闻',
+  };
+}
+
 // === 全部合约池 ===
 const ALL_CONTRACTS = [
   // 潮流
   trendExact,
-  trendRepeat,
+  trendNotRepeat,       // 知识：潮流轮换规则
   // 社群
   communityGrowth,
   communityDecline,
+  saturationStall,      // 知识：承载力饱和
+  diversityCrisis,      // 知识：多样性惩罚
   // 竞争
   hvpCreatorSwing,
-  lvpFlood,
+  hvpEquilibrium,       // 知识：均衡回归
+  recessionExodus,      // 知识：衰退期流失加速
   // 宏观
   recessionBet,
   doubleRecession,
+  confidenceForecast,   // 知识：市场信心EMA
   // 二手
   secondHandSpike,
-  speculatorCrash,
+  bubbleChainBet,       // 知识：事件因果链
   // 传闻/八卦
   npcCollabRumor,
   npcRetirementRumor,
@@ -430,9 +527,9 @@ const ALL_CONTRACTS = [
   printingCrisisRumor,
   fandomWarRumor,
   viralPrediction,
-  // 高难度
-  exactCommunitySize,
+  // IP
   ipHeatShift,
+  phaseTransitionBet,   // 知识：IP热度相变
   // 玩家社团
   playerClubContract,
 ];

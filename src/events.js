@@ -672,7 +672,7 @@ export const RANDOM_EVENTS = [
   {
     id: 'creative_plateau', emoji: 'wall', title: '风格成熟，但也成了牢笼',
     desc: '你已经形成了自己独特的风格，粉丝也因此而关注你。但你越来越觉得自己在重复——每一笔都太熟练了，缺少了当初那种探索的刺激感...',
-    effect: '热情-10 下一部HVP将获得突破加成', effectClass: 'neutral',
+    effect: '热情-10 下一部同人本将获得突破加成', effectClass: 'neutral',
     apply: (s) => {
       s.passion = Math.max(0, s.passion - 10);
       s._plateauBreakthroughPending = true;

@@ -161,7 +161,8 @@ function handleAction(actionId) {
   }
 
   // === Auto-end month if zero leisure and no actions taken yet (0-leisure month) ===
-  if (!actionId.startsWith('app:')) {
+  // goCommercial is a 0-cost terminal action — never auto-skip it
+  if (!actionId.startsWith('app:') && actionId !== 'goCommercial') {
     const remaining = state.time - (state.monthTimeSpent || 0);
     if (remaining <= 0 && (state.monthActions || []).length === 0) {
       finishMonth();
@@ -789,6 +790,12 @@ function handleAction(actionId) {
       executeInMonth(actionId);
     });
     overlay.querySelector('#btn-sponsor-back').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+    return;
+  }
+
+  // === goCommercial: execute directly (already confirmed in publisher message UI) ===
+  if (actionId === 'goCommercial') {
+    executeInMonth(actionId);
     return;
   }
 
