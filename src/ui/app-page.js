@@ -1,4 +1,4 @@
-import { ACTIONS, canPerformAction, getActionDisplay, ensureEventCalendar, HVP_SUBTYPES } from '../engine.js';
+import { ACTIONS, canPerformAction, getActionDisplay, ensureEventCalendar, HVP_SUBTYPES, getLifeStage, getCalendarMonth } from '../engine.js';
 import { ic, escapeHtml } from '../icons.js';
 
 // === App Desktop ===
@@ -130,6 +130,7 @@ export function renderAppPage(appId, state, onAction, onBack) {
           ensureEventCalendar(state);
           const cal = state.eventCalendar || [];
           const MTAG = { 1: '寒假', 5: '五一', 7: '暑假', 8: '暑假', 10: '国庆' };
+          const EXAM_MONTHS = new Set([6, 12, 1]);
           const curIdx = Math.max(0, cal.findIndex(e => e.turn === state.turn));
           return `<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border)">
             <div style="font-size:0.8rem;font-weight:700;margin-bottom:8px">${ic('calendar-dots')} 漫展年历</div>
@@ -137,9 +138,10 @@ export function renderAppPage(appId, state, onAction, onBack) {
               ${cal.map((entry, i) => {
                 const isCur = entry.turn === state.turn;
                 const has = entry.events.length > 0;
-                const tag = MTAG[entry.month] || '';
+                const isExam = EXAM_MONTHS.has(entry.month) && getLifeStage(entry.turn) === 'university';
+                const tag = isExam ? '期末' : (MTAG[entry.month] || '');
                 return `<span class="ecal-pill" data-idx="${i}" style="flex-shrink:0;padding:5px 10px;border-radius:14px;font-size:0.72rem;cursor:pointer;border:1.5px solid ${isCur ? '#E84393' : 'var(--border)'};background:${isCur ? '#E8439318' : 'var(--bg-card)'};text-align:center;position:relative;white-space:nowrap;user-select:none;line-height:1.3;transition:all 0.15s">
-                  ${entry.month}月${tag ? `<br><span style="font-size:0.55rem;opacity:0.6">${tag}</span>` : ''}
+                  ${entry.month}月${tag ? `<br><span style="font-size:0.55rem;${isExam ? 'color:var(--danger)' : 'opacity:0.6'}">${tag}</span>` : ''}
                   ${has ? '<span style="position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:#E84393"></span>' : ''}
                 </span>`;
               }).join('')}
@@ -235,6 +237,7 @@ export function renderAppPage(appId, state, onAction, onBack) {
       const sIcon = { mega: ic('star-four'), big: ic('tent'), small: ic('note-pencil') };
       const sLabel = { mega: '全国盛典', big: '大型展会', small: '小型展会' };
 
+      const EXAM_MONTHS = new Set([6, 12, 1]);
       function showCalMonth(idx) {
         ecalPills.forEach(p => {
           const pi = parseInt(p.dataset.idx);
@@ -245,12 +248,14 @@ export function renderAppPage(appId, state, onAction, onBack) {
           p.style.borderColor = sel ? '#E84393' : (cur ? '#E84393' : 'var(--border)');
         });
         const entry = cal[idx];
+        const isExam = entry && EXAM_MONTHS.has(entry.month) && getLifeStage(entry.turn) === 'university';
+        const examBanner = isExam ? `<div style="padding:8px 12px;margin-bottom:8px;border-radius:8px;background:#FFF0F0;border:1px solid #FECACA;font-size:0.72rem;color:var(--danger);display:flex;align-items:center;gap:6px">${ic('warning', '0.8rem')} 期末考试月 · 闲暇仅3天，无法参展</div>` : '';
         if (!entry || entry.events.length === 0) {
-          ecalBody.innerHTML = `<div style="text-align:center;padding:20px 12px;color:var(--text-muted);font-size:0.78rem">${ic('calendar-x')} 本月无同人展安排</div>`;
+          ecalBody.innerHTML = examBanner + `<div style="text-align:center;padding:20px 12px;color:var(--text-muted);font-size:0.78rem">${ic('calendar-x')} 本月无同人展安排</div>`;
           return;
         }
         const isCur = entry.turn === state.turn;
-        ecalBody.innerHTML = `${isCur ? `<div style="font-size:0.65rem;color:#E84393;font-weight:600;margin-bottom:6px">${ic('map-pin-area', '0.65rem')} 当前月份</div>` : `<div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:6px">${entry.turn < state.turn ? '已过去' : `${entry.turn - state.turn}个月后`}</div>`}` +
+        ecalBody.innerHTML = examBanner + `${isCur ? `<div style="font-size:0.65rem;color:#E84393;font-weight:600;margin-bottom:6px">${ic('map-pin-area', '0.65rem')} 当前月份</div>` : `<div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:6px">${entry.turn < state.turn ? '已过去' : `${entry.turn - state.turn}个月后`}</div>`}` +
           entry.events.map(e => {
             const done = attended.includes(e.calendarId);
             const isPast = entry.turn < state.turn;

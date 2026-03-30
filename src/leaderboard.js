@@ -28,6 +28,13 @@ export function buildLeaderboardPayload(state) {
   else if (age >= 42) endingType = 'open';
   else if (state.idleMonthStreak >= 12) endingType = 'idle';
 
+  // Best single work by sales
+  const works = state.inventory?.works || [];
+  let bestWork = null;
+  for (const w of works) {
+    if (!bestWork || (w.totalSold || 0) > (bestWork.totalSold || 0)) bestWork = w;
+  }
+
   // Core stats
   const stats = {
     turns,
@@ -38,6 +45,9 @@ export function buildLeaderboardPayload(state) {
     totalHVP: state.totalHVP,
     totalLVP: state.totalLVP,
     achievementCount: (state.achievements || []).length,
+    bestWorkSales: bestWork ? (bestWork.totalSold || 0) : 0,
+    bestWorkName: bestWork?.name || null,
+    bestWorkType: bestWork?.type || null,
     endingType,
     tampered: !!state.tampered,
   };
@@ -189,6 +199,7 @@ function generateMockData(sort) {
 const SORT_OPTIONS = [
   { key: 'revenue', label: '收入', icon: 'coins', fmt: v => `¥${v.stats.totalRevenue.toLocaleString()}` },
   { key: 'reputation', label: '声誉', icon: 'star', fmt: v => v.stats.maxReputation.toFixed(1) },
+  { key: 'bestWork', label: '名作', icon: 'book-open-text', fmt: v => v.stats.bestWorkSales ? `${v.stats.bestWorkSales}售 ${v.stats.bestWorkName || ''}` : '—' },
   { key: 'turns', label: '月数', icon: 'calendar', fmt: v => `${v.stats.turns}月` },
 ];
 
