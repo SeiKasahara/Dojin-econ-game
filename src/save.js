@@ -66,6 +66,7 @@ const PERSISTENT_UNDERSCORED = new Set([
   '_fundEstablished',         // new creator fund established (permanent time debuff)
   '_digestChain',             // anti-cheat: chained digest per month (leaderboard verification)
   '_actionLog',               // anti-cheat: compact action log per month (leaderboard verification)
+  '_leaderboardEntryId',      // last submitted leaderboard entry ID (for overwrite)
 ]);
 
 function cleanState(state) {

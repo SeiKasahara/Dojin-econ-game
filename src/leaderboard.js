@@ -129,6 +129,8 @@ export function verifyDigestChain(actionLog, digestChain) {
 export async function submitToLeaderboard(state) {
   try {
     const payload = buildLeaderboardPayload(state);
+    // If previously submitted from this ending, include replaceId for overwrite
+    if (state._leaderboardEntryId) payload.replaceId = state._leaderboardEntryId;
     const res = await fetch(LEADERBOARD_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -136,6 +138,8 @@ export async function submitToLeaderboard(state) {
     });
     const data = await res.json();
     if (!res.ok) return { ok: false, error: data.error || `HTTP ${res.status}` };
+    // Store entry ID for future overwrite
+    state._leaderboardEntryId = data.id;
     return { ok: true, rank: data.rank, id: data.id };
   } catch (e) {
     return { ok: false, error: '网络错误，请稍后重试' };

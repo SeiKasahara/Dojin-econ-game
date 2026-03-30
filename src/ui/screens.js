@@ -1267,7 +1267,7 @@ export function renderGameOver(state, onRestart) {
           btn.style.color = 'var(--success)';
           btn.style.border = '1px solid var(--success)';
           btn.innerHTML = res.rank ? `${ic('trophy')} 已提交！排名 #${res.rank}` : `${ic('trophy')} 已提交！`;
-          // After a brief pause, turn into "view leaderboard" button
+          // After a brief pause, show view + overwrite options
           setTimeout(() => {
             btn.disabled = false;
             btn.style.background = '';
@@ -1279,6 +1279,32 @@ export function renderGameOver(state, onRestart) {
                 openLeaderboard(state, onRestart);
               });
             };
+            // Add overwrite button next to it
+            if (!document.getElementById('btn-lb-overwrite')) {
+              const ow = document.createElement('button');
+              ow.id = 'btn-lb-overwrite';
+              ow.className = 'btn';
+              ow.style.cssText = 'margin-top:6px;width:100%;padding:10px;border-radius:10px;background:var(--bg);border:1px solid var(--border);color:var(--text-muted);font-size:0.8rem;cursor:pointer';
+              ow.innerHTML = `${ic('arrows-clockwise')} 覆盖提交`;
+              btn.parentNode.insertBefore(ow, btn.nextSibling);
+              ow.addEventListener('click', () => {
+                ow.disabled = true;
+                ow.innerHTML = '提交中…';
+                import('../leaderboard.js').then(({ submitToLeaderboard }) => {
+                  submitToLeaderboard(state).then(r => {
+                    if (r.ok) {
+                      ow.style.color = 'var(--success)';
+                      ow.innerHTML = r.rank ? `${ic('check')} 已覆盖！排名 #${r.rank}` : `${ic('check')} 已覆盖！`;
+                      setTimeout(() => { ow.disabled = false; ow.innerHTML = `${ic('arrows-clockwise')} 覆盖提交`; ow.style.color = 'var(--text-muted)'; }, 2000);
+                    } else {
+                      ow.style.color = 'var(--danger)';
+                      ow.innerHTML = r.error || '覆盖失败';
+                      setTimeout(() => { ow.disabled = false; ow.innerHTML = `${ic('arrows-clockwise')} 覆盖提交`; ow.style.color = 'var(--text-muted)'; }, 3000);
+                    }
+                  });
+                });
+              });
+            }
           }, 1500);
         } else {
           btn.style.color = 'var(--danger)';
