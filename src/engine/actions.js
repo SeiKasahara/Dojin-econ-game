@@ -71,7 +71,11 @@ export function getActionDisplay(actionId, state) {
     const label = state.unemployed ? '失业接稿' : getLifeStage(state.turn) === 'university' ? '课余接稿' : '下班接稿';
     const recTag = state.recessionTurnsLeft > 0 ? ` ${ic('trend-down')}-50%` : '';
     const premiumTag = state.reputation >= 4 ? ' 含高端约稿' : '';
-    return { ...base, costLabel: `需≥${tc}天 ${label}${recTag}${premiumTag}` };
+    // Show why time cost is high
+    const tierReason = state.jobTier === 'elite' ? '(大厂加班多)' : state.jobTier === 'labor' ? '(体力活后疲劳)' : '';
+    const hopDebuff = (state.timeDebuffs || []).find(d => d.id === 'job_hop_penalty');
+    const hopTag = hopDebuff ? ` 跳槽观察期闲暇${hopDebuff.delta}天` : '';
+    return { ...base, costLabel: `需≥${tc}天 ${label}${tierReason}${hopTag}${recTag}${premiumTag}` };
   }
   if (actionId === 'partTimeJob') {
     const stage = getLifeStage(state.turn);
@@ -290,7 +294,7 @@ export function canPerformAction(state, actionId) {
       if ((state.eventLog?.length || 0) < 3) return false;
     } else {
       if ((state.eventLog?.length || 0) < 5) return false;
-      // Cooldown: must work at least 6 months before quitting again (prevents frequent switching)
+      // Cooldown: must work at least 12 months before quitting again (prevents frequent switching)
       if (state.lastReturnToWorkTurn > 0 && state.turn - state.lastReturnToWorkTurn < 12) return false;
     }
   }
