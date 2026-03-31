@@ -238,21 +238,21 @@ export function calculateSales(actionId, state) {
   const noise = 0.85 + Math.random() * 0.3;
 
   // --- Catalog display bonus: inverted-U curve ---
-  // 1-4 types: more variety attracts browsers (bonus rises)
-  // 5+: booth gets cluttered, each work gets less prominent display (bonus falls)
-  // Sweet spot at 3-4 types. Applies across ALL types at the booth, not per-type.
+  // 1-3 types: variety attracts browsers (bonus rises)
+  // 4+: booth gets cluttered, each work gets less prominent display (bonus falls hard)
+  // Sweet spot at 2-3 types. Realistically, a solo creator can manage 3-4 items on a small table.
   const totalUniqueWorks = (state.inventory?.works?.filter(w => w.qty > 0).length) || 0;
   const uniqueWorks = state.inventory?.works?.filter(w => w.type === type && w.qty > 0).length || 0;
   let catalogBonus;
-  if (totalUniqueWorks <= 4) {
-    catalogBonus = 1 + Math.min(0.3, Math.max(0, uniqueWorks - 1) * 0.1);
-    // 1=1.0, 2=1.1, 3=1.2, 4=1.3
+  if (totalUniqueWorks <= 3) {
+    catalogBonus = 1 + Math.min(0.2, Math.max(0, uniqueWorks - 1) * 0.1);
+    // 1=1.0, 2=1.1, 3=1.2
   } else {
-    // Clutter penalty: each extra type beyond 4 reduces display quality
-    // 5=-5%, 6=-10%, 8=-20%, 10+=-30% (floor 0.7)
-    const clutter = Math.max(0.7, 1.0 - (totalUniqueWorks - 4) * 0.05);
-    catalogBonus = 1.3 * clutter;
-    // 5=1.24, 6=1.17, 8=1.04, 10+=0.91
+    // Clutter penalty: each extra type beyond 3 reduces display quality significantly
+    // 4=-8%, 5=-16%, 6=-24%, 8=-40%, 10+=-50% (floor 0.5)
+    const clutter = Math.max(0.5, 1.0 - (totalUniqueWorks - 3) * 0.08);
+    catalogBonus = 1.2 * clutter;
+    // 4=1.10, 5=1.01, 6=0.91, 8=0.72, 10+=0.60
   }
 
   // --- High info bonus: word-of-mouth effect when awareness ≥ 80% ---

@@ -333,17 +333,38 @@ export function executeAction(state, actionId) {
 
       // Logistics cost: personally carrying to the venue
       // Estimate weight: HVP ~0.2kg/item, LVP ~0.08kg/item
-      // First ~15kg free (fits in suitcase, ~60 HVP or ~180 LVP)
-      // Excess shipped separately: tiered by distance (based on SF Express rates)
+      // Hand carry ~8kg (backpack + small suitcase, ~40 HVP or ~100 LVP)
+      // Excess must be shipped: expensive and drains stamina
+      const totalItems = state.inventory.hvpStock + state.inventory.lvpStock;
       const carryWeightKg = state.inventory.hvpStock * 0.2 + state.inventory.lvpStock * 0.08;
-      const freeCarryKg = 15; // one suitcase worth
+      const freeCarryKg = 8; // one backpack + hand luggage
       let cargoCost = 0;
+      let cargoFatigue = 0;
+      let lostItems = { hvp: 0, lvp: 0 }; // damaged/lost in transit
       if (carryWeightKg > freeCarryKg) {
         const excessKg = carryWeightKg - freeCarryKg;
-        // Tiered rate: 同城2/kg, 邻市5/kg, 省会~一线8/kg, 异地14/kg (approximating SF Express)
         const perKg = evt.city === '本市' ? 2 : evt.city === '邻市' ? 5 : evt.city === '异地' ? 14 : 8;
         const firstWeightFee = evt.city === '本市' ? 10 : evt.city === '邻市' ? 12 : evt.city === '异地' ? 22 : 18;
         cargoCost = Math.round(firstWeightFee + excessKg * perKg);
+        // Physical exhaustion: 1 passion per 3kg excess, no cap
+        cargoFatigue = Math.round(excessKg / 3);
+      }
+      // Overstock penalty: >100 items is hard for one person to manage
+      if (isAttend && totalItems > 100) {
+        const overstock = totalItems - 100;
+        cargoFatigue += Math.round(overstock / 20);
+
+        // Lost/damaged items: the more you carry, the higher the chance of accidents
+        // >100: 3-8% loss rate; >300: 8-15% loss rate; >500: 15-25% loss rate
+        const lossRate = totalItems > 500 ? 0.15 + Math.random() * 0.10
+          : totalItems > 300 ? 0.08 + Math.random() * 0.07
+          : 0.03 + Math.random() * 0.05;
+        if (state.inventory.hvpStock > 0) {
+          lostItems.hvp = Math.min(state.inventory.hvpStock, Math.ceil(state.inventory.hvpStock * lossRate));
+        }
+        if (state.inventory.lvpStock > 0) {
+          lostItems.lvp = Math.min(state.inventory.lvpStock, Math.ceil(state.inventory.lvpStock * lossRate));
+        }
       }
 
       if (isAttend && mg) {
@@ -364,6 +385,19 @@ export function executeAction(state, actionId) {
         if (fatigueDrain > 0) {
           state.passion -= fatigueDrain;
           result.deltas.push({ icon: 'battery-medium', label: '连续参展身心俱疲', value: `热情-${fatigueDrain}`, positive: false });
+        }
+        if (cargoFatigue > 0) {
+          state.passion = Math.max(1, state.passion - cargoFatigue);
+          result.deltas.push({ icon: 'package', label: `搬${Math.round(carryWeightKg)}kg货物累坏了`, value: `热情-${cargoFatigue}`, positive: false });
+        }
+        if (lostItems.hvp > 0 || lostItems.lvp > 0) {
+          state.inventory.hvpStock = Math.max(0, state.inventory.hvpStock - lostItems.hvp);
+          state.inventory.lvpStock = Math.max(0, state.inventory.lvpStock - lostItems.lvp);
+          const parts = [];
+          if (lostItems.hvp > 0) parts.push(`同人本${lostItems.hvp}本`);
+          if (lostItems.lvp > 0) parts.push(`谷子${lostItems.lvp}个`);
+          state.passion = Math.max(1, state.passion - Math.round((lostItems.hvp + lostItems.lvp) * 0.1));
+          result.deltas.push({ icon: 'warning', label: `搬运途中${Math.random() < 0.5 ? '被压坏' : '丢失'}了`, value: `-${parts.join('、')}`, positive: false });
         }
         if (eventFatigue < 1) {
           const rc = state.recentEventTurns.filter(t => state.turn - t < 6).length;
@@ -388,6 +422,19 @@ export function executeAction(state, actionId) {
           state.passion -= fatigueDrain;
           result.deltas.push({ icon: 'battery-medium', label: '连续参展身心俱疲', value: `热情-${fatigueDrain}`, positive: false });
         }
+        if (cargoFatigue > 0) {
+          state.passion = Math.max(1, state.passion - cargoFatigue);
+          result.deltas.push({ icon: 'package', label: `搬${Math.round(carryWeightKg)}kg货物累坏了`, value: `热情-${cargoFatigue}`, positive: false });
+        }
+        if (lostItems.hvp > 0 || lostItems.lvp > 0) {
+          state.inventory.hvpStock = Math.max(0, state.inventory.hvpStock - lostItems.hvp);
+          state.inventory.lvpStock = Math.max(0, state.inventory.lvpStock - lostItems.lvp);
+          const parts = [];
+          if (lostItems.hvp > 0) parts.push(`同人本${lostItems.hvp}本`);
+          if (lostItems.lvp > 0) parts.push(`谷子${lostItems.lvp}个`);
+          state.passion = Math.max(1, state.passion - Math.round((lostItems.hvp + lostItems.lvp) * 0.1));
+          result.deltas.push({ icon: 'warning', label: `搬运途中${Math.random() < 0.5 ? '被压坏' : '丢失'}了`, value: `-${parts.join('、')}`, positive: false });
+        }
       } else {
         // === 寄售 (consignment) ===
         state.consecutiveConsigns++;
@@ -400,14 +447,39 @@ export function executeAction(state, actionId) {
         state.passion -= 2;
         addMoney(state, -shipCost);
         const consignDiscount = 0.55; // consignment agent takes a cut + less engagement
+
+        // --- Consignment volume efficiency: agent has limited table space ---
+        // A consignment agent can comfortably handle ~50 items on a shared table.
+        // Beyond that, items get stacked in boxes behind the table, barely visible.
+        // 0-50: 100%, 50-150: drops to ~40%, 150-300: drops to ~15%, 300+: ~5%
+        const consignItems = state.inventory.hvpStock + state.inventory.lvpStock;
+        let volumeEfficiency = 1.0;
+        if (consignItems > 50) {
+          // Logarithmic decay: efficiency = 50 / items (capped at floor 0.05)
+          volumeEfficiency = Math.max(0.05, 50 / consignItems);
+          // 100 items → 0.50, 150 → 0.33, 300 → 0.17, 500 → 0.10, 700 → 0.07, 1000 → 0.05
+        }
+
         // Random variance: not being there means less control (0.7~0.95)
         const consignRNG = 0.7 + Math.random() * 0.25;
-        const consignBoost = Math.round(evt.salesBoost * consignDiscount * consignRNG * 10) / 10;
+        const consignBoost = Math.round(evt.salesBoost * consignDiscount * consignRNG * volumeEfficiency * 10) / 10;
         state.attendingEvent = { ...evt, salesBoost: consignBoost };
         const rngPct = Math.round(consignRNG * 100);
         result.deltas.push({ icon: 'package', label: `寄售 ${evt.name}@${evt.city}`, value: `委托代售 销量×${consignBoost}`, positive: true });
+        if (volumeEfficiency < 0.9) {
+          result.deltas.push({ icon: 'warning', label: `寄售${consignItems}件货物`, value: `代售效率${Math.round(volumeEfficiency * 100)}%（摊位放不下）`, positive: false });
+        }
         if (rngPct < 85) result.deltas.push({ icon: 'shuffle', label: '代理摆摊状态一般', value: `发挥${rngPct}%`, positive: false });
         result.deltas.push({ icon: 'coins', label: '邮寄费用', value: `-¥${shipCost}`, positive: false });
+
+        // --- Excess consignment surcharge: >300 items require extra storage/handling ---
+        if (consignItems > 300) {
+          const excess = consignItems - 300;
+          // ¥2 per item for storage + ¥500 flat handling fee
+          const surcharge = 500 + excess * 2;
+          addMoney(state, -surcharge);
+          result.deltas.push({ icon: 'coins', label: '展会方加收寄售管理费', value: `-¥${surcharge}（${excess}件超额）`, positive: false });
+        }
 
         // --- Consignment agent mishap: flat 12% each time (normal probability event) ---
         if (Math.random() < 0.12) {
