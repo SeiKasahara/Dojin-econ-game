@@ -333,26 +333,37 @@ export function executeAction(state, actionId) {
 
       // Logistics cost: personally carrying to the venue
       // Estimate weight: HVP ~0.2kg/item, LVP ~0.08kg/item
-      // Hand carry ~8kg (backpack + small suitcase, ~40 HVP or ~100 LVP)
-      // Excess must be shipped: expensive and drains stamina
+      // Solo: 35kg free carry (~175 HVP or ~435 LVP), 100 item management cap
+      // With partner: doubled to 70kg carry, +80 item cap (partner helps carry and manage booth)
       const totalItems = state.inventory.hvpStock + state.inventory.lvpStock;
       const carryWeightKg = state.inventory.hvpStock * 0.2 + state.inventory.lvpStock * 0.08;
-      const freeCarryKg = 8; // one backpack + hand luggage
+      const hasPartnerHelp = isAttend && state.hasPartner;
+      const freeCarryKg = hasPartnerHelp ? 70 : 35;
+      const manageCap = hasPartnerHelp ? 180 : 100;
       let cargoCost = 0;
       let cargoFatigue = 0;
-      let lostItems = { hvp: 0, lvp: 0 }; // damaged/lost in transit
+      let lostItems = { hvp: 0, lvp: 0 };
+      if (hasPartnerHelp) {
+        result.deltas.push({ icon: 'handshake', label: '搭档帮忙搬货看摊', value: `搬运上限70kg 管理+80件`, positive: true });
+      }
       if (carryWeightKg > freeCarryKg) {
         const excessKg = carryWeightKg - freeCarryKg;
         const perKg = evt.city === '本市' ? 2 : evt.city === '邻市' ? 5 : evt.city === '异地' ? 14 : 8;
         const firstWeightFee = evt.city === '本市' ? 10 : evt.city === '邻市' ? 12 : evt.city === '异地' ? 22 : 18;
         cargoCost = Math.round(firstWeightFee + excessKg * perKg);
-        // Physical exhaustion: 1 passion per 3kg excess, no cap
         cargoFatigue = Math.round(excessKg / 3);
+        // Hint: suggest recruiting a partner if solo and overweight
+        if (!hasPartnerHelp && excessKg > 10) {
+          result.deltas.push({ icon: 'lightbulb', label: '提示：有搭档可以帮忙搬货', value: '搬运上限翻倍至70kg', positive: true });
+        }
       }
-      // Overstock penalty: >100 items is hard for one person to manage
-      if (isAttend && totalItems > 100) {
-        const overstock = totalItems - 100;
+      // Overstock penalty: exceeding management capacity
+      if (isAttend && totalItems > manageCap) {
+        const overstock = totalItems - manageCap;
         cargoFatigue += Math.round(overstock / 20);
+        if (!hasPartnerHelp && overstock > 0) {
+          result.deltas.push({ icon: 'lightbulb', label: '提示：有搭档可以帮忙看摊', value: '管理上限+80件', positive: true });
+        }
 
         // Lost/damaged items: the more you carry, the higher the chance of accidents
         // >100: 3-8% loss rate; >300: 8-15% loss rate; >500: 15-25% loss rate
