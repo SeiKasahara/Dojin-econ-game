@@ -8,7 +8,7 @@ export { addMoney, activeCrisisCount, getAge, getLifeStage, getLifeStageLabel, g
          computeEffectiveTime, getCalendarMonth, getBaseTime, getRealityDrain, applyPassionDecay } from './engine/core.js';
 export { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, CHOICE_EFFECTS, getQualityStars, applyCreativeChoice,
          getWorkQualityEffects, getTrendBonus, syncInventoryAggregates,
-         PARTNER_TYPES, addContact, generatePartnerCandidates } from './engine/definitions.js';
+         PARTNER_TYPES, addContact, generatePartnerCandidates, canCreateMusic } from './engine/definitions.js';
 export { ENDOWMENTS, ENDOWMENT_TOTAL_POINTS, ENDOWMENT_MAX_PER_TRAIT, OBSESSIVE_TRAITS,
          BACKGROUNDS, rollBackground, createInitialState } from './engine/state.js';
 export { ACTIONS, getActionDisplay, getFreelanceTimeCost, getTimeCost,

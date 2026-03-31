@@ -17,8 +17,8 @@ export const ACTIONS = {
                    costLabel: '热情-3 小幅提升信息', requires: { passion: 3, time: 1 }, promoteIntensity: 'light' },
   promote_heavy: { id: 'promote_heavy', name: '全力宣发', emoji: 'megaphone-simple', type: 'promote',
                    costLabel: '热情-8 大幅提升信息 需闲暇≥3天', requires: { passion: 8, time: 3 }, promoteIntensity: 'heavy' },
-  findPartner: { id: 'findPartner', name: '寻找搭档',   emoji: 'handshake', type: 'social',
-                 costLabel: '热情-3 搭档有稿费成本', requires: { passion: 3, time: 2 } },
+  findPartner: { id: 'findPartner', name: '招募搭档',   emoji: 'handshake', type: 'social',
+                 costLabel: '热情-3 从人脉池选搭档', requires: { passion: 3, time: 2 } },
   partTimeJob: { id: 'partTimeJob', name: '普通打工',   emoji: 'storefront', type: 'work',
                  costLabel: '赚¥300~500 下月闲暇-1天 仅学生/失业', requires: { passion: 2, time: 3 } },
   freelance:   { id: 'freelance',   name: '接稿赚钱',   emoji: 'paint-brush', type: 'freelance',
@@ -43,6 +43,10 @@ export const ACTIONS = {
                  costLabel: '一次性大额投入 永久提升创作质量', requires: {} },
   sponsorCommunity: { id: 'sponsorCommunity', name: '投资社群', emoji: 'hand-heart', type: 'sponsorCommunity',
                  costLabel: '花钱回馈社群 声誉↑热情↑ 冷却3月', requires: {} },
+  surfOnline: { id: 'surfOnline', name: '网络冲浪', emoji: 'globe', type: 'surfOnline',
+                 costLabel: '热情-2 拓展线上人脉 每月1次', requires: { passion: 2, time: 1 } },
+  anthology: { id: 'anthology', name: '合集企划', emoji: 'books', type: 'anthology',
+                 costLabel: '多人协作大型项目 需声誉≥4', requires: { passion: 10, time: 2 } },
 };
 
 // Dynamic action info (for UI)
@@ -173,6 +177,28 @@ export function getActionDisplay(actionId, state) {
     const best = available[available.length - 1];
     return { ...base, costLabel: `${available.length}种方案可选 · ¥${available[0].cost}~¥${best.cost}` };
   }
+  if (actionId === 'anthology') {
+    if (state.anthologyProject) {
+      const ap = state.anthologyProject;
+      return { ...base, name: `推进合集企划「${ap.name || '合集'}」`, costLabel: `进度 ${ap.progress}/${ap.needed} · ${ap.members.length}人参与 · 热情-10` };
+    }
+    const familiarCount = (state.contacts || []).filter(c => c.affinity >= 2).length;
+    if (state.reputation < 4) return { ...base, costLabel: `需要声誉≥4（当前${state.reputation.toFixed(1)}）` };
+    if (familiarCount < 3) return { ...base, costLabel: `需要≥3位熟悉的联系人（当前${familiarCount}位）` };
+    return { ...base, costLabel: `热情-10 选2-3人合作 工期4-6月 高风险高回报` };
+  }
+  if (actionId === 'findPartner') {
+    if (state.hasPartner) return { ...base, costLabel: '已有搭档' };
+    if (!state.contacts?.length) return { ...base, costLabel: '没有认识的人——先去冲浪或参加展会吧' };
+    return { ...base, costLabel: `热情-3 从${state.contacts.length}位联系人中选` };
+  }
+  if (actionId === 'surfOnline') {
+    if (state.surfedThisMonth) return { ...base, costLabel: '本月已冲浪过' };
+    const disc = state.infoDisclosure || 0.2;
+    const social = state.endowments?.social || 0;
+    const chance = Math.round(Math.min(0.85, disc * 0.6 + social * 0.05) * 100);
+    return { ...base, costLabel: `热情-2 发现概率${chance}% 透明度${Math.round(disc * 100)}%` };
+  }
   return base;
 }
 
@@ -265,6 +291,8 @@ export function getTimeCost(state, actionId) {
   if (actionId === 'reprint') return 1;
   if (actionId === 'buyGoods') return 1;
   if (actionId === 'sellGoods') return 1;
+  if (actionId === 'surfOnline') return 1;
+  if (actionId === 'anthology') return 2;
   if (actionId === 'hireAssistant') return 1;
   // sponsorCommunity: time cost depends on selected tier
   if (actionId === 'sponsorCommunity') {
@@ -327,7 +355,17 @@ export function canPerformAction(state, actionId) {
     if (!state.commercialOfferReceived) return false;
   }
   // findPartner: can't find a new partner if you already have one, or already tried this month
-  if (actionId === 'findPartner' && (state.hasPartner || state.findPartnerTriedThisMonth)) return false;
+  // anthology: need rep>=4, >=3 familiar contacts, no existing anthology, and not already working HVP
+  if (actionId === 'anthology') {
+    if (state.reputation < 4) return false;
+    if (state.hvpProject) return false; // can't run anthology + solo HVP simultaneously
+    if (!state.anthologyProject) {
+      const familiarCount = (state.contacts || []).filter(c => c.affinity >= 2).length;
+      if (familiarCount < 3) return false;
+    }
+  }
+  if (actionId === 'findPartner' && (state.hasPartner || state.findPartnerTriedThisMonth || !state.contacts?.length)) return false;
+  if (actionId === 'surfOnline' && state.surfedThisMonth) return false;
   if (actionId === 'hvp' && state.hvpWorkedThisMonth) return false;
   if (actionId === 'lvp' && state.lvpWorkedThisMonth) return false;
   // Promote: only one promotion action per month (light OR heavy, not both)

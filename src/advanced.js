@@ -41,6 +41,12 @@ export function createAdvancedState() {
     // Cross-border (pk45.md)
     foreignContentPressure: 0, // 0-1: how much foreign content competes
     isContentBridge: false,    // player acts as cultural bridge
+
+    // Market regime cycles: periodic shifts that change optimal strategy
+    marketRegime: 'normal',    // 'normal'|'boom'|'winter'|'stylePivot'|'platformShift'|'ipCrisis'
+    regimeTurnsLeft: 0,        // months until next regime roll
+    regimeNextRoll: 24 + Math.floor(Math.random() * 12), // first roll at turn 24-36
+    regimePivotType: null,     // for 'stylePivot': which subtype is boosted
   };
 }
 
@@ -106,12 +112,122 @@ export function tickAdvanced(adv, market, playerState) {
   }
   adv.foreignContentPressure = Math.max(0, adv.foreignContentPressure - 0.01);
 
+  // --- Market regime cycles ---
+  if (adv.regimeTurnsLeft > 0) {
+    adv.regimeTurnsLeft--;
+    if (adv.regimeTurnsLeft === 0) {
+      const prev = adv.marketRegime;
+      adv.marketRegime = 'normal';
+      adv.regimePivotType = null;
+      adv.regimeNextRoll = playerState.turn + 18 + Math.floor(Math.random() * 18); // next roll in 18-36 months
+      events.push({ msg: `${ic('arrows-clockwise')} "${REGIME_NAMES[prev] || '异常状态'}"结束，市场恢复常态` });
+    }
+  } else if (playerState.turn >= (adv.regimeNextRoll || 999)) {
+    // Roll a new regime
+    const regime = rollMarketRegime(adv, playerState);
+    if (regime) {
+      adv.marketRegime = regime.id;
+      adv.regimeTurnsLeft = regime.duration;
+      adv.regimePivotType = regime.pivotType || null;
+      events.push({ msg: `${ic(regime.emoji)} ${regime.announcement}` });
+      // Platform shift: halve info disclosure (need to rebuild presence)
+      if (regime.id === 'platformShift') {
+        playerState.infoDisclosure = Math.max(0.1, playerState.infoDisclosure * 0.5);
+      }
+      // Boom: new creators flood in
+      if (regime.id === 'boom' && playerState.market) {
+        playerState.market.nLVP += 15;
+        playerState.market.communitySize = Math.round(playerState.market.communitySize * 1.15);
+      }
+      // Winter: creators exit, community shrinks
+      if (regime.id === 'winter' && playerState.market) {
+        playerState.market.nHVP = Math.max(2, playerState.market.nHVP - 3);
+        playerState.market.nLVP = Math.max(10, playerState.market.nLVP - 15);
+        playerState.market.communitySize = Math.round(playerState.market.communitySize * 0.85);
+      }
+      // IP crisis: reputation dip for everyone
+      if (regime.id === 'ipCrisis') {
+        playerState.reputation = Math.max(0, playerState.reputation - 0.3);
+      }
+    }
+  }
+
   return events;
 }
 
-// === Get cost multiplier from stagflation + AI ===
+// === Market Regime Definitions ===
+const REGIME_NAMES = {
+  normal: '常态',
+  boom: '黄金期',
+  winter: '寒冬',
+  stylePivot: '风格转向',
+  platformShift: '平台迁移',
+  ipCrisis: '版权风波',
+};
+
+const REGIME_DEFS = [
+  {
+    id: 'boom', emoji: 'trend-up', weight: 20,
+    duration: () => 12 + Math.floor(Math.random() * 12), // 12-24 months
+    announcement: '同人黄金期！大量新人涌入，需求暴涨，但竞争也在加剧',
+    when: (adv) => adv.marketRegime === 'normal',
+  },
+  {
+    id: 'winter', emoji: 'snowflake', weight: 20,
+    duration: () => 12 + Math.floor(Math.random() * 12),
+    announcement: '同人寒冬降临——需求骤降，大量创作者退出，只有最坚定的人能撑过去',
+    when: (adv) => adv.marketRegime === 'normal',
+  },
+  {
+    id: 'stylePivot', emoji: 'arrows-clockwise', weight: 25,
+    duration: () => 8 + Math.floor(Math.random() * 10), // 8-18 months
+    announcement: '圈内风向突变！某种创作类型突然爆火',
+    when: (adv) => adv.marketRegime === 'normal',
+  },
+  {
+    id: 'platformShift', emoji: 'device-mobile', weight: 15,
+    duration: () => 6 + Math.floor(Math.random() * 6), // 6-12 months
+    announcement: '主流社交平台换代——你积累的曝光和粉丝需要重新建立',
+    when: (adv) => adv.marketRegime === 'normal',
+  },
+  {
+    id: 'ipCrisis', emoji: 'shield-warning', weight: 20,
+    duration: () => 6 + Math.floor(Math.random() * 8), // 6-14 months
+    announcement: '版权风波！原作方对同人创作态度收紧，圈内人人自危',
+    when: (adv) => adv.marketRegime === 'normal',
+  },
+];
+
+const STYLE_PIVOT_TYPES = ['manga', 'novel', 'artbook', 'lorebook', 'music'];
+
+function rollMarketRegime(adv, playerState) {
+  const eligible = REGIME_DEFS.filter(r => r.when(adv, playerState));
+  if (eligible.length === 0) return null;
+  const totalW = eligible.reduce((s, r) => s + r.weight, 0);
+  let roll = Math.random() * totalW;
+  for (const r of eligible) {
+    roll -= r.weight;
+    if (roll <= 0) {
+      const result = { id: r.id, emoji: r.emoji, duration: r.duration(), announcement: r.announcement };
+      if (r.id === 'stylePivot') {
+        result.pivotType = STYLE_PIVOT_TYPES[Math.floor(Math.random() * STYLE_PIVOT_TYPES.length)];
+        const subtypeNames = { manga: '漫画本', novel: '小说本', artbook: '绘本', lorebook: '设定集', music: '音乐专辑' };
+        result.announcement = `圈内风向突变！「${subtypeNames[result.pivotType]}」突然爆火，需求翻倍`;
+      }
+      return result;
+    }
+  }
+  return null;
+}
+
+// === Get cost multiplier from stagflation + AI + regime ===
 export function getAdvancedCostMod(adv) {
-  return 1 + (adv.costInflation || 0);
+  let mod = 1 + (adv.costInflation || 0);
+  // Boom: costs rise due to competition for materials/venues
+  if (adv.marketRegime === 'boom') mod *= 1.15;
+  // Winter: costs drop slightly (less competition for slots)
+  if (adv.marketRegime === 'winter') mod *= 0.9;
+  return mod;
 }
 
 // === Get sales modifier from advanced systems ===
@@ -139,7 +255,27 @@ export function getAdvancedSalesMod(adv, productType) {
   // Network phase: mature networks have more competition but bigger audience
   if (adv.networkPhase === 'fragmented') mod *= 0.9; // harder to reach everyone
 
+  // Market regime effects
+  if (adv.marketRegime === 'boom') mod *= 1.3;          // demand surge
+  if (adv.marketRegime === 'winter') mod *= 0.6;         // demand crash
+  if (adv.marketRegime === 'ipCrisis') mod *= 0.7;       // everyone scared, buying less
+  // Style pivot: specific subtype gets 2x, others get 0.8x
+  if (adv.marketRegime === 'stylePivot' && adv.regimePivotType) {
+    if (productType === 'hvp') {
+      // Caller doesn't pass subtype, so we apply a mild general boost
+      // The specific subtype bonus is applied in sales.js per-work
+      mod *= 1.0; // neutral at aggregate level; per-work bonus handled separately
+    }
+  }
+
   return mod;
+}
+
+// === Get regime subtype bonus for a specific work ===
+export function getRegimeSubtypeBonus(adv, workSubtype) {
+  if (adv.marketRegime !== 'stylePivot' || !adv.regimePivotType) return 1.0;
+  if (workSubtype === adv.regimePivotType) return 2.0;  // hot type: 2x sales
+  return 0.8;  // cold types: -20%
 }
 
 // === Signal cost for info disclosure (Spence model, posp.md) ===
@@ -178,6 +314,18 @@ export function getAdvancedNarratives(adv) {
   }
   if (adv.foreignContentPressure > 0.15) {
     phrases.push(`${ic('globe')} 海外内容竞争压力: ${Math.round(adv.foreignContentPressure * 100)}%`);
+  }
+
+  // Market regime
+  if (adv.marketRegime && adv.marketRegime !== 'normal') {
+    const regimeDescs = {
+      boom: `${ic('trend-up')} 黄金期：需求+30%，成本+15%，新创作者大量涌入（剩${adv.regimeTurnsLeft}月）`,
+      winter: `${ic('snowflake')} 寒冬期：需求-40%，成本-10%，创作者退出中（剩${adv.regimeTurnsLeft}月）`,
+      stylePivot: `${ic('arrows-clockwise')} 风格转向：${adv.regimePivotType ? ({'manga':'漫画本','novel':'小说本','artbook':'绘本','lorebook':'设定集','music':'音乐专辑'}[adv.regimePivotType] || adv.regimePivotType) : '某类型'}需求×2，其余-20%（剩${adv.regimeTurnsLeft}月）`,
+      platformShift: `${ic('device-mobile')} 平台迁移：信息透明度重置，需重建曝光（剩${adv.regimeTurnsLeft}月）`,
+      ipCrisis: `${ic('shield-warning')} 版权风波：需求-30%，全员声誉受损（剩${adv.regimeTurnsLeft}月）`,
+    };
+    phrases.push(regimeDescs[adv.marketRegime] || `市场状态: ${adv.marketRegime}`);
   }
 
   return phrases;

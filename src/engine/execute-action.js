@@ -1,5 +1,5 @@
 import { getLifeStage, getAge, getCreativeSkill, getSkillEffects, getSkillLabel, addMoney, addReputation, getRealityDrain, applyPassionDecay, computeEffectiveTime } from './core.js';
-import { HVP_SUBTYPES, LVP_SUBTYPES, PARTNER_TYPES, CHOICE_EFFECTS, applyCreativeChoice, getQualityStars, getWorkQualityEffects, syncInventoryAggregates, addContact } from './definitions.js';
+import { HVP_SUBTYPES, LVP_SUBTYPES, PARTNER_TYPES, CHOICE_EFFECTS, applyCreativeChoice, getQualityStars, getWorkQualityEffects, syncInventoryAggregates, addContact, addInteraction, getIcebreakerChance } from './definitions.js';
 import { ACTIONS, getTimeCost, getFreelanceTimeCost, getSponsorTiers } from './actions.js';
 import { calculateSales, getSupplyDemandData, sellFromWorks, calculateFeedback } from './sales.js';
 import { TIPS } from './tips.js';
@@ -123,25 +123,11 @@ export function executeAction(state, actionId) {
   } else if (action.type === 'social') {
     state.passion -= 3;
     result.deltas.push({ icon: 'heart', label: '精力消耗', value: '-3', positive: false });
-    const socialEff = state.obsessiveTrait === 'talent' ? 0 : (state.endowments.social || 0);
-    let prob = Math.min(0.9, state.reputation / (state.reputation + 3) + socialEff * 0.08);
-    // Work stage: smaller social circle → harder to find partners
-    if (getLifeStage(state.turn) === 'work') {
-      prob *= 0.6;
-      // 老炮加成: long-time active workers get a bonus
-      const workYears = (state.turn - 50) / 12;
-      if (workYears > 3 && (state.turn - state.lastCreativeTurn) <= 6) {
-        prob += 0.1;
-        result.deltas.push({ icon: 'medal', label: '老炮加成', value: '长期活跃+10%', positive: true });
-      }
-    }
     // Mark as tried this month (one attempt per month)
     state.findPartnerTriedThisMonth = true;
-    // Check if candidate was selected via UI or if search failed
+    // Check if candidate was selected via UI
     const candidate = state._selectedPartnerCandidate;
     state._selectedPartnerCandidate = null;
-    const searchFailed = state._partnerSearchFailed;
-    state._partnerSearchFailed = false;
 
     if (candidate) {
       // Candidate selected — reveal true type
@@ -150,6 +136,14 @@ export function executeAction(state, actionId) {
       state.hasPartner = true;
       state.partnerType = pType;
       state.activeContactId = candidate.contactId || null;
+
+      // Collaboration adds interactions (+2)
+      if (candidate.contactId) {
+        const revealed = addInteraction(state, candidate.contactId, 2);
+        if (revealed) {
+          result.deltas.push({ icon: 'eye', label: `深入了解了${revealed.name}`, value: `原来是${PARTNER_TYPES[revealed.pType]?.name}`, positive: revealed.pType !== 'toxic' });
+        }
+      }
 
       // If there's an ongoing HVP project, recalculate needed months with partner
       if (state.hvpProject) {
@@ -191,7 +185,7 @@ export function executeAction(state, actionId) {
         // Toxic revealed for first time → force contact to trusted tier
         if (pType === 'toxic' && candidate.contactId) {
           const c = (state.contacts || []).find(x => x.id === candidate.contactId);
-          if (c && c.tier !== 'trusted') { c.tier = 'trusted'; c.affinity = Math.max(c.affinity, 4); c.bio = getContactBio('toxic', 'trusted', c.source); }
+          if (c && c.tier !== 'trusted') { c.tier = 'trusted'; c.affinity = Math.max(c.affinity, 4); c.bio = getContactBio('toxic', 'trusted', c.source, c.specialty); }
         }
       }
       if (isFree) {
@@ -205,11 +199,8 @@ export function executeAction(state, actionId) {
       result.deltas.push({ icon: 'note-pencil', label: pt.desc, value: '', positive: false });
       result.tip = pType === 'toxic' ? TIPS.partnerToxic : pType === 'supportive' ? TIPS.partnerFound : TIPS.partnerRisk;
     } else {
-      // No candidates or search failed
-      result.deltas.push({ icon: 'handshake', label: '本次没找到合适的搭档', value: '', positive: false });
-      if (getLifeStage(state.turn) === 'work') {
-        result.deltas.push({ icon: 'briefcase', label: '工作后同人圈子变小，找搭档更难了', value: '', positive: false });
-      }
+      // No candidate selected (cancelled or no contacts)
+      result.deltas.push({ icon: 'handshake', label: '没有选择搭档', value: '', positive: false });
       result.tip = TIPS.partnerFail;
     }
 
@@ -591,6 +582,18 @@ export function executeAction(state, actionId) {
         }
       }
 
+      // Attending events gives +1 interaction to existing contacts (chance encounter at venue)
+      if (isAttend && state.contacts) {
+        const encounterCount = Math.min(2, state.contacts.filter(c => c.id !== state.activeContactId && c.affinity >= 1).length);
+        const shuffled = state.contacts.filter(c => c.id !== state.activeContactId && c.affinity >= 1).sort(() => Math.random() - 0.5);
+        for (let i = 0; i < encounterCount; i++) {
+          const revealed = addInteraction(state, shuffled[i].id, 1);
+          if (revealed) {
+            result.deltas.push({ icon: 'eye', label: `展会上深入了解了${revealed.name}`, value: `原来是${PARTNER_TYPES[revealed.pType]?.name}`, positive: revealed.pType !== 'toxic' });
+          }
+        }
+      }
+
       // Clear event (selling happens immediately at the event)
       state.attendingEvent = null;
       result.tip = TIPS.doujinEvent;
@@ -722,7 +725,7 @@ export function executeAction(state, actionId) {
       state._selectedHVPSubtype = null;
       const sub = HVP_SUBTYPES[subtypeId] || HVP_SUBTYPES.manga;
       const skill = getCreativeSkill(state);
-      const fx = getSkillEffects(skill);
+      const fx = getSkillEffects(skill, state);
       let soloNeeded = sub.monthsSolo;
       if (fx.soloHVPMonths < 3 && soloNeeded >= 3) soloNeeded--; // mastery -1 month
       const needed = state.hasPartner ? sub.monthsPartner : soloNeeded;
@@ -809,7 +812,7 @@ export function executeAction(state, actionId) {
 
         // Skill-based learning curve (Arrow 1962)
         const skill = getCreativeSkill(state);
-        const fx = getSkillEffects(skill);
+        const fx = getSkillEffects(skill, state);
 
         const costMult = (state.recessionTurnsLeft > 0 ? 1.2 : 1.0) * getAdvancedCostMod(state.advanced);
         const talentDiscount = 1 - (state.endowments.talent || 0) * 0.05;
@@ -825,11 +828,12 @@ export function executeAction(state, actionId) {
         state.inventory.hvpPrice = hvpPrice;
         // Add to works array
         const subInfo = HVP_SUBTYPES[savedProject.subtype] || HVP_SUBTYPES.manga;
-        // Obsessive quality modifiers
+        // Skill quality bonus + obsessive quality modifiers
         let hvpFinalQ = savedProject.workQuality || 1.0;
+        hvpFinalQ += fx.qualityBonus;
         if (state.obsessiveTrait === 'stamina') hvpFinalQ -= 0.15;
         if (state.obsessiveTrait === 'marketing') hvpFinalQ -= 0.1;
-        hvpFinalQ = Math.max(0.1, hvpFinalQ);
+        hvpFinalQ = Math.max(0.1, Math.min(1.8, hvpFinalQ));
         state.inventory.works.push({
           id: state.inventory.nextWorkId++,
           type: 'hvp', subtype: savedProject.subtype || 'manga',
@@ -960,7 +964,7 @@ export function executeAction(state, actionId) {
     let lvpQuality = Math.max(0.5, Math.min(1.8, 1.0 + (pfx.qualityMod || 0)));
 
     const skill = getCreativeSkill(state);
-    const fx = getSkillEffects(skill);
+    const fx = getSkillEffects(skill, state);
 
     // Creative fatigue: LVP adds +1
     state.creativeFatigue += 1;
@@ -1225,6 +1229,198 @@ export function executeAction(state, actionId) {
 
     result.tip = tier.tip ? { label: '社群投资', text: tier.tip }
       : { label: '社群投资', text: '赞助同人社区活动是建立口碑的有效方式。不仅提升声誉和曝光度，还能认识新朋友扩展人脉。冷却6个月。' };
+  }
+
+  // === Surf Online: discover contacts via social media ===
+  if (action.type === 'surfOnline') {
+    state.passion -= 2;
+    state.surfedThisMonth = true;
+    result.deltas.push({ icon: 'heart', label: '精力消耗', value: '-2', positive: false });
+
+    const disc = state.infoDisclosure || 0.2;
+    const social = state.obsessiveTrait === 'talent' ? 0 : (state.endowments?.social || 0);
+    const discoverChance = Math.min(0.85, disc * 0.6 + social * 0.05);
+    const socialObsessiveBonus = state.obsessiveTrait === 'social' ? 1 : 0;
+
+    if (Math.random() < discoverChance) {
+      const count = 1 + (Math.random() < 0.3 ? 1 : 0) + socialObsessiveBonus;
+      let discovered = 0;
+      let rejected = 0;
+      for (let i = 0; i < count; i++) {
+        const affinity = 0.3 + Math.random() * 0.5; // 0.3-0.8
+        const c = addContact(state, { source: 'online', affinity });
+        if (c) {
+          // Icebreaker check: NPC may not reciprocate
+          const iceChance = getIcebreakerChance(state, c);
+          if (Math.random() >= iceChance) {
+            // Failed icebreaker — remove and notify
+            state.contacts = state.contacts.filter(x => x.id !== c.id);
+            rejected++;
+            continue;
+          }
+          discovered++;
+          const specialtyLabel = c.specialty === 'music' ? ' ${ic("music-notes","0.7rem")}' : '';
+          result.deltas.push({ icon: 'address-book', label: `发现了${c.name}${c.npcTier === 'big' ? '(知名)' : ''}`, value: '线上人脉+1', positive: true });
+        }
+      }
+      if (discovered === 0 && rejected > 0) {
+        result.deltas.push({ icon: 'magnifying-glass', label: '发了私信但没人回复', value: '对方不感兴趣', positive: false });
+      } else if (discovered === 0) {
+        result.deltas.push({ icon: 'magnifying-glass', label: '刷了一圈', value: '人脉池已满', positive: false });
+      }
+    } else {
+      result.deltas.push({ icon: 'magnifying-glass', label: '刷了一圈', value: '没有发现感兴趣的人', positive: false });
+    }
+
+    // Small info disclosure bump from being active online
+    const infoGain = 0.02;
+    state.infoDisclosure = Math.min(1, state.infoDisclosure + infoGain);
+
+    // Browsing may encounter existing contacts online (+0.5 interaction)
+    if (state.contacts && state.contacts.length > 0) {
+      const online = state.contacts.filter(c => c.id !== state.activeContactId && c.affinity >= 0.5);
+      if (online.length > 0) {
+        const pick = online[Math.floor(Math.random() * online.length)];
+        const revealed = addInteraction(state, pick.id, 0.5);
+        if (revealed) {
+          result.deltas.push({ icon: 'eye', label: `刷到${revealed.name}的动态后了解更多了`, value: `原来是${PARTNER_TYPES[revealed.pType]?.name}`, positive: revealed.pType !== 'toxic' });
+        }
+      }
+    }
+
+    result.tip = { label: '网络冲浪', text: '在社交媒体上浏览同好的作品和动态。信息透明度越高（你在网上越有存在感），越容易被同好发现。展会是高质量破冰，冲浪是广撒网。' };
+  }
+
+  // === Anthology Project: multi-person collaboration ===
+  if (action.type === 'anthology') {
+    state.passion -= 10;
+    result.deltas.push({ icon: 'heart', label: '精力消耗', value: '-10', positive: false });
+
+    if (!state.anthologyProject) {
+      // Start new anthology — members selected via UI (_selectedAnthologyMembers)
+      const members = state._selectedAnthologyMembers || [];
+      state._selectedAnthologyMembers = null;
+
+      if (members.length < 2) {
+        result.deltas.push({ icon: 'warning', label: '人数不足', value: '需要至少2人', positive: false });
+      } else {
+        const needed = 4 + Math.floor(Math.random() * 3); // 4-6 months
+        const anthologyName = state._anthologyName || '合集企划';
+        state._anthologyName = null;
+        state.anthologyProject = {
+          name: anthologyName,
+          members: members.map(m => ({ contactId: m.contactId, name: m.name, pType: m._type || 'supportive', morale: 1.0 })),
+          progress: 1,
+          needed,
+          turnsActive: 0,
+        };
+        result.deltas.push({ icon: 'books', label: `「${anthologyName}」启动！`, value: `${members.length}人参与 · 工期${needed}月`, positive: true });
+        for (const m of members) {
+          result.deltas.push({ icon: 'user', label: m.name, value: '加入企划', positive: true });
+        }
+        result.tip = { label: '合集企划', text: '多人协作的大型同人合集。每月需要推进进度并应对协调挑战——搭档性格、意外退出、创意分歧都会影响项目。完成后获得远超个人作品的声誉和销量加成。' };
+      }
+    } else {
+      // Continue existing anthology: progress + coordination check
+      const ap = state.anthologyProject;
+      ap.progress++;
+      ap.turnsActive++;
+      result.deltas.push({ icon: 'books', label: `「${ap.name}」推进中`, value: `进度 ${ap.progress}/${ap.needed}`, positive: true });
+
+      // --- Monthly coordination check ---
+      let coordIssue = false;
+      for (const m of ap.members) {
+        const dramaChance = m.pType === 'toxic' ? 0.35 : m.pType === 'unreliable' ? 0.25 : m.pType === 'demanding' ? 0.12 : 0.03;
+        if (Math.random() < dramaChance) {
+          coordIssue = true;
+          m.morale = Math.max(0, m.morale - 0.3);
+          if (m.pType === 'unreliable' && Math.random() < 0.3) {
+            // Unreliable member disappears
+            result.deltas.push({ icon: 'warning', label: `${m.name}失联了！`, value: '进度-1', positive: false });
+            ap.progress = Math.max(1, ap.progress - 1);
+          } else if (m.pType === 'toxic') {
+            result.deltas.push({ icon: 'skull', label: `${m.name}在群里吵架了`, value: '全员士气↓', positive: false });
+            for (const om of ap.members) om.morale = Math.max(0, om.morale - 0.1);
+            state.passion = Math.max(0, state.passion - 3);
+          } else if (m.pType === 'demanding') {
+            result.deltas.push({ icon: 'smiley-angry', label: `${m.name}要求推翻重做`, value: '质量↑但进度停滞', positive: false });
+            // demanding drama doesn't lose progress but doesn't advance either — handled by not adding extra progress
+          } else {
+            result.deltas.push({ icon: 'chat-circle', label: `${m.name}有点不在状态`, value: '小波折', positive: false });
+          }
+          break; // max 1 drama per month
+        }
+      }
+
+      if (!coordIssue) {
+        result.deltas.push({ icon: 'check', label: '本月协作顺利', value: '', positive: true });
+      }
+
+      // --- Check for member dropping out (morale <= 0) ---
+      const dropped = ap.members.filter(m => m.morale <= 0);
+      if (dropped.length > 0) {
+        for (const d of dropped) {
+          result.deltas.push({ icon: 'user-minus', label: `${d.name}退出了企划`, value: '人数减少', positive: false });
+        }
+        ap.members = ap.members.filter(m => m.morale > 0);
+        if (ap.members.length === 0) {
+          result.deltas.push({ icon: 'warning', label: '所有人都退出了', value: '企划解散', positive: false });
+          state.anthologyProject = null;
+        }
+      }
+
+      // --- Completion check ---
+      if (state.anthologyProject && ap.progress >= ap.needed) {
+        const memberCount = ap.members.length;
+        const qualityBonus = ap.members.some(m => m.pType === 'demanding') ? 0.2 : 0;
+        const baseQuality = 1.0 + qualityBonus + memberCount * 0.1;
+        const finalQ = Math.min(1.8, baseQuality);
+        const repMult = 1.5 + memberCount * 0.3; // 2.1-2.4x rep mult
+        const printCost = 3000 + memberCount * 1500;
+
+        addMoney(state, -printCost);
+        const batchQty = Math.round(printCost / 40);
+        const price = state.playerPrice?.hvp || 60;
+
+        state.inventory.works.push({
+          id: state.inventory.nextWorkId++,
+          type: 'hvp', subtype: 'artbook',
+          name: ap.name,
+          qty: batchQty, price,
+          workQuality: finalQ,
+          styleTag: null,
+          isCultHit: memberCount >= 3 && Math.random() < 0.2,
+          turn: state.turn,
+          totalSold: 0,
+          isAnthology: true,
+        });
+        state.inventory.hvpStock += batchQty;
+
+        const rawRep = 0.5 * repMult;
+        const actualRep = addReputation(state, rawRep);
+        state.maxReputation = Math.max(state.maxReputation, state.reputation);
+        state.totalHVP++;
+
+        // Skill exp bonus for anthology
+        state.skillExp = (state.skillExp || 0) + 60 + memberCount * 20;
+
+        result.deltas.push({ icon: 'books', label: `「${ap.name}」完成！`, value: `质量${finalQ.toFixed(2)} · ${batchQty}本`, positive: true });
+        result.deltas.push({ icon: 'star', label: '合集声誉加成', value: `+${actualRep.toFixed(2)}（${repMult.toFixed(1)}x）`, positive: true });
+        result.deltas.push({ icon: 'coins', label: '印刷费', value: `-¥${printCost}`, positive: false });
+
+        // Update affinity for all members
+        for (const m of ap.members) {
+          const c = (state.contacts || []).find(x => x.id === m.contactId);
+          if (c) {
+            c.affinity = Math.min(5, c.affinity + 1.5);
+            c.interactions = (c.interactions || 0) + 3;
+          }
+        }
+
+        state.anthologyProject = null;
+        state.monthHadCreativeAction = true;
+      }
+    }
   }
 
   // --- Commercial transition: player accepts publisher offer ---

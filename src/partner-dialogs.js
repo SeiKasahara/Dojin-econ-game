@@ -53,6 +53,42 @@ const GENERAL = [
     { text: '试完分享心得', response: '一定！好东西要和好搭档分享~', effect: { affinity: 0.1 } },
   ]},
 
+  { types: ['supportive'], npc: '帮你整理了一份印刷厂对比表，你看看哪家合适', replies: [
+    { text: '太贴心了吧！', response: '嘿嘿，举手之劳~选好了告诉我，帮你对接', effect: { passion: 2, affinity: 0.1 } },
+    { text: '你怎么比我还上心', response: '谁让你老忘记这些细节嘛~', effect: { passion: 1 } },
+    { text: '我先看看价格', response: '嗯嗯，不急，有问题随时问我~', effect: { passion: 1 } },
+  ]},
+  { types: ['supportive'], npc: '今天路过书店，看到有人在翻同人区的书，突然好感慨', replies: [
+    { text: '是啊，能被人看到就很开心', response: '对吧！每一本都是创作者的心血~', effect: { passion: 2 } },
+    { text: '不知道有没有人买我们的', response: '肯定有！说不定正在看呢~', effect: { passion: 2 } },
+    { text: '什么感慨', response: '就是觉得同人这个圈子虽然小，但好温暖', effect: { passion: 1, affinity: 0.1 } },
+  ]},
+  { types: ['supportive'], npc: '你有没有那种突然灵感爆发停不下来的时候？', replies: [
+    { text: '有！特别爽', response: '对对对！那种状态简直像开了挂~', effect: { passion: 3 } },
+    { text: '很少…', response: '那就多看看别人的作品找找感觉，灵感是积累出来的~' },
+    { text: '你是不是刚经历了', response: '嘿嘿被你发现了！刚画了一晚上停不下来！', effect: { passion: 2 } },
+  ]},
+  { types: ['supportive'], npc: '最近发现一个很棒的创作者，推荐给你看看', replies: [
+    { text: '发链接！', response: '你看TA的构图和用色！超有参考价值~', effect: { passion: 2, infoDisclosure: 0.02 } },
+    { text: '不想看别人的，怕受影响', response: '也有道理~保持自己的风格更重要', effect: { passion: 1 } },
+    { text: '你总是能发现好东西', response: '因为我一直在关注嘛~也是为了和你一起进步', effect: { affinity: 0.15 } },
+  ]},
+  { types: ['supportive'], npc: '下雨天特别适合窝在家里画画，你觉得呢？', replies: [
+    { text: '完全同意！', response: '泡杯茶，开着雨声BGM，幸福感爆棚~', effect: { passion: 2 } },
+    { text: '下雨天我只想睡觉', response: '哈哈也行~充足的睡眠也是创作力的来源', effect: { passion: 1 } },
+    { text: '你现在在画吗', response: '嗯！画得超顺利，想跟你分享这份好心情~', effect: { passion: 1, affinity: 0.1 } },
+  ]},
+  { types: ['supportive'], npc: '记得按时吃饭哦，别光顾着画画忘了照顾自己', replies: [
+    { text: '已经吃了！', response: '乖~那继续加油吧', effect: { passion: 1 } },
+    { text: '被你发现了…还没吃', response: '去吃！马上！创作可以等，身体不能等！', effect: { passion: 2 } },
+    { text: '你也是', response: '放心，我刚吃完~咱们都要好好的才能一直画下去', effect: { affinity: 0.1 } },
+  ]},
+  { types: ['supportive'], npc: '最近想学点新技术，你有推荐的教程吗？', replies: [
+    { text: '我发你几个！', response: '太好了！一起学一起进步~', effect: { passion: 1, affinity: 0.1 } },
+    { text: '你想学什么方向', response: '想试试厚涂！你觉得适合我吗？', effect: { passion: 1 } },
+    { text: '我们互相教', response: '好主意！你教我上色我教你构图怎么样~', effect: { passion: 2, affinity: 0.15 } },
+  ]},
+
   // --- demanding (严格搭档) ---
   { types: ['demanding'], npc: '你上次那个配色方案，说实话不太行', replies: [
     { text: '…具体哪里不好？', response: '对比度太弱，主色调和背景打架。我发你几个参考', effect: { passion: -1, affinity: 0.15 } },
@@ -98,6 +134,37 @@ const GENERAL = [
     { text: '具体怎么改？', response: '主推作品要放在视线高度，价格牌要大。我画个布局图给你', effect: { passion: 1, affinity: 0.1 } },
     { text: '我觉得挺好了', response: '你觉得好和买家觉得好是两回事', effect: { passion: -1 } },
     { text: '下次你帮我布置吧', response: '可以，但你得学会，不能每次都靠我', effect: { affinity: 0.1 } },
+  ]},
+
+  { types: ['demanding'], npc: '你的速写本我翻了一下，基本功退步了', replies: [
+    { text: '最近确实没怎么练', response: '看出来了。每天至少画30分钟速写，这不是建议是要求', effect: { passion: -1, affinity: 0.1 } },
+    { text: '你翻我速写本？！', response: '搭档之间还有什么不能看的？重点是你确实退步了', effect: { passion: -1 } },
+    { text: '我会补回来的', response: '从今天开始。别说下周', effect: { passion: 1 } },
+  ]},
+  { types: ['demanding'], npc: '看到你在社交媒体上发了张半成品，这种东西不该放出来', replies: [
+    { text: '当进度分享嘛', response: '进度分享也要挑好的发。你展示的每一张图都代表你的水平', effect: { infoDisclosure: 0.02 } },
+    { text: '粉丝喜欢看过程', response: '那就精选过程图，别什么都往外扔', effect: { passion: 1 } },
+    { text: '你管太多了', response: '你不管我就得管。这叫品牌管理', effect: { passion: -1 } },
+  ]},
+  { types: ['demanding'], npc: '你的上一本作品我重新看了一遍，封面可以做得更好', replies: [
+    { text: '你觉得哪里不好', response: '标题字体太小，主视觉缺乏冲击力。封面是第一印象，比内容更重要', effect: { passion: 1, affinity: 0.1 } },
+    { text: '但是读者反馈不错啊', response: '不错不代表不能更好。你是要"不错"还是要"最好"？', effect: { passion: -1 } },
+    { text: '下次帮我审稿吧', response: '当然。但你自己也得有判断力，不能什么都等我', effect: { affinity: 0.15 } },
+  ]},
+  { types: ['demanding'], npc: '你有没有做过竞品分析？知道你的同类型作品都在什么水平？', replies: [
+    { text: '做过一些', response: '把结果整理出来，我们对照着看差距在哪', effect: { passion: 1, affinity: 0.1 } },
+    { text: '没想过这些', response: '这就是你和头部创作者的差距。不是技术，是意识', effect: { passion: -1 } },
+    { text: '我不想跟别人比', response: '不是跟别人比，是了解市场。闭门造车做不出好东西', effect: { passion: 1 } },
+  ]},
+  { types: ['demanding'], npc: '我帮你整了个创作checklist，以后每本完成前对照着过一遍', replies: [
+    { text: '你也太认真了', response: '专业就是认真。你要是也这么认真，早就上一个台阶了', effect: { passion: 1, affinity: 0.1 } },
+    { text: '好的，我试试', response: '不是试试，是执行。试试等于不做', effect: { passion: 1 } },
+    { text: '感觉好有压力', response: '有压力才有动力。你潜力很大，别浪费了', effect: { passion: 2 } },
+  ]},
+  { types: ['demanding'], npc: '你知道为什么我愿意花时间跟你说这些吗', replies: [
+    { text: '因为你严格？', response: '因为你值得。不值得的人我懒得说', effect: { passion: 2, affinity: 0.15 } },
+    { text: '不知道', response: '因为我觉得你能做得更好。别让我失望', effect: { passion: 1 } },
+    { text: '因为我们是搭档', response: '对。搭档就是互相逼着进步的关系', effect: { affinity: 0.1 } },
   ]},
 
   // --- unreliable (不靠谱搭档) ---
@@ -147,6 +214,37 @@ const GENERAL = [
     { text: '不急，慢慢来', response: '你人真好呜呜呜…那我就慢慢来了嘿嘿', effect: { affinity: 0.1 } },
   ]},
 
+  { types: ['unreliable'], npc: '我刚买了一个新的数位板！要不要来我家试试？', replies: [
+    { text: '好呀！什么型号', response: '嘿嘿就是那个最新款！虽然还没拆封…买了三天了', effect: { passion: 1 } },
+    { text: '你又冲动消费', response: '才没有！这是投资！…好吧可能有点冲动', effect: { passion: 1 } },
+    { text: '你上个板还没用熟呢', response: '那个…已经被我弄坏了…所以才买新的嘛', effect: { affinity: 0.1 } },
+  ]},
+  { types: ['unreliable'], npc: '告诉你个秘密，我同时在画五个企划', replies: [
+    { text: '你疯了吧', response: '哈哈可能吧！但每个都超有趣停不下来！', effect: { passion: 2 } },
+    { text: '能完成几个？', response: '呃…保守估计…一个半？', effect: { passion: 1 } },
+    { text: '分我一个', response: '行！你选！…但不能催我交稿哦', effect: { affinity: 0.1, passion: 1 } },
+  ]},
+  { types: ['unreliable'], npc: '我刚发现个bug——去年画的那张图左右手画反了，居然没人发现', replies: [
+    { text: '哈哈哈哈哈', response: '别笑！我现在要不要偷偷修掉…算了就这样吧', effect: { passion: 2 } },
+    { text: '你都不检查的吗', response: '检查？我画完就秒发的那种人你还不了解吗', effect: { passion: 1 } },
+    { text: '这就是你的风格', response: '对！自由奔放不拘小节！…好吧其实是粗心', effect: { affinity: 0.1, passion: 1 } },
+  ]},
+  { types: ['unreliable'], npc: '我突然好想去旅行…要不我们来个取材之旅？', replies: [
+    { text: '去哪！', response: '还没想好！但一定要去有很多猫的地方！', effect: { passion: 2 } },
+    { text: '你的稿子…', response: '带上笔电边旅行边画！完美计划！…理论上', effect: { passion: 1 } },
+    { text: '等忙完这阵', response: '好吧…那到时候你一定要去！拉钩！', effect: { affinity: 0.1 } },
+  ]},
+  { types: ['unreliable'], npc: '我觉得我可能有多动症…注意力完全没办法集中超过半小时', replies: [
+    { text: '要不要去看看医生', response: '嗯…说的也是。但预约好麻烦啊…改天吧', effect: { passion: 1 } },
+    { text: '试试番茄钟工作法', response: '试过了！设了25分钟闹钟，然后把闹钟关了继续玩手机', effect: { passion: 1 } },
+    { text: '你这样也能画出好东西挺厉害的', response: '嘿嘿…可能这就是天赋和混乱并存吧！', effect: { passion: 2, affinity: 0.1 } },
+  ]},
+  { types: ['unreliable'], npc: '诶诶诶我在跳蚤市场找到一本绝版同人志！', replies: [
+    { text: '发照片！', response: '你看你看！品相还超好的！我好幸运！', effect: { passion: 2 } },
+    { text: '你不是应该在画稿吗', response: '画稿和逛市场不冲突！…好吧确实冲突', effect: { passion: -1 } },
+    { text: '多少钱买的', response: '才200！值翻了！…虽然回来才发现本月预算爆了', effect: { passion: 1, affinity: 0.1 } },
+  ]},
+
   // --- toxic (有毒搭档) ---
   { types: ['toxic'], npc: '你看到XX的新作品了吗？画得真好啊…比起来——啊不是那个意思啦', replies: [
     { text: '…你到底想说啥', response: '没什么啦！就觉得你可以更努力嘛，又不是在损你~', effect: { passion: -2 } },
@@ -187,6 +285,36 @@ const GENERAL = [
     { text: '怎么了？', response: '也没什么大事啦…就是觉得在这个圈子里只有你对我好', effect: { passion: -1, affinity: 0.1 } },
     { text: '我也有点忙…', response: '好吧。反正你也不是第一次推脱了', effect: { passion: -3 } },
     { text: '当然可以', response: '嗯…谢谢。虽然说了你也不一定真的在听', effect: { passion: -2 } },
+  ]},
+  { types: ['toxic'], npc: '我把我们的合作过程发群里了，大家都夸你呢~当然主要是夸我', replies: [
+    { text: '你没经过我同意', response: '又没发什么隐私的东西，至于吗。这么小气', effect: { passion: -2 } },
+    { text: '…随你吧', response: '看吧，你也觉得没问题对不对~', effect: { passion: -1 } },
+    { text: '下次先跟我说', response: '好好好~你怎么跟个老妈子似的', effect: { passion: -1, affinity: 0.1 } },
+  ]},
+  { types: ['toxic'], npc: '我觉得你最近画的东西没以前好了诶…是不是遇到什么事了？', replies: [
+    { text: '没有啊，正常发挥', response: '嗯…那可能是我的错觉吧。或者说…你以前也就那样？', effect: { passion: -2 } },
+    { text: '确实状态不好', response: '我就知道。这种时候就该多靠靠我嘛', effect: { passion: -1, affinity: 0.1 } },
+    { text: '你觉得哪里不好', response: '怎么说呢…总之就是差了点什么。你自己不觉得吗？', effect: { passion: -2 } },
+  ]},
+  { types: ['toxic'], npc: '圈里有人说你抄袭诶——当然我帮你否认了', replies: [
+    { text: '谁说的！', response: '你别激动嘛~反正我帮你摆平了。以后有我罩着你不怕', effect: { passion: -3 } },
+    { text: '我的作品都是原创', response: '我知道啦，不用跟我解释。但你看，没有我帮你说话多危险', effect: { passion: -2, affinity: 0.1 } },
+    { text: '谢谢你', response: '嗯~记住这份恩情哦', effect: { passion: -1, affinity: 0.1 } },
+  ]},
+  { types: ['toxic'], npc: '你说实话，你身边的朋友里，谁对你最好？', replies: [
+    { text: '…你？', response: '哼~算你有良心。我也觉得除了我没人对你这么好了', effect: { passion: -1, affinity: 0.15 } },
+    { text: '每个朋友都很好', response: '哦…大家都一样好是吧。那我也没什么特别的呗', effect: { passion: -2 } },
+    { text: '这种比较没意义', response: '你不愿意回答就直说嘛，绕什么弯子', effect: { passion: -2 } },
+  ]},
+  { types: ['toxic'], npc: '我最近认识了个超厉害的画师，比你画得好多了~不过放心我还是你搭档', replies: [
+    { text: '那你去找TA合作啊', response: '诶~生气了？我就随便说说嘛，你怎么这么敏感', effect: { passion: -2 } },
+    { text: '…', response: '怎么不说话了？我又没说你不好，只是客观比较而已', effect: { passion: -2 } },
+    { text: '每个人都有长处', response: '嗯说得对~你的长处就是…嗯…让我想想', effect: { passion: -3 } },
+  ]},
+  { types: ['toxic'], npc: '你是不是又在偷偷看那个人的主页？我看到你点赞了', replies: [
+    { text: '就正常浏览', response: '哦~"正常浏览"。点赞也是正常浏览的一部分？', effect: { passion: -2 } },
+    { text: '你怎么连这个都盯着', response: '我关心你有错吗？你这态度让人很寒心', effect: { passion: -2 } },
+    { text: '你想多了', response: '嗯…但愿是我想多了', effect: { passion: -1 } },
   ]},
 ];
 
@@ -242,6 +370,36 @@ const STATE_DIALOGS = [
     { text: '时间真的不够用', response: '周末集中突击？或者通勤路上构思剧情？', effect: { passion: 1 } },
     { text: '想辞职全职搞', response: '这个决定要慎重…但如果你准备好了我支持你', effect: { passion: 1 } },
   ]},
+  { trigger: s => s.totalHVP >= 5, types: ['supportive'], npc: '你已经出了这么多本了，有没有想过出个精选集？', replies: [
+    { text: '好主意！', response: '对吧！把最好的几篇收在一起，再加点新的，肯定有人买~', effect: { passion: 2, collabHint: true } },
+    { text: '太早了吧', response: '不早了！这说明你的创作已经有厚度了~', effect: { passion: 1 } },
+    { text: '一起做？', response: '当然！我帮你选稿排版~', effect: { affinity: 0.15 } },
+  ]},
+  { trigger: s => s.totalHVP >= 5, types: ['demanding'], npc: '出了这么多本，有没有回头看过哪些卖得好哪些卖得差？', replies: [
+    { text: '看过，有规律', response: '那就按规律来。市场给了你数据，用起来', effect: { passion: 1 } },
+    { text: '没太关注', response: '这就是你的问题。数据是最诚实的反馈', effect: { passion: -1 } },
+    { text: '一起分析？', response: '可以。把你的销售记录发我', effect: { affinity: 0.1, passion: 1 } },
+  ]},
+  { trigger: s => s.reputation > 3 && s.reputation < 6, types: ['supportive', 'unreliable'], npc: '你现在在圈里算小有名气了呢', replies: [
+    { text: '还差得远', response: '别谦虚啦，一步步来，你已经很棒了~', effect: { passion: 2 } },
+    { text: '有点开心', response: '你应该开心！这是你努力的结果~', effect: { passion: 2 } },
+    { text: '名气带来的压力也大', response: '压力是好事，说明有人在期待你的下一部作品', effect: { passion: 1 } },
+  ]},
+  { trigger: s => s.unemployed, types: ['supportive'], npc: '听说你最近在找工作…辛苦了，别太焦虑', replies: [
+    { text: '有点迷茫', response: '迷茫是暂时的，你的才华不会消失~趁这段时间多画画也好', effect: { passion: 3 } },
+    { text: '还好，能撑', response: '嗯！相信自己，一切都会好起来的~', effect: { passion: 2 } },
+    { text: '谢谢你的关心', response: '我一直在的~有什么需要帮忙的说一声', effect: { affinity: 0.1, passion: 2 } },
+  ]},
+  { trigger: s => s.unemployed, types: ['demanding'], npc: '失业不是世界末日。利用这段时间提升自己', replies: [
+    { text: '你说得对', response: '去学一门新技能，或者把之前想做没时间做的作品做出来', effect: { passion: 2 } },
+    { text: '我在努力找工作', response: '找工作的同时别停下创作。两条腿走路', effect: { passion: 1 } },
+    { text: '好难', response: '难也要撑过去。你以为我没经历过这种时候？', effect: { passion: 1, affinity: 0.1 } },
+  ]},
+  { trigger: s => s.anthologyProject, types: ['supportive', 'demanding', 'unreliable'], npc: '合集企划进展怎么样了？', replies: [
+    { text: '还在推进', response: '加油！多人合作最难的是协调，但做出来一定很棒', effect: { passion: 2 } },
+    { text: '有点混乱', response: '正常的！大家磨合需要时间，坚持下去', effect: { passion: 1 } },
+    { text: '快完成了！', response: '期待成品！到时候一定帮你宣传~', effect: { passion: 2, infoDisclosure: 0.02 } },
+  ]},
 ];
 
 // === MICRO_DECISION: 带gameplay effect的决策对话 ===
@@ -295,6 +453,32 @@ const MICRO_DECISION = [
     { text: '一步一步来吧', response: '好吧好吧…那先做钥匙扣？成本低好试水', effect: { passion: 1, collabHint: true } },
     { text: '你出设计我出钱？', response: '诶这个分工好！但你可能要等我有灵感的时候…', effect: { passion: 1 } },
     { text: '我怕你做一半跑了', response: '不会！绝对不会！…可能不会…你看着我就行', effect: { affinity: 0.1 } },
+  ]},
+
+  // supportive extra
+  { types: ['supportive'], npc: '我在研究怎么做周边立牌，你有兴趣一起吗？', replies: [
+    { text: '好呀！一起研究', response: '耶！我找了几家工厂的报价，一起对比看看~', effect: { passion: 2, collabHint: true } },
+    { text: '我手头有别的事', response: '没关系，等你有空了再说~', effect: { passion: 1 } },
+    { text: '你带我飞', response: '哈哈包在我身上~搭档就是互相带飞嘛', effect: { affinity: 0.15 } },
+  ]},
+  { types: ['supportive'], npc: '你有没有想过开个创作直播？我帮你当场控', replies: [
+    { text: '好紧张…', response: '我在旁边给你打气！而且弹幕互动超有趣的~', effect: { passion: 2, infoDisclosure: 0.03 } },
+    { text: '这个主意不错', response: '对吧！还能涨粉，一举两得~', effect: { passion: 2 } },
+    { text: '你自己播不就好了', response: '一个人播多无聊啊，要一起才有意思~', effect: { affinity: 0.1 } },
+  ]},
+
+  // demanding extra
+  { types: ['demanding'], npc: '你有没有给自己设过年度创作目标？', replies: [
+    { text: '有，今年出三本', response: '不错。但光有数量目标不够，要有质量基准线', effect: { passion: 1 } },
+    { text: '随缘…', response: '随缘就是没有。今天开始给自己定个deadline', effect: { passion: -1, affinity: 0.1 } },
+    { text: '你帮我定？', response: '可以。但定了就要执行，别让我白费心思', effect: { passion: 1, collabHint: true } },
+  ]},
+
+  // unreliable extra
+  { types: ['unreliable'], npc: '我想到一个超棒的联动企划！找五个人一起做一本合集！', replies: [
+    { text: '我参加！', response: '太好了！那我去拉人…等等先让我想想找谁', effect: { passion: 2, collabHint: true } },
+    { text: '你能组织起来吗', response: '你小看我了！我社交能力还是有的！…拖稿能力更强就是了', effect: { passion: 1 } },
+    { text: '先从两个人开始吧', response: '好吧好吧，那就我们两个先试试水~', effect: { affinity: 0.15 } },
   ]},
 
   // toxic

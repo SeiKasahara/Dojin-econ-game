@@ -5,7 +5,7 @@ export function renderMessageApp(state, onAction, onBack) {
   overlay.className = 'event-overlay';
 
   // Dynamically import to check goddess state
-  import('../chat-npc.js').then(({ getBestieRemaining, getBestieCooldown, getGoddessState, getPartnerChatContact, getPartnerChatRemaining, getPartnerChatCooldown, CHAT_CHARACTERS }) => {
+  import('../chat-npc.js').then(({ getBestieRemaining, getBestieCooldown, getGoddessState, getPartnerChatContacts, CHAT_CHARACTERS }) => {
     const bestieRemain = getBestieRemaining(state);
     const bestieCd = getBestieCooldown(state);
     const goddessState = getGoddessState(state);
@@ -23,29 +23,34 @@ export function renderMessageApp(state, onAction, onBack) {
     } else {
       contacts.push({ id: 'goddess', name: '傲娇女神织梦', subtitle: '不在线', color: '#9B59B6', avatar: 'Goddess/goddess.jpg', disabled: true });
     }
-    const partnerContact = getPartnerChatContact(state);
-    if (partnerContact) {
-      const pRemain = getPartnerChatRemaining(state);
-      const pCd = getPartnerChatCooldown(state);
-      const pHasNudge = state._partnerChatNudgeSent && pRemain > 0;
-      let pSubtitle;
-      if (pRemain > 0) pSubtitle = '社团成员 · 有空聊天';
-      else if (pCd > 0) pSubtitle = `社团成员 · ${pCd}个月后再聊`;
-      else pSubtitle = '社团成员 · 忙去了';
-      contacts.push({ id: `partner_${partnerContact.id}`, name: partnerContact.name, subtitle: pSubtitle, color: '#3498DB', avatar: `partner/${partnerContact.avatarIdx}.webp`, disabled: pRemain <= 0, badge: pHasNudge || pRemain > 0 });
+    // All familiar+ contacts as chat entries
+    const partnerContacts = getPartnerChatContacts(state);
+    for (const pc of partnerContacts) {
+      const relation = pc.affinity >= 4 ? '挚友' : '同好';
+      let subtitle;
+      if (pc.canChat) subtitle = `${relation} · 有空聊天`;
+      else if (pc.cooldownLeft > 0) subtitle = `${relation} · ${pc.cooldownLeft}个月后再聊`;
+      else subtitle = `${relation} · 忙去了`;
+      const hasNudge = state._partnerChatNudgeSent && pc.canChat;
+      contacts.push({
+        id: `partner_${pc.id}`, name: pc.name, subtitle,
+        color: pc.affinity >= 4 ? '#27ae60' : '#3498DB',
+        avatar: `partner/${pc.avatarIdx}.webp`,
+        disabled: !pc.canChat, badge: hasNudge || pc.canChat,
+      });
     }
     if (state.commercialOfferReceived) {
       contacts.push({ id: 'publisher', name: '某出版社编辑', subtitle: '新消息！', color: '#2ECC71', icon: 'building-office', badge: true });
     }
 
     overlay.innerHTML = `
-      <div class="app-page">
-        <div class="app-titlebar" style="border-bottom-color:#2ECC71">
+      <div class="app-page" style="display:flex;flex-direction:column;max-height:85vh">
+        <div class="app-titlebar" style="border-bottom-color:#2ECC71;flex-shrink:0">
           <button class="app-back" id="app-back">${ic('arrow-left')} 返回</button>
           <span class="app-title">${ic('envelope')} 短信</span>
           <span style="width:60px"></span>
         </div>
-        <div class="app-page-body">
+        <div class="app-page-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch">
           ${contacts.map(c => `
             <div class="app-action-card ${c.disabled ? 'disabled' : ''}" data-contact="${c.id}" style="cursor:${c.disabled ? 'default' : 'pointer'};${c.disabled ? 'opacity:0.5;' : ''}">
               ${c.avatar
@@ -163,7 +168,7 @@ async function renderBestieChat(state, onAction, onBack) {
       </div>` : '';
 
     overlay.innerHTML = `
-      <div class="app-page" style="display:flex;flex-direction:column;height:80vh">
+      <div class="app-page" style="display:flex;flex-direction:column;max-height:85vh;height:85vh">
         <div class="app-titlebar" style="border-bottom-color:${char.color};flex-shrink:0">
           <button class="app-back" id="chat-back">${ic('arrow-left')} 返回</button>
           <span class="app-title" style="display:flex;align-items:center;gap:6px">
@@ -277,7 +282,7 @@ async function renderPartnerChat(state, contactId, onAction, onBack) {
       </div>` : '';
 
     overlay.innerHTML = `
-      <div class="app-page" style="display:flex;flex-direction:column;height:80vh">
+      <div class="app-page" style="display:flex;flex-direction:column;max-height:85vh;height:85vh">
         <div class="app-titlebar" style="border-bottom-color:${charColor};flex-shrink:0">
           <button class="app-back" id="chat-back">${ic('arrow-left')} 返回</button>
           <span class="app-title" style="display:flex;align-items:center;gap:6px">
@@ -309,17 +314,32 @@ async function renderPartnerChat(state, contactId, onAction, onBack) {
         if (reply.effect) {
           const fx = reply.effect;
           const parts = [];
-          if (fx.passion) { state.passion = Math.min(100, Math.max(0, state.passion + fx.passion)); parts.push(`热情${fx.passion > 0 ? '+' : ''}${fx.passion}`); }
-          if (fx.affinity) { updateContactAffinity(state, contactId, fx.affinity); parts.push(`好感+${fx.affinity}`); }
+          if (fx.passion) {
+            // Chat cannot kill you — floor at 1
+            state.passion = Math.min(100, Math.max(1, state.passion + fx.passion));
+            parts.push(`热情${fx.passion > 0 ? '+' : ''}${fx.passion}`);
+            if (state.passion <= 5) parts.push('⚠️ 热情告急');
+          }
+          if (fx.affinity) {
+            const ms = updateContactAffinity(state, contactId, fx.affinity);
+            parts.push(`好感+${fx.affinity}`);
+            if (ms) {
+              const labels = { familiar: '你们变得熟悉了！', trusted: '你们成为了挚友！' };
+              parts.push(labels[ms.milestone] || '关系变化');
+              if (ms.milestone === 'familiar') state.passion = Math.min(100, state.passion + 5);
+              if (ms.milestone === 'trusted') { state.passion = Math.min(100, state.passion + 8); }
+            }
+          }
           if (fx.collabHint) { state._partnerCollabHint = true; parts.push('合作灵感'); }
           if (fx.infoDisclosure) { state.infoDisclosure = Math.min(1, state.infoDisclosure + fx.infoDisclosure); parts.push(`信息+${Math.round(fx.infoDisclosure * 100)}%`); }
           if (parts.length > 0) history.push({ role: 'effect', content: `[${parts.join(' · ')}]` });
         }
         history._pendingDialog = null;
-        if (!state._chatUsage) state._chatUsage = {};
-        state._chatUsage.partnerChat = (state._chatUsage.partnerChat || 0) + 1;
-        state._partnerChatLastTurn = state.turn;
-        render();
+        // Mark per-contact cooldown
+        import('../chat-npc.js').then(({ markPartnerChatUsed }) => {
+          markPartnerChatUsed(state, contactId);
+          render();
+        });
       });
     });
   }
@@ -358,7 +378,7 @@ async function renderGoddessChat(state, onAction, onBack) {
       </div>`).join('');
 
     overlay.innerHTML = `
-      <div class="app-page" style="display:flex;flex-direction:column;height:80vh">
+      <div class="app-page" style="display:flex;flex-direction:column;max-height:85vh;height:85vh">
         <div class="app-titlebar" style="border-bottom-color:${char.color};flex-shrink:0">
           <button class="app-back" id="chat-back">${ic('arrow-left')} 返回</button>
           <span class="app-title" style="display:flex;align-items:center;gap:6px">

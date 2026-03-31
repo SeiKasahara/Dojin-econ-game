@@ -1,9 +1,9 @@
 import { getCreativeSkill, getSkillEffects } from './core.js';
-import { PARTNER_TYPES, addContact, generatePartnerCandidates } from '../partner.js';
+import { PARTNER_TYPES, addContact, generatePartnerCandidates, addInteraction, getIcebreakerChance, canCreateMusic } from '../partner.js';
 import { ic } from '../icons.js';
 
 // === Re-export from partner.js ===
-export { PARTNER_TYPES, addContact, generatePartnerCandidates };
+export { PARTNER_TYPES, addContact, generatePartnerCandidates, addInteraction, getIcebreakerChance, canCreateMusic };
 
 // === Work Subtypes ===
 export const HVP_SUBTYPES = {
@@ -11,7 +11,7 @@ export const HVP_SUBTYPES = {
   novel:    { id: 'novel',    name: '小说本',       emoji: 'book', monthsSolo: 2, monthsPartner: 1, costRange: [1500, 2500], repMult: 0.8,  audienceMult: 0.75, requiredRep: 0, desc: '成本低周期短，受众略小' },
   artbook:  { id: 'artbook',  name: '加厚创意绘本',     emoji: 'palette', monthsSolo: 3, monthsPartner: 2, costRange: [4500, 6000], repMult: 1.5,  audienceMult: 0.85, requiredRep: 0, desc: '声誉加成高但投入大' },
   lorebook: { id: 'lorebook', name: '设定集',       emoji: 'scroll', monthsSolo: 2, monthsPartner: 1, costRange: [2500, 3500], repMult: 1.2,  audienceMult: 0.6,  requiredRep: 2, desc: '小众高价值，需声誉≥2' },
-  music:    { id: 'music',    name: '同人音乐专辑', emoji: 'music-notes', monthsSolo: 4, monthsPartner: 3, costRange: [4000, 5000], repMult: 1.3,  audienceMult: 0.7,  requiredRep: 0, desc: '独特受众，周期长' },
+  music:    { id: 'music',    name: '同人音乐专辑', emoji: 'music-notes', monthsSolo: 4, monthsPartner: 3, costRange: [4000, 5000], repMult: 1.3,  audienceMult: 0.7,  requiredRep: 0, requiresSpecialty: 'music', desc: '需要音乐搭档，独特受众，周期长' },
 };
 export const LVP_SUBTYPES = {
   acrylic:  { id: 'acrylic',  name: '亚克力',     emoji: 'diamond', cost: 400, batchSize: 28, marginMult: 1.0, desc: '标准谷子，开模费较贵' },

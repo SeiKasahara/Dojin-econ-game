@@ -1,4 +1,4 @@
-import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES } from '../engine.js';
+import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, canCreateMusic } from '../engine.js';
 import { getPriceTiers, getMarketAvgPrice } from '../market.js';
 import { ic, escapeHtml } from '../icons.js';
 import { fogCreatorCount } from '../market-fog.js';
@@ -137,8 +137,12 @@ export function renderSubtypeSelector(state, productType, onSelect, onCancel) {
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
         ${Object.values(subtypes).map(s => {
-          const locked = isHVP && s.requiredRep > 0 && state.reputation < s.requiredRep;
-          const lockLabel = locked ? ` ${ic('lock')} 声誉≥${s.requiredRep}` : '';
+          const repLocked = isHVP && s.requiredRep > 0 && state.reputation < s.requiredRep;
+          const specialtyLocked = isHVP && s.requiresSpecialty === 'music' && !canCreateMusic(state);
+          const locked = repLocked || specialtyLocked;
+          const lockLabel = repLocked ? ` ${ic('lock')} 声誉≥${s.requiredRep}`
+            : specialtyLocked ? ` ${ic('lock')} 需要认识音乐创作者`
+            : '';
           const detail = isHVP
             ? `${s.monthsSolo}月(独)/${s.monthsPartner}月(搭) · ¥${s.costRange[0]}~${s.costRange[1]}`
             : `¥${s.cost} · ${s.batchSize}个/批`;

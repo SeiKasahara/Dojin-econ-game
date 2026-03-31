@@ -6,10 +6,12 @@
 import './style.css';
 import { createInitialState, executeTurn, executeAction, endMonth, rollEvent, applyEvent, ACTIONS, getLifeStage, generatePartnerCandidates, getTimeCost, calculateSales, getActionDisplay, needsPricing, rollEventCondition, rollPartnerBusy, getSponsorTiers } from './engine.js';
 import { renderTitle, renderEndowments, renderGame, renderTutorial, renderResult, renderEvent, renderGameOver, renderPriceSelector, renderEventSelector, renderReprintSelector, renderStrategySelector, renderEventModeSelector, renderSubtypeSelector, renderCreativeChoice, renderWorkNameInput, renderAppPage, renderMessageApp, openSNSPanel, openMarketApp, openBrowserApp, renderEventWorksSelector } from './ui.js';
-import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES, getQualityStars } from './engine.js';
+import { HVP_SUBTYPES, LVP_SUBTYPES, CREATIVE_CHOICES, applyCreativeChoice, PARTNER_TYPES, getQualityStars, getCreativeSkill } from './engine.js';
+import { SPECIALIZATIONS } from './engine/core.js';
 import { preloadBGM, initAudioUnlock, updateBGM } from './bgm.js';
 import { ic } from './icons.js';
 import { saveGame, loadGame, deleteSave } from './save.js';
+import { resolveLifeEvent } from './partner-life-events.js';
 
 let state = null;
 
@@ -314,6 +316,79 @@ function handleAction(actionId) {
     return;
   }
 
+  // === Anthology flow: select members → name → start/continue ===
+  if (actionId === 'anthology' && !state.anthologyProject) {
+    const eligible = (state.contacts || []).filter(c => c.affinity >= 2 && !(c._unavailableUntil && state.turn < c._unavailableUntil));
+    const overlay = document.createElement('div');
+    overlay.className = 'event-overlay';
+    const tierColors = { acquaintance: '#95a5a6', familiar: '#3498db', trusted: '#27ae60' };
+    overlay.innerHTML = `
+      <div class="event-card" style="max-width:400px;text-align:left">
+        <div style="text-align:center;margin-bottom:10px">
+          <span style="font-size:1.3rem">${ic('books', '1.3rem')}</span>
+          <div style="font-weight:700">选择合集成员</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">选2-3位联系人（familiar+）</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;max-height:300px;overflow-y:auto">
+          ${eligible.map((c, i) => {
+            const tc = tierColors[c.tier] || '#95a5a6';
+            const pt = c.revealed || c.tier === 'trusted' ? (PARTNER_TYPES[c.pType]?.name || '') : '';
+            return `<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">
+              <input type="checkbox" class="anth-member" data-idx="${i}" style="flex-shrink:0">
+              <img src="partner/${c.avatarIdx}.webp" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid ${tc}">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:0.82rem">${c.name} <span style="font-size:0.65rem;color:${tc}">${pt}</span></div>
+                <div style="font-size:0.68rem;color:var(--text-muted)">${c.bio}</div>
+              </div>
+            </label>`;
+          }).join('')}
+        </div>
+        <button class="btn btn-primary btn-block" id="anth-confirm" disabled style="opacity:0.5">选好了（0/2-3）</button>
+        <button class="btn btn-block" id="anth-cancel" style="margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--text-light)">返回</button>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const confirmBtn = overlay.querySelector('#anth-confirm');
+    const checkboxes = overlay.querySelectorAll('.anth-member');
+    const updateBtn = () => {
+      const checked = [...checkboxes].filter(cb => cb.checked).length;
+      confirmBtn.disabled = checked < 2 || checked > 3;
+      confirmBtn.style.opacity = confirmBtn.disabled ? '0.5' : '1';
+      confirmBtn.textContent = `选好了（${checked}/2-3）`;
+    };
+    checkboxes.forEach(cb => cb.addEventListener('change', updateBtn));
+
+    overlay.querySelector('#anth-cancel').addEventListener('click', () => { overlay.remove(); cancelBack(); });
+
+    confirmBtn.addEventListener('click', () => {
+      const selected = [...checkboxes].filter(cb => cb.checked).map(cb => {
+        const c = eligible[parseInt(cb.dataset.idx)];
+        return { contactId: c.id, name: c.name, _type: c.pType };
+      });
+      overlay.remove();
+      // Name input
+      const nameOverlay = document.createElement('div');
+      nameOverlay.className = 'event-overlay';
+      nameOverlay.innerHTML = `
+        <div class="event-card" style="max-width:320px;text-align:center">
+          <div style="font-size:1.3rem;margin-bottom:4px">${ic('books', '1.3rem')}</div>
+          <div style="font-weight:700;margin-bottom:8px">给合集起个名字</div>
+          <input type="text" id="anth-name-input" maxlength="20" placeholder="合集企划" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;text-align:center;font-size:0.9rem">
+          <button class="btn btn-primary btn-block" id="anth-name-ok">开始企划！</button>
+        </div>`;
+      document.body.appendChild(nameOverlay);
+      const nameInput = nameOverlay.querySelector('#anth-name-input');
+      nameInput.focus();
+      nameOverlay.querySelector('#anth-name-ok').addEventListener('click', () => {
+        state._selectedAnthologyMembers = selected;
+        state._anthologyName = nameInput.value.trim() || '合集企划';
+        nameOverlay.remove();
+        executeInMonth(actionId);
+      });
+    });
+    return;
+  }
+
   // === HVP flow: new project → all choices upfront; continue → just confirm ===
   if (actionId === 'hvp' && !needsPricing(state, actionId)) {
     if (!state.hvpProject) {
@@ -452,11 +527,9 @@ function handleAction(actionId) {
     function showPartnerSelector() {
       const candidates = generatePartnerCandidates(state);
       if (!candidates) {
-        state._partnerSearchFailed = true;
         executeInMonth(actionId);
         return;
       }
-      const isFromPool = candidates[0]?.contactId != null;
       const tierColors = { acquaintance: '#95a5a6', familiar: '#3498db', trusted: '#27ae60' };
       const tierLabels = { acquaintance: '认识', familiar: '熟悉', trusted: '信任' };
 
@@ -466,12 +539,12 @@ function handleAction(actionId) {
         <div class="app-page" style="max-height:80vh">
           <div class="app-titlebar" style="border-bottom-color:#27AE60">
             <button class="app-back" id="partner-back">${ic('arrow-left')} 返回</button>
-            <span class="app-title">${ic('handshake')} 寻找搭档</span>
+            <span class="app-title">${ic('handshake')} 招募搭档</span>
             <span style="width:60px"></span>
           </div>
           <div class="app-page-body">
             <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px;text-align:center">
-              ${isFromPool ? `人脉池中有${candidates.length}位认识的人` : `有${candidates.length}位创作者愿意合作，选一个试试？`}
+              人脉池中有${candidates.length}位认识的人
             </div>
             ${candidates.map((c, i) => {
               const tc = tierColors[c.tier] || '#95a5a6';
@@ -483,6 +556,13 @@ function handleAction(actionId) {
               const typeHint = c.visibleType
                 ? `<span style="font-size:0.65rem;color:${c.visibleType === 'supportive' ? 'var(--success)' : c.visibleType === 'toxic' ? 'var(--danger)' : 'var(--accent)'}">${PARTNER_TYPES[c.visibleType]?.name || ''}</span>`
                 : '';
+              const specialtyIcons = { music: 'music-notes', writing: 'book', art: 'palette' };
+              const specialtyTag = c.specialty && c.tier && c.tier !== 'acquaintance'
+                ? `<span style="font-size:0.55rem;padding:1px 4px;border-radius:4px;background:var(--bg);color:var(--text-muted)">${ic(specialtyIcons[c.specialty] || 'palette', '0.55rem')}</span>`
+                : '';
+              const bigTag = c.npcTier === 'big' && c.tier && c.tier !== 'acquaintance'
+                ? `<span style="font-size:0.55rem;padding:1px 4px;border-radius:4px;background:#F39C1218;color:#F39C12">${ic('star', '0.55rem')}</span>`
+                : '';
               const affinityDots = c.affinity != null
                 ? '<span style="font-size:0.6rem;color:' + tc + '">' + '●'.repeat(Math.floor(c.affinity)) + '○'.repeat(5 - Math.floor(c.affinity)) + '</span>'
                 : '';
@@ -493,7 +573,7 @@ function handleAction(actionId) {
                     <div class="app-action-name" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
                       ${c.name}
                       ${c.tier ? `<span style="font-size:0.58rem;padding:1px 5px;border-radius:6px;background:${tc}18;color:${tc};font-weight:600">${tl}</span>` : ''}
-                      ${typeHint}
+                      ${typeHint}${specialtyTag}${bigTag}
                     </div>
                     <div class="app-action-cost">${busy ? '<span style="color:var(--danger)">本月没空</span>' : c.bio}</div>
                     ${affinityDots ? `<div style="margin-top:2px">${affinityDots}</div>` : ''}
@@ -529,8 +609,6 @@ function handleAction(actionId) {
               busyPopup.remove();
               overlay.remove();
               if (allBusy) {
-                // Everyone is busy → treat as search failed
-                state._partnerSearchFailed = true;
                 executeInMonth(actionId);
               } else {
                 showPartnerSelector(); // re-render with this candidate greyed out
@@ -889,7 +967,127 @@ function finishMonth() {
   }
 }
 
+function showSpecializationChoice(onDone) {
+  state._pendingSpecialization = false;
+  const skill = getCreativeSkill(state);
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:400px;text-align:left">
+      <div style="text-align:center;margin-bottom:12px">
+        <span style="font-size:1.5rem">${ic('graduation-cap', '1.5rem')}</span>
+        <div style="font-weight:700;font-size:1.05rem;margin-top:4px">技艺精通——选择专精方向</div>
+        <div style="font-size:0.75rem;color:var(--text-light);margin-top:4px">你的创作技能达到了${skill.toFixed(1)}级（精通），可以选择一个专精方向。此选择永久生效。</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        ${Object.values(SPECIALIZATIONS).map(s => `
+          <div class="price-btn spec-btn" data-spec="${s.id}" style="padding:10px 12px;cursor:pointer;text-align:left">
+            <div style="font-weight:700;font-size:0.88rem">${ic(s.emoji, '0.9rem')} ${s.name}</div>
+            <div style="font-size:0.72rem;color:var(--text-light);margin-top:2px">${s.desc}</div>
+            <div style="font-size:0.65rem;color:var(--success);margin-top:2px">${ic('arrow-fat-up', '0.6rem')} ${s.buff}</div>
+            <div style="font-size:0.65rem;color:var(--danger)">${ic('arrow-fat-down', '0.6rem')} ${s.debuff}</div>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn btn-primary btn-block" id="spec-confirm" disabled style="opacity:0.5">请选择专精方向</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  let selected = null;
+  const confirmBtn = overlay.querySelector('#spec-confirm');
+  overlay.querySelectorAll('.spec-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.spec-btn').forEach(b => { b.style.border = '1px solid var(--border)'; b.style.background = ''; });
+      btn.style.border = '2px solid var(--accent)';
+      btn.style.background = 'var(--accent)08';
+      selected = btn.dataset.spec;
+      const spec = SPECIALIZATIONS[selected];
+      confirmBtn.disabled = false;
+      confirmBtn.style.opacity = '1';
+      confirmBtn.textContent = `选择「${spec.name}」`;
+    });
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    if (!selected) return;
+    state.specialization = selected;
+    overlay.remove();
+    saveGame(state);
+    onDone();
+  });
+}
+
+function showLifeEventPopup(lifeEvt, onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'event-overlay';
+  const optionsHtml = lifeEvt.options.map((opt, i) => `
+    <button class="btn btn-block life-evt-opt ${opt.available ? 'btn-primary' : ''}" data-idx="${i}"
+      style="margin-bottom:6px;text-align:left;${opt.available ? '' : 'opacity:0.4;cursor:not-allowed'}"
+      ${opt.available ? '' : 'disabled'}>
+      <div style="font-weight:600;font-size:0.82rem">${opt.label}</div>
+      <div style="font-size:0.7rem;color:var(--text-light)">${opt.desc}</div>
+      ${!opt.available && opt.unavailableReason ? `<div style="font-size:0.65rem;color:var(--danger)">${opt.unavailableReason}</div>` : ''}
+    </button>
+  `).join('');
+
+  overlay.innerHTML = `
+    <div class="event-card" style="max-width:360px">
+      <div style="font-size:1.3rem;margin-bottom:4px">${ic(lifeEvt.emoji, '1.3rem')}</div>
+      <div style="font-weight:700;margin-bottom:6px">${lifeEvt.title}</div>
+      <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px;line-height:1.6">${lifeEvt.desc}</div>
+      <div class="life-evt-options">${optionsHtml}</div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelectorAll('.life-evt-opt:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      const opt = lifeEvt.options[idx];
+      const result = resolveLifeEvent(state, lifeEvt.eventId, lifeEvt.contactId, opt.id, opt);
+      state._pendingLifeEvent = null;
+      overlay.remove();
+
+      if (result && result.deltas && result.deltas.length > 0) {
+        // Show result briefly
+        const resOverlay = document.createElement('div');
+        resOverlay.className = 'event-overlay';
+        resOverlay.innerHTML = `
+          <div class="event-card" style="max-width:340px;text-align:center">
+            <div style="margin-bottom:10px">${result.deltas.map(d =>
+              `<div style="font-size:0.8rem;margin-bottom:4px;color:${d.positive ? 'var(--success)' : 'var(--danger)'}">${ic(d.icon, '0.8rem')} ${d.label} ${d.value}</div>`
+            ).join('')}</div>
+            <button class="btn btn-primary btn-block" id="life-evt-ok">确定</button>
+          </div>`;
+        document.body.appendChild(resOverlay);
+        resOverlay.querySelector('#life-evt-ok').addEventListener('click', () => { resOverlay.remove(); saveGame(state); onDone(); });
+      } else {
+        saveGame(state);
+        onDone();
+      }
+    });
+  });
+}
+
 function afterMonthTransition(monthResult) {
+  // Check for pending skill specialization
+  if (state._pendingSpecialization) {
+    showSpecializationChoice(() => afterMonthTransitionLife(monthResult));
+    return;
+  }
+  afterMonthTransitionLife(monthResult);
+}
+
+function afterMonthTransitionLife(monthResult) {
+  // Check for pending NPC life event
+  const lifeEvt = state._pendingLifeEvent;
+  if (lifeEvt) {
+    showLifeEventPopup(lifeEvt, () => afterMonthTransitionEvents(monthResult));
+    return;
+  }
+  afterMonthTransitionEvents(monthResult);
+}
+
+function afterMonthTransitionEvents(monthResult) {
   const officialEvts = (monthResult.officialEvents || []).filter(e => e.type);
   showEventChain([...officialEvts], () => {
     const event = rollEvent(state);

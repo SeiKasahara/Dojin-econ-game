@@ -135,27 +135,46 @@ export function getBestieCooldown(state) {
   return remaining > 0 ? remaining : 0;
 }
 
-// === Partner Chat: trusted contacts (affinity >= 4), 1 dialog every 2 months ===
+// === Partner Chat: familiar+ contacts (affinity >= 2), per-contact cooldown ===
 const PARTNER_CHAT_COOLDOWN_MONTHS = 2;
-const PARTNER_CHAT_MSG_LIMIT = 1;
 
-export function getPartnerChatContact(state) {
-  if (!state.contacts || state.contacts.length === 0) return null;
+// Returns all familiar+ contacts with chat availability info
+export function getPartnerChatContacts(state) {
+  if (!state.contacts || state.contacts.length === 0) return [];
+  const chatLog = state._partnerChatLog || {}; // { [contactId]: lastChatTurn }
   return state.contacts
-    .filter(c => c.affinity >= 3.95)
-    .sort((a, b) => b.affinity - a.affinity || a.metTurn - b.metTurn)[0] || null;
+    .filter(c => c.affinity >= 2.0 && !(c._unavailableUntil && state.turn < c._unavailableUntil))
+    .sort((a, b) => b.affinity - a.affinity || a.metTurn - b.metTurn)
+    .map(c => {
+      const lastChat = chatLog[c.id] || -99;
+      const cdLeft = Math.max(0, PARTNER_CHAT_COOLDOWN_MONTHS - (state.turn - lastChat));
+      return { ...c, canChat: cdLeft === 0, cooldownLeft: cdLeft };
+    });
+}
+
+// Legacy single-contact accessor (for nudge system compatibility)
+export function getPartnerChatContact(state) {
+  const all = getPartnerChatContacts(state);
+  return all.find(c => c.canChat) || all[0] || null;
 }
 
 export function getPartnerChatRemaining(state) {
-  const lastTurn = state._partnerChatLastTurn || -99;
-  if (state.turn - lastTurn < PARTNER_CHAT_COOLDOWN_MONTHS) return 0;
-  return Math.max(0, PARTNER_CHAT_MSG_LIMIT - ((state._chatUsage || {}).partnerChat || 0));
+  const all = getPartnerChatContacts(state);
+  return all.some(c => c.canChat) ? 1 : 0;
 }
 
 export function getPartnerChatCooldown(state) {
-  const lastTurn = state._partnerChatLastTurn || -99;
-  const remaining = PARTNER_CHAT_COOLDOWN_MONTHS - (state.turn - lastTurn);
-  return remaining > 0 ? remaining : 0;
+  const all = getPartnerChatContacts(state);
+  if (all.length === 0) return 0;
+  const minCd = Math.min(...all.map(c => c.cooldownLeft));
+  return minCd;
+}
+
+// Mark a specific contact as chatted this turn
+export function markPartnerChatUsed(state, contactId) {
+  if (!state._partnerChatLog) state._partnerChatLog = {};
+  state._partnerChatLog[contactId] = state.turn;
+  state._partnerChatLastTurn = state.turn; // keep global for decay system
 }
 
 // === Goddess: event-triggered, 8 messages per conversation (welcome = 10) ===

@@ -3,12 +3,12 @@ import { ic, escapeHtml } from '../icons.js';
 
 // === App Desktop ===
 export const APP_DEFS = [
-  { id: 'enzao', name: '嗯造', icon: 'palette', color: '#2A9D8F', actions: ['hvp', 'lvp', 'reprint'], logo: 'app logos/嗯造.avif' },
+  { id: 'enzao', name: '嗯造', icon: 'palette', color: '#2A9D8F', actions: ['hvp', 'lvp', 'anthology', 'reprint'], logo: 'app logos/嗯造.avif' },
   { id: 'xuanfa', name: '次元宣发机', icon: 'megaphone', color: '#E6A817', actions: ['promote_light', 'promote_heavy'], logo: 'app logos/次元宣发机.jpg' },
   { id: 'miaohuashi', name: '喵画师', icon: 'paint-brush', color: '#9B59B6', actions: ['freelance'], logo: 'app logos/喵画师.avif' },
   { id: 'miaosi', name: '喵丝职聘', icon: 'briefcase', color: '#5B7DB1', actions: ['partTimeJob', 'jobSearch', 'quitForDoujin'], logo: 'app logos/喵丝职聘.avif' },
   { id: 'manzhan', name: '漫展通', icon: 'tent', color: '#E84393', actions: ['attendEvent', 'buyGoods', 'sellGoods'], logo: 'app logos/漫展通.avif' },
-  { id: 'ciyuanbi', name: '打破次元墙', icon: 'handshake', color: '#27AE60', actions: ['findPartner', 'hireAssistant', 'sponsorCommunity'], logo: 'app logos/打破次元壁.jpg' },
+  { id: 'ciyuanbi', name: '打破次元墙', icon: 'handshake', color: '#27AE60', actions: ['findPartner', 'surfOnline', 'hireAssistant', 'sponsorCommunity'], logo: 'app logos/打破次元壁.jpg' },
   { id: 'rest', name: '休息', icon: 'coffee', color: '#8B6914', actions: ['rest'], special: true, logo: 'app logos/休息.avif' },
   { id: 'memu', name: 'Memu', icon: 'desktop', color: '#3498DB', actions: ['upgradeEquipment'], special: true, logo: 'app logos/Memu.avif' },
   { id: 'prediction', name: '织梦交易', icon: 'chart-line-up', color: '#F39C12', actions: [], special: 'prediction', logo: 'app logos/织梦交易.avif' },

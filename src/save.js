@@ -60,7 +60,9 @@ const PERSISTENT_UNDERSCORED = new Set([
   '_tamperCountdown',     // anti-tamper system
   '_smallCircleBigRepShown',  // milestone: rep≥5 in small circle (one-time)
   '_smallCircleLegendShown',  // milestone: rep≥8 in small circle (one-time)
-  '_partnerChatLastTurn',     // partner chat cooldown tracking
+  '_partnerChatLastTurn',     // partner chat cooldown tracking (global)
+  '_partnerChatLog',          // per-contact chat cooldown { contactId: lastChatTurn }
+  '_pendingRepayments',       // NPC loan repayments pending
   '_clubContractFired',       // player club prediction contract (one-time)
   '_marketManipulated',       // achievement flag: won a club contract
   '_fundEstablished',         // new creator fund established (permanent time debuff)
@@ -147,6 +149,40 @@ export function loadGame() {
     // Anti-cheat digest chain (added in v5)
     if (!state._digestChain) state._digestChain = [];
     if (!state._actionLog) state._actionLog = [];
+
+    // --- Social system v2 migrations ---
+    if (!state._partnerChatLog) state._partnerChatLog = {};
+    if (state.surfedThisMonth === undefined) state.surfedThisMonth = false;
+    if (state.anthologyProject === undefined) state.anthologyProject = null;
+    if (state.specialization === undefined) state.specialization = null;
+    if (state._pendingSpecialization === undefined) state._pendingSpecialization = false;
+    if (state._pendingLifeEvent === undefined) state._pendingLifeEvent = null;
+    if (state._pendingRepayments === undefined) state._pendingRepayments = [];
+
+    // Migrate existing contacts: add new fields for social v2
+    if (state.contacts) {
+      for (const c of state.contacts) {
+        if (c.interactions === undefined) c.interactions = 0;
+        if (c.revealed === undefined) c.revealed = c.tier === 'trusted'; // trusted contacts already known
+        if (c.npcTier === undefined) c.npcTier = 'small';
+        if (c.npcReputation === undefined) {
+          // Infer from pType: demanding/supportive are higher rep
+          c.npcReputation = c.pType === 'demanding' ? 3 + Math.random() * 2
+            : c.pType === 'supportive' ? 2 + Math.random() * 2
+            : 1 + Math.random() * 2;
+          c.npcReputation = Math.round(c.npcReputation * 10) / 10;
+        }
+        if (c.specialty === undefined) c.specialty = 'art';
+      }
+    }
+
+    // Migrate advanced state: add market regime fields
+    if (state.advanced) {
+      if (state.advanced.marketRegime === undefined) state.advanced.marketRegime = 'normal';
+      if (state.advanced.regimeTurnsLeft === undefined) state.advanced.regimeTurnsLeft = 0;
+      if (state.advanced.regimeNextRoll === undefined) state.advanced.regimeNextRoll = state.turn + 12 + Math.floor(Math.random() * 12);
+      if (state.advanced.regimePivotType === undefined) state.advanced.regimePivotType = null;
+    }
 
     // Rebuild prediction market resolveCheck functions from serializable descriptors
     if (state._predictions?.contracts) {

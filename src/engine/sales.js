@@ -2,7 +2,7 @@ import { getLifeStage, getCreativeSkill, getSkillEffects, addReputation } from '
 import { getWorkQualityEffects, getTrendBonus, syncInventoryAggregates } from './definitions.js';
 import { getMarketAvgPrice, getCompetitionModifier } from '../market.js';
 import { getSecondHandModifier, computeIPPhase } from '../official.js';
-import { getAdvancedSalesMod } from '../advanced.js';
+import { getAdvancedSalesMod, getRegimeSubtypeBonus } from '../advanced.js';
 import { PARTNER_TYPES } from '../partner.js';
 
 // === Per-Work Demand Parameters ===
@@ -94,9 +94,11 @@ export function sellFromWorks(state, type, baseDemand) {
     else if (pr > 1.4) priceMult = 0.7;
     else if (pr < 0.15) priceMult = 0.2;
     else if (pr < 0.3) priceMult = 0.5;
+    // Market regime subtype bonus (style pivot: hot type 2x, cold 0.8x)
+    const regimeBonus = state.advanced ? getRegimeSubtypeBonus(state.advanced, w.subtype) : 1.0;
     // Combined attractiveness (includes IP phase modifier)
-    const workMult = qualityMult * trendMult * noveltyBonus * saturationFactor * ageDecay * priceMult * phaseModForType;
-    return { work: w, workMult, qualityMult, trendMult, noveltyBonus, saturationFactor, ageDecay, priceMult, phaseMod: phaseModForType };
+    const workMult = qualityMult * trendMult * noveltyBonus * saturationFactor * ageDecay * priceMult * phaseModForType * regimeBonus;
+    return { work: w, workMult, qualityMult, trendMult, noveltyBonus, saturationFactor, ageDecay, priceMult, phaseMod: phaseModForType, regimeBonus };
   });
 
   // Phase 2: sort by attractiveness (best first)

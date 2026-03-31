@@ -7,7 +7,7 @@ import { createAdvancedState } from '../advanced.js';
 export const ENDOWMENTS = {
   talent:     { name: '创作天赋', emoji: 'palette', desc: '作品质量与声誉积累速度', effects: ['声誉积累+15%/级', '印刷成本-5%/级'] },
   stamina:    { name: '体力精力', emoji: 'barbell', desc: '热情恢复力与创作消耗', effects: ['休息恢复+3/级', '制作同人本时间月耗-1/级'] },
-  social:     { name: '社交魅力', emoji: 'handshake', desc: '搭档质量与展会表现', effects: ['找搭档+8%/级', '毒搭档率-2%/级'] },
+  social:     { name: '社交魅力', emoji: 'handshake', desc: '人脉积累与关系维护', effects: ['人脉上限+2/级', '好感加成+15%/级', '衰减抗性+10%/级', '毒搭档率-2%/级'] },
   marketing:  { name: '营销直觉', emoji: 'megaphone', desc: '宣发效果与信息衰减', effects: ['宣发效果+12%/级', '信息衰减-1%/级'] },
   resilience: { name: '心理韧性', emoji: 'shield', desc: '抵抗现实消耗与负面事件', effects: ['现实消耗-0.5/级', '负债焦虑阈+200/级'] },
 };
@@ -20,8 +20,8 @@ export const OBSESSIVE_TRAITS = {
     name: '偏执·天才', emoji: 'fire',
     desc: '对创作品质近乎疯狂的执着',
     buff: '声誉积累额外+25%，经验获取+50%',
-    debuff: '社交能力归零——找搭档成功率-20%，毒搭档概率翻倍',
-    // Applied in code: social endowment treated as 0 for partner search; toxic chance ×2
+    debuff: '社交能力归零——社交加成无效，毒搭档概率翻倍',
+    // Applied in code: social endowment treated as 0 for all social checks; toxic chance ×2
   },
   stamina: {
     name: '偏执·铁人', emoji: 'lightning',
@@ -33,7 +33,7 @@ export const OBSESSIVE_TRAITS = {
   social: {
     name: '偏执·社牛', emoji: 'chat-circle',
     desc: '天生的社交达人，人脉就是一切',
-    buff: '找搭档+20%，毒搭档率-5%，联系人上限+4',
+    buff: '冲浪发现+1人，毒搭档率-5%，联系人上限+4',
     debuff: '沉迷社交荒废创作——每月额外热情消耗+3，休息恢复效率-30%',
     // Applied in code: monthly passion drain +3; rest restore ×0.7
   },
@@ -89,12 +89,16 @@ export function createInitialState(communityPreset = 'mid', endowments = null, b
     partnerFee: 0,      // ¥ per HVP project, 0 = free
     contacts: [],        // 人脉池
     contactNextId: 1,    // contact auto-increment ID
-    activeContactId: null, // ID of contact currently serving as partner (null = stranger)
+    activeContactId: null, // ID of contact currently serving as partner (null = no partner)
     timeDebuffs: [],
     recessionTurnsLeft: 0,
     monthlyIncome: 0,
     unemployed: false,       // true = lost job, must find new one
     jobSearchTurns: 0,       // months spent searching
+    // Anthology (multi-person collaboration project)
+    anthologyProject: null,
+    // Skill specialization (unlocked at skill >= 3, permanent)
+    specialization: null,
     // HVP multi-turn project: null or { progress, needed, printCost }
     hvpProject: null,
     recentLVP: 0,

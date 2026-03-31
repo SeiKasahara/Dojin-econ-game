@@ -1,4 +1,4 @@
-import { getLifeStage, getAge, getRealityDrain, computeEffectiveTime, addMoney, addReputation, getCreativeSkill, applyPassionDecay } from './core.js';
+import { getLifeStage, getAge, getRealityDrain, computeEffectiveTime, addMoney, addReputation, getCreativeSkill, applyPassionDecay, getSpecializationEffects } from './core.js';
 import { PARTNER_TYPES, HVP_SUBTYPES, LVP_SUBTYPES, getWorkQualityEffects, syncInventoryAggregates } from './definitions.js';
 import { BACKGROUNDS } from './state.js';
 import { sellFromWorks } from './sales.js';
@@ -8,6 +8,7 @@ import { tickOfficial, getSecondHandModifier, recordPlayerWork } from '../offici
 import { tickAdvanced } from '../advanced.js';
 import { rollPartnerDrama } from '../partner-drama.js';
 import { tickContacts } from '../partner.js';
+import { rollLifeEvent, processRepayments, processUnavailableReturns } from '../partner-life-events.js';
 import { chainDigest } from '../hash.js';
 import { resolveContract } from '../prediction-contracts.js';
 import { checkAchievements } from '../achievements.js';
@@ -99,7 +100,17 @@ export function endMonth(state) {
       // Update contact affinity based on collaboration outcome
       if (state.activeContactId) {
         const affinityDelta = wasType === 'toxic' ? -1 : 2;
-        updateContactAffinity(state, state.activeContactId, affinityDelta);
+        const ms = updateContactAffinity(state, state.activeContactId, affinityDelta);
+        if (ms) {
+          const milestoneLabels = { familiar: '关系升温——变得熟悉了', trusted: '关系深厚——成为挚友' };
+          const milestoneRewards = { familiar: { passion: 5 }, trusted: { passion: 8, rep: 0.1 } };
+          const reward = milestoneRewards[ms.milestone];
+          if (reward) {
+            if (reward.passion) state.passion = Math.min(100, state.passion + reward.passion);
+            if (reward.rep) { addReputation(state, reward.rep); state.maxReputation = Math.max(state.maxReputation, state.reputation); }
+          }
+          result.deltas.push({ icon: 'heart', label: `${ms.contact.name}：${milestoneLabels[ms.milestone] || '关系变化'}`, value: reward?.passion ? `热情+${reward.passion}${reward?.rep ? ' 声誉+' + reward.rep : ''}` : '', positive: true });
+        }
 
         // Trusted + non-toxic: offer renewal next turn
         const contact = (state.contacts || []).find(c => c.id === state.activeContactId);
@@ -117,11 +128,27 @@ export function endMonth(state) {
   // --- Contacts pool maintenance: cap + natural decay ---
   tickContacts(state, result);
 
+  // --- NPC life events: exit/crisis events ---
+  processRepayments(state, result);
+  processUnavailableReturns(state, result);
+  const lifeEvent = rollLifeEvent(state);
+  if (lifeEvent) {
+    state._pendingLifeEvent = {
+      eventId: lifeEvent.event.id,
+      contactId: lifeEvent.contact.id,
+      contactName: lifeEvent.contact.name,
+      emoji: lifeEvent.event.emoji,
+      title: lifeEvent.event.title(lifeEvent.contact.name),
+      desc: lifeEvent.event.desc(lifeEvent.contact.name),
+      options: lifeEvent.event.options(lifeEvent.contact, state),
+    };
+  }
+
   // --- Partner chat: nudge message if long time no chat ---
   if (!state._partnerChatNudgeSent && state.contacts?.length > 0) {
     const lastChat = state._partnerChatLastTurn || -99;
     if (state.turn - lastChat >= 3) {
-      const trustedContact = state.contacts.find(c => c.affinity >= 3.95 && c.id !== state.activeContactId);
+      const trustedContact = state.contacts.find(c => c.affinity >= 2.0 && c.id !== state.activeContactId);
       if (trustedContact) {
         const msgs = PARTNER_NUDGE_MESSAGES[trustedContact.pType] || PARTNER_NUDGE_MESSAGES.supportive;
         const nudge = msgs[Math.floor(Math.random() * msgs.length)];
@@ -154,6 +181,22 @@ export function endMonth(state) {
   if (drain > 0) {
     state.passion = Math.max(0, state.passion - drain);
     result.deltas.push({ icon: 'globe', label: '现实消耗', value: `热情-${drain.toFixed(1)}`, positive: false });
+  }
+
+  // --- Skill specialization monthly effects ---
+  const specFx = getSpecializationEffects(state);
+  if (specFx) {
+    // Mentor: passive reputation gain
+    if (specFx.passiveRepGain) {
+      const rep = addReputation(state, specFx.passiveRepGain);
+      state.maxReputation = Math.max(state.maxReputation, state.reputation);
+      if (rep > 0.005) result.deltas.push({ icon: 'chalkboard-teacher', label: '前辈光环', value: `声誉+${rep.toFixed(3)}`, positive: true });
+    }
+    // Versatile: extra passion drain
+    if (specFx.passionDrainExtra) {
+      state.passion = Math.max(0, state.passion - specFx.passionDrainExtra);
+      result.deltas.push({ icon: 'circles-three-plus', label: '多线操作消耗', value: `热情-${specFx.passionDrainExtra}`, positive: false });
+    }
   }
 
   // --- Inactivity drain: the longer you stop creating, the faster passion fades ---
@@ -696,6 +739,11 @@ export function endMonth(state) {
     ? Math.max(0, Math.min(10, 7 + state.timeDebuffs.reduce((s, d) => s + d.delta, 0)))
     : computeEffectiveTime(state.turn, state.timeDebuffs);
 
+  // --- Skill specialization unlock check ---
+  if (!state.specialization && !state._pendingSpecialization && getCreativeSkill(state) >= 3) {
+    state._pendingSpecialization = true;
+  }
+
   // --- Small-circle big-reputation milestone ---
   const _cs = state.market?.communitySize || 10000;
   if (_cs < 5000 && !state._smallCircleBigRepShown && state.reputation >= 5) {
@@ -717,6 +765,7 @@ export function endMonth(state) {
   state.eventsAttendedThisMonth = [];
   state.monthHadCreativeAction = false;
   state.findPartnerTriedThisMonth = false;
+  state.surfedThisMonth = false;
   if (state._chatUsage) state._chatUsage.partnerChat = 0;
   state._partnerChatNudgeSent = false;
   state._monthIncome = 0;
