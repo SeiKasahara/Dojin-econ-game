@@ -15,6 +15,7 @@ export function renderTitle(onStart, onContinue) {
   app().innerHTML = `
     <div class="screen title-screen">
       <h1>同人社团物语</h1>
+      <div class="dev-version">开发中 v${__APP_VERSION__}</div>
       <p class="subtitle">一个关于热情、声誉与选择的<br/>同人经济学模拟游戏</p>
       <p class="tagline">
         <br/>

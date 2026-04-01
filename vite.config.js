@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite';
 import obfuscatorPlugin from 'rollup-plugin-obfuscator';
+import { readFileSync } from 'fs';
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 export default defineConfig({
   base: '/Dojin-econ-game/',
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   build: {
     rollupOptions: {
       plugins: [
