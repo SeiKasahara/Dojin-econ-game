@@ -94,7 +94,8 @@ function createState(mainState, event) {
     // Per-work stock tracking (decremented on each sale to cap minigame sales to real inventory)
     worksStock: (mainState.inventory?.works || []).filter(w => w.qty > 0).map(w => {
       const sub = w.type === 'hvp' ? (HVP_SUBTYPES[w.subtype] || HVP_SUBTYPES.manga) : (LVP_SUBTYPES[w.subtype] || LVP_SUBTYPES.acrylic);
-      return { id: w.id, type: w.type, displayName: sub.name + (w.name ? '·' + w.name : ''), qty: w.qty, initialQty: w.qty, icon: sub.emoji || (w.type === 'hvp' ? 'book-open-text' : 'key') };
+      const avg = mainState.market ? getMarketAvgPrice(mainState.market, mainState, w.type) : (w.type === 'hvp' ? 50 : 15);
+      return { id: w.id, type: w.type, displayName: sub.name + (w.name ? '·' + w.name : ''), qty: w.qty, initialQty: w.qty, icon: sub.emoji || (w.type === 'hvp' ? 'book-open-text' : 'key'), priceRatio: w.price / Math.max(1, avg) };
     }),
     stockRemaining: (mainState.inventory?.hvpStock || 0) + (mainState.inventory?.lvpStock || 0),
     // Per-work price ratios for customer reactions
@@ -238,8 +239,17 @@ function rollRandomEvent(mg) {
   return MINIGAME_EVENTS[0];
 }
 
+// === Price ratio threshold matching CES model (sales.js: pr > 2.5 → priceMult = 0) ===
+const ABSURD_PRICE_RATIO = 2.5;
+
+/** Check if any work in stock has a non-absurd price (purchasable) */
+function hasPurchasableStock(mg) {
+  return mg.worksStock.some(w => w.qty > 0 && w.priceRatio <= ABSURD_PRICE_RATIO);
+}
+
 // === Deduct Per-Work Stock ===
-// Distributes sold units across worksStock, preferring the customer's type preference
+// Distributes sold units across worksStock, preferring the customer's type preference.
+// Skips absurdly priced works (no one would actually pay that). Returns actual units sold.
 function deductWorksStock(mg, qty, preference) {
   let remaining = qty;
   // Preferred type first, then other type
@@ -249,10 +259,12 @@ function deductWorksStock(mg, qty, preference) {
     : mg.worksStock;
   for (const w of order) {
     if (remaining <= 0) break;
+    if (w.priceRatio > ABSURD_PRICE_RATIO) continue; // absurd price — no one buys this
     const take = Math.min(remaining, w.qty);
     w.qty -= take;
     remaining -= take;
   }
+  return qty - remaining; // actual units sold
 }
 
 // === Spawn Customer ===
@@ -512,8 +524,8 @@ function updateCustomers(mg, dt) {
       }
 
       if (c.satisfaction >= 60) {
-        if (mg.stockRemaining <= 0) {
-          // Sold out — customer reacts and leaves
+        if (mg.stockRemaining <= 0 || !hasPurchasableStock(mg)) {
+          // Sold out or all remaining stock absurdly priced
           const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
           mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1800, vy: -0.04 });
           c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😢';
@@ -528,7 +540,7 @@ function updateCustomers(mg, dt) {
       c.patience -= dt * 0.7; // interested are more patient, but still leave eventually
       c.x += (boothCX - c.x) * 0.01;
       if (c.satisfaction >= 60) {
-        if (mg.stockRemaining <= 0) {
+        if (mg.stockRemaining <= 0 || !hasPurchasableStock(mg)) {
           const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
           mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1800, vy: -0.04 });
           c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😢';
@@ -543,7 +555,7 @@ function updateCustomers(mg, dt) {
       c.stateTimer -= dt;
       if (c.stateTimer <= 0) {
         // Double-check stock (may have sold out while this customer was in buying animation)
-        if (mg.stockRemaining <= 0) {
+        if (mg.stockRemaining <= 0 || !hasPurchasableStock(mg)) {
           const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
           mg.particles.push({ x: c.x, y: c.y - 10, text: txt, life: 1800, vy: -0.04 });
           c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😢';
@@ -565,14 +577,19 @@ function updateCustomers(mg, dt) {
               bulkExtra = Math.random() < 0.3 ? 2 : 1;
             }
           }
-          // Cap at remaining stock
+          // Cap at remaining stock; deductWorksStock skips absurdly-priced works
           const totalBuy = Math.min(baseBuy + diversityExtra + bulkExtra, mg.stockRemaining);
-          mg.stockRemaining -= totalBuy;
-          mg.score.sold += totalBuy;
-          deductWorksStock(mg, totalBuy, c.preference);
-          const coinText = totalBuy >= 3 ? '💰💰💰' : totalBuy >= 2 ? '💰💰' : '💰';
-          mg.particles.push({ x: c.x, y: c.y, text: coinText, life: 1000, vy: -0.08 });
-          c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = totalBuy >= 2 ? '🤩' : '😊';
+          const actualSold = deductWorksStock(mg, totalBuy, c.preference);
+          mg.stockRemaining -= actualSold;
+          mg.score.sold += actualSold;
+          if (actualSold > 0) {
+            const coinText = actualSold >= 3 ? '💰💰💰' : actualSold >= 2 ? '💰💰' : '💰';
+            mg.particles.push({ x: c.x, y: c.y, text: coinText, life: 1000, vy: -0.08 });
+            c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = actualSold >= 2 ? '🤩' : '😊';
+          } else {
+            // All works at this customer's preference are absurdly priced
+            c.state = 'leaving'; c.targetY = 340; c.thoughtBubble = '😤';
+          }
         }
       }
 
@@ -754,8 +771,8 @@ export function resolveDialog(mg, choiceIdx) {
     // Fan: always positive, extra bonus + instant buy
     // If player has diverse inventory, fan buys both types
     if (target) {
-      if (mg.stockRemaining <= 0) {
-        // Fan arrived but stock is sold out
+      if (mg.stockRemaining <= 0 || !hasPurchasableStock(mg)) {
+        // Fan arrived but stock is sold out or all absurdly priced
         const txt = SOLDOUT_REACTIONS[Math.floor(Math.random() * SOLDOUT_REACTIONS.length)];
         mg.particles.push({ x: target.x, y: target.y - 10, text: txt, life: 1800, vy: -0.04 });
         target.state = 'leaving'; target.targetY = 340; target.thoughtBubble = '😢';

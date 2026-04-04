@@ -64,9 +64,11 @@ export function openMarketApp(state) {
         }).join('')}
         <div id="reprice-panel" style="display:none;margin-top:6px;padding:10px;background:var(--bg-card);border:2px solid var(--primary);border-radius:10px">
           <div id="reprice-title" style="font-weight:600;font-size:0.78rem;margin-bottom:6px"></div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <input type="range" id="reprice-slider" min="1" max="200" value="50" step="1" style="flex:1;accent-color:var(--primary)">
-            <span id="reprice-label" style="font-weight:700;font-size:1rem;min-width:45px;text-align:center">¥50</span>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <button id="reprice-minus" style="width:30px;height:30px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);cursor:pointer;font-size:1rem;font-weight:700;color:var(--text);flex-shrink:0;touch-action:manipulation">\u2212</button>
+            <input type="range" id="reprice-slider" min="1" max="200" value="50" step="1" style="flex:1;accent-color:var(--primary);touch-action:none">
+            <button id="reprice-plus" style="width:30px;height:30px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);cursor:pointer;font-size:1rem;font-weight:700;color:var(--text);flex-shrink:0;touch-action:manipulation">+</button>
+            <span id="reprice-label" style="font-weight:700;font-size:1rem;min-width:45px;text-align:center;cursor:pointer;text-decoration:underline dotted var(--text-muted)" title="点击手动输入价格">¥50</span>
           </div>
           <div id="reprice-hint" style="font-size:0.65rem;color:var(--text-muted);text-align:center;margin-bottom:8px;font-style:italic"></div>
           <button id="reprice-confirm" class="btn btn-primary btn-block" style="font-size:0.8rem;padding:8px">确认改价</button>
@@ -222,21 +224,54 @@ export function openMarketApp(state) {
       repriceLabel.textContent = '¥' + cur;
       repriceTitle.textContent = row.querySelector('span:nth-child(2)').textContent;
       repriceHint.textContent = cur === parseInt(repriceSlider.value) ? '拖动滑块调整价格' : '';
-      if (repricePanel) repricePanel.style.display = 'block';
+      if (repricePanel) {
+        repricePanel.style.display = 'block';
+        setTimeout(() => repricePanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+      }
       // Highlight active row
       overlay.querySelectorAll('.reprice-row').forEach(r => r.style.background = '');
       row.style.background = '#F0FAF8';
     });
   });
 
+  function syncRepriceDisplay() {
+    const p = parseInt(repriceSlider.value);
+    repriceLabel.textContent = '¥' + p;
+    const work = (state.inventory.works || []).find(w => w.id === activeRepriceWid);
+    if (work) {
+      const diff = p - work.price;
+      repriceHint.textContent = diff === 0 ? '价格未变' : diff > 0 ? `涨价 +¥${diff}` : `降价 ¥${diff}`;
+    }
+  }
   if (repriceSlider) {
-    repriceSlider.addEventListener('input', () => {
-      const p = parseInt(repriceSlider.value);
-      repriceLabel.textContent = '¥' + p;
-      const work = (state.inventory.works || []).find(w => w.id === activeRepriceWid);
-      if (work) {
-        const diff = p - work.price;
-        repriceHint.textContent = diff === 0 ? '价格未变' : diff > 0 ? `涨价 +¥${diff}` : `降价 ¥${diff}`;
+    repriceSlider.addEventListener('input', syncRepriceDisplay);
+  }
+  // +/- buttons for fine-grained price adjustment (especially useful when slider is at extremes)
+  const repriceMinus = overlay.querySelector('#reprice-minus');
+  const repricePlus = overlay.querySelector('#reprice-plus');
+  if (repriceMinus) {
+    repriceMinus.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const v = parseInt(repriceSlider.value);
+      if (v > parseInt(repriceSlider.min)) { repriceSlider.value = v - 1; syncRepriceDisplay(); }
+    });
+  }
+  if (repricePlus) {
+    repricePlus.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const v = parseInt(repriceSlider.value);
+      if (v < parseInt(repriceSlider.max)) { repriceSlider.value = v + 1; syncRepriceDisplay(); }
+    });
+  }
+  // Tap price label to enter custom value directly
+  if (repriceLabel) {
+    repriceLabel.addEventListener('click', () => {
+      if (activeRepriceWid == null) return;
+      const max = parseInt(repriceSlider.max);
+      const input = prompt(`输入新价格 (1~${max}):`, repriceSlider.value);
+      if (input != null) {
+        const v = parseInt(input);
+        if (!isNaN(v) && v >= 1 && v <= max) { repriceSlider.value = v; syncRepriceDisplay(); }
       }
     });
   }
